@@ -24,7 +24,7 @@ import yaml
 n_row=6 
 n_col=9
 n_min_img = 10 # img needed for calibration
-square_size=30 # checkboard square size in mm
+square_size=38 # checkboard square size in mm
 
 criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001) # termination criteria
 corner_accuracy = (11,11)
@@ -128,7 +128,9 @@ while True:
             # Draw and display the corners
             imgAugmnt = cv2.drawChessboardCorners(img, (n_row,n_col), corners2,ret)
             cv2.imshow('Calibration',imgAugmnt) 
-            cv2.waitKey(500)        
+            cv2.waitKey(500)  
+
+            print('number of object points %d' %(len(objpoints)))      
                 
     # "c" pressed to compute calibration        
     elif k%256 == 99:        
@@ -139,8 +141,8 @@ while True:
             print("Computing calibration ...")
             ret, mtx, dist, rvecs, tvecs = cv2.calibrateCamera(objpoints, imgpoints, (width,height),None,None)
 
-            print(rvecs)
-            print(tvecs)
+            
+
             
             if not ret:
                 print("Cannot compute calibration!")
@@ -158,8 +160,15 @@ while True:
                 print("Mean error: ", np.mean(error))
                 
                 # Saving calibration matrix
+
+                rvecs = np.array(list(rvecs))
+                tvecs = np.array(list(tvecs))
+
+                print('number of cal points: %d' %(len(objpoints)))
+                print(rvecs.shape,tvecs.shape)
+
                 print("Saving camera matrix .. in ",result_file)
-                data={"camera_matrix": mtx.tolist(), "dist_coeff": dist.tolist()}
+                data={"camera_matrix": mtx.tolist(), "dist_coeff": dist.tolist(),"rvecs":rvecs.tolist(),"tvecs":tvecs.tolist()}
                 with open(result_file, "w") as f:
                     yaml.dump(data, f, default_flow_style=False)
 
