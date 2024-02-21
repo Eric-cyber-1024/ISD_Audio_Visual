@@ -2,6 +2,8 @@ from PyQt5 import QtGui
 from PyQt5.QtWidgets import *
 from PyQt5.QtCore import *
 from PyQt5.QtGui import *
+from PyQt5.QtMultimedia import *
+
 import sys
 import cv2
 
@@ -36,6 +38,35 @@ CURRENT_PATH = os.getcwd()
 START_RECORDING = False
 DEBUG = True
 
+def getCameraList():
+    # Get available camera indices
+    available_cameras=[]
+    for i,camera in enumerate(QCameraInfo.availableCameras()):
+        available_cameras.append(camera.description())
+    return available_cameras
+
+
+class CameraSelectionDialog(QDialog):
+    def __init__(self, camera_names):
+        super().__init__()
+
+        self.setWindowTitle("Camera Selection")
+        
+        self.camera_combo = QComboBox()
+        self.camera_combo.addItems(camera_names)
+        
+        button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        button_box.accepted.connect(self.accept)
+        button_box.rejected.connect(self.reject)
+        
+        layout = QVBoxLayout()
+        layout.addWidget(self.camera_combo)
+        layout.addWidget(button_box)
+        
+        self.setLayout(layout)
+    
+    def get_selected_camera_name(self):
+        return self.camera_combo.currentIndex()
 
 
 # Combine As output thread 
@@ -58,12 +89,20 @@ class VideoAudioThread(QThread):
 class VideoThread(QThread):
 
     change_pixmap_signal = pyqtSignal(np.ndarray)
-     
+    
+    def __init__(self, arg1):
+        super().__init__()
+        self.camera_index = arg1
+
     def run(self):
         global START_RECORDING,VIDEO_NAME,OUTPUT_NAME,AUDIO_NAME
+
+        
+        
         # capture from web cam
         i = 0
-        cap = cv2.VideoCapture(2)
+        print(self.camera_index)
+        cap = cv2.VideoCapture(self.camera_index)
         
         cap.set(3, WINDOW_WIDTH)
         cap.set(4, WINDOW_HEIGHT)
@@ -234,13 +273,25 @@ class App(QWidget):
         self.setLayout(self.layout)
         self.setFixedSize(WINDOW_WIDTH,WINDOW_HEIGHT)
       
-        self.setGeometry(QApplication.screens()[self.ScreenNumber].geometry())
-        self.showFullScreen()
+        # self.setGeometry(QApplication.screens()[self.ScreenNumber].geometry())
+        # self.showFullScreen()
+
+        # pop up dialog to select video first
+        dialog = CameraSelectionDialog(getCameraList())
+
+        # Display the dialog and get the selected camera name
+        if dialog.exec_() == QDialog.Accepted:
+            self.selected_camera_index = dialog.get_selected_camera_name()
+        else:
+            print("Exit now...")
+            exit()
+
         # create the video capture thread
-        self.video_thread = VideoThread()
+        self.video_thread = VideoThread(self.selected_camera_index)
         self.audio_thread = AudioThread()
         # connect its signal to the update_image slot
         self.video_thread.change_pixmap_signal.connect(self.update_image)
+        
         # start the thread
         self.video_thread.start()
         
