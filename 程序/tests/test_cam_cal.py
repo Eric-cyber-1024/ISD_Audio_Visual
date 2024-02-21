@@ -1,5 +1,7 @@
 # simple python script to calibrate camera
-# ref: https://docs.opencv.org/4.x/dc/dbb/tutorial_py_calibration.html
+# ref: 
+#      https://docs.opencv.org/4.x/d4/d94/tutorial_camera_calibration.html
+#      https://docs.opencv.org/4.x/dc/dbb/tutorial_py_calibration.html
 #      https://learnopencv.com/camera-calibration-using-opencv/
 #
 # revised from: https://github.com/zeryabmoussaoui/camera_calibration_tool.git
@@ -10,6 +12,7 @@
 # Inspired from : https://opencv-python-tutroals.readthedocs.io/en/latest/py_tutorials/py_calib3d/py_calibration/py_calibration.html
 # Version : 1.0
 
+from pywinauto import Desktop
 import numpy as np
 import cv2
 import yaml
@@ -21,6 +24,7 @@ import yaml
 n_row=6 
 n_col=9
 n_min_img = 10 # img needed for calibration
+square_size=30 # checkboard square size in mm
 
 criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001) # termination criteria
 corner_accuracy = (11,11)
@@ -28,16 +32,43 @@ result_file = "./calibration.yaml"
 
 # prepare object points, like (0,0,0), (1,0,0), (2,0,0) ....,(n_row-1,n_col-1,0)
 objp = np.zeros((n_row*n_col,3), np.float32)
-objp[:,:2] = np.mgrid[0:n_row,0:n_col].T.reshape(-1,2)
+objp[:,:2] = np.mgrid[0:n_row,0:n_col].T.reshape(-1,2)*square_size
+
+
 
 # Intialize camera and window
-camera = cv2.VideoCapture(0) #Supposed to be the only camera
+camera = cv2.VideoCapture(1) #Supposed to be the only camera
 if not camera.isOpened():
     print("Camera not found!")
     quit()
 width = int(camera.get(cv2.CAP_PROP_FRAME_WIDTH))  
 height = int(camera.get(cv2.CAP_PROP_FRAME_HEIGHT))
-cv2.namedWindow("Calibration")
+cv2.namedWindow("Calibration",cv2.WINDOW_NORMAL)
+cv2.resizeWindow('Calibration',width,height)
+
+
+def loadCalibrationData(yamlFileName):
+    with open(yamlFileName, 'r') as file:
+        data = yaml.safe_load(file)
+
+    # Extract the camera matrix and distortion coefficients
+    camera_matrix = np.array(data['camera_matrix'])
+    dist_coeffs = np.array(data['dist_coeff'])
+    print(camera_matrix,dist_coeffs)
+    return camera_matrix,dist_coeffs
+
+
+# draw a 3D cube wireframe for checking calibration results
+def drawCube(img, corners, imgpts):
+    imgpts = np.int32(imgpts).reshape(-1,2)
+    # draw ground floor in green
+    img = cv2.drawContours(img, [imgpts[:4]],-1,(0,255,0),-3)
+    # draw pillars in blue color
+    for i,j in zip(range(4),range(4,8)):
+        img = cv2.line(img, tuple(imgpts[i]), tuple(imgpts[j]),(255),3)
+    # draw top layer in red color
+    img = cv2.drawContours(img, [imgpts[4:]],-1,(0,0,255),3)
+    return img
 
 
 # Usage
@@ -46,6 +77,7 @@ def usage():
     print("[space]     : take picture")
     print("[c]         : compute calibration")
     print("[r]         : reset program")
+    print("[l]         : load cal data")
     print("[ESC]    : quit")
 
 usage()
@@ -77,6 +109,8 @@ while True:
         print("Adding image for calibration...")
         imgGray = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
 
+        
+
         # Find the chess board corners
         ret, corners = cv2.findChessboardCorners(imgGray, (n_row,n_col),None)
 
@@ -104,6 +138,9 @@ while True:
         else:
             print("Computing calibration ...")
             ret, mtx, dist, rvecs, tvecs = cv2.calibrateCamera(objpoints, imgpoints, (width,height),None,None)
+
+            print(rvecs)
+            print(tvecs)
             
             if not ret:
                 print("Cannot compute calibration!")
@@ -125,6 +162,16 @@ while True:
                 data={"camera_matrix": mtx.tolist(), "dist_coeff": dist.tolist()}
                 with open(result_file, "w") as f:
                     yaml.dump(data, f, default_flow_style=False)
+
+                # project 3D points to image plane
+                # axes = np.float32([[0,0,0], [0,3,0], [3,3,0], [3,0,0],[0,0,-3],[0,3,-3],[3,3,-3],[3,0,-3] ])
+                # imgPtsAll=[]
+                # for i in range(len(axes)):
+                #     imgpts, jac = cv2.projectPoints(axes[i], rvecs[i], tvecs[i], mtx, dist)
+                #     imgPtsAll.append(imgpts)
+                # img = drawCube(img,corners2,imgPtsAll)
+                # cv2.imshow('Calibration',img) 
+                # cv2.waitKey(1000)   
                 
     # ESC pressed to quit
     elif k%256 == 27:
@@ -136,6 +183,11 @@ while True:
     elif k%256 ==114: 
          print("Reset program...")
          Initialization = True
+    
+    # 'l' pressed to load yaml calibration data
+    elif k%256 == ord('l'):
+        print('load calibration data from yaml file')
+        loadCalibrationData('calibration.yaml')
         
             
         
