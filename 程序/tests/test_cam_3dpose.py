@@ -69,8 +69,13 @@ if __name__ == '__main__':
     mtx,dist = loadCalibrationData('20240226_1255_1m6_calibration_err0_05.yaml')
 
     criteria = (cv.TERM_CRITERIA_EPS + cv.TERM_CRITERIA_MAX_ITER, 30, 0.001)
+
+
+    # 3D object points, assuming the chessboard lies on the X-Y plane (z=0) and square size of 38mm
     objp = np.zeros((6*9, 3), np.float32)
     objp[:, :2] = np.mgrid[0:6, 0:9].T.reshape(-1, 2)*square_size
+
+   
 
     axis = np.float32([[1, 0, 0], [0, 1, 0], [0, 0, -1]]).reshape(-1, 3)*square_size
     axisCube = np.float32([[0, 0, 0], [0, 1, 0], [1, 1, 0], [1, 0, 0],
@@ -98,10 +103,16 @@ if __name__ == '__main__':
             cv.imshow('Pose Estimation',imgAugmnt) 
 
             # Find the rotation and translation vectors
+            # assuming word coordinates lies on the chessboard 
             ret, rvecs, tvecs = cv.solvePnP(objp, corners2, mtx, dist)
 
             if ret:
-                cv.putText(img, 'solved!!', (text_x, text_y), font, font_scale, font_color, 1, line_type)
+                debug_message='%.2f,%.2f,%.2f' % (tvecs[0]/1e3,tvecs[1]/1e3,tvecs[2]/1e3)
+                cv.putText(img, debug_message, (text_x, text_y), font, font_scale, font_color, 1, line_type)
+                
+                # converting Rodrigues format to 3x3 rotation matrix format
+                rotMatrix,_=cv.Rodrigues(rvecs)
+                #print(rotMatrix)
             
 
                 # project 3D points to image plane
@@ -130,4 +141,4 @@ if __name__ == '__main__':
                 camera.release()        
                 break
 
-    cv.destroyAllWindow()
+    cv.destroyAllWindows()
