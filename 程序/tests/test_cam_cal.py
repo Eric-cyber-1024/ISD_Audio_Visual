@@ -139,6 +139,17 @@ while True:
         
         else:
             print("Computing calibration ...")
+
+            # 
+            # input:
+            # objpoints -- 3D coordinates corresponding to imgpoints
+            # imgpoints -- corners detected from image frames
+            # 
+            # returns:
+            # mtx       -- camera matrix
+            # rvecs     -- rotation matrix
+            # tvecs     -- translation vector
+            # 
             ret, mtx, dist, rvecs, tvecs = cv2.calibrateCamera(objpoints, imgpoints, (width,height),None,None)
 
             
@@ -150,14 +161,21 @@ while True:
             else:
                 print("Camera calibration successfully computed")
                 # Compute reprojection errors
+                errors=[]
                 for i in range(len(objpoints)):
+                   # project 3D coordinates to 2D points according to the estimated project matrix
+                   # 
                    imgpoints2, _ = cv2.projectPoints(objpoints[i], rvecs[i], tvecs[i], mtx, dist)
+                   # compare imgpoints2 and imgpoints  
                    error = cv2.norm(imgpoints[i],imgpoints2, cv2.NORM_L2)/len(imgpoints2)
+                   errors.append(error)
                    tot_error += error
+                   
                 print("Camera matrix: ", mtx)
                 print("Distortion coeffs: ", dist)
                 print("Total error: ", tot_error)
-                print("Mean error: ", np.mean(error))
+                print("Mean error: ", np.mean(errors))
+                print(errors)
                 
                 # Saving calibration matrix
 
