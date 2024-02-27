@@ -1,3 +1,4 @@
+import csv
 import serial
 import threading
 import sys
@@ -11,13 +12,45 @@ def read_serial_data(ser):
             break
 
 # Get command-line arguments
-if len(sys.argv) != 4:
-    print("Usage: python serial_client.py <com_port> <x> <y>")
+if len(sys.argv) == 3:
+    index = int(sys.argv[2])  
+
+    # Read the table from the CSV file
+    table = []
+    try:
+        with open('locs.csv', 'r') as file:
+            csv_reader = csv.reader(file)
+            for row in csv_reader:
+                x, y = map(int, row)
+                table.append((x, y))
+    except FileNotFoundError:
+        print("CSV file not found.")
+        sys.exit(1)
+    except csv.Error:
+        print("Error reading CSV file.")
+        sys.exit(1)
+
+    # Validate the index
+    if not (0 <= index < len(table)):
+        print("Invalid index provided.")
+        sys.exit(1)
+
+    # Extract x and y values from the table based on the index
+    x, y = table[index]
+
+    print('index=%d' %(index))
+    print('x,y=%d,%d' %(x,y))
+
+
+elif len(sys.argv) == 4:
+    x = int(sys.argv[2])
+    y = int(sys.argv[3])
+
+else:
+    print("Usage: python test_xy_uart.py <com_port> <index> OR python test_xy_uart.py <com_port> <x> <y>")
     sys.exit(1)
 
 com_port = sys.argv[1]
-x = int(sys.argv[2])
-y = int(sys.argv[3])
 
 # Configure the serial port
 ser = serial.Serial(com_port, 9600)
@@ -35,7 +68,7 @@ serial_thread.start()
 # Main thread continues execution
 # You can perform other tasks here if needed
 
-# Wait for the serial thread to finish (optional)
+# Wait for the serial thread to finish
 serial_thread.join()
 
 # Close the serial port
