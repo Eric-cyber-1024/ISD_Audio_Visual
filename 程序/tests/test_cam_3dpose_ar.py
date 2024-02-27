@@ -63,6 +63,7 @@ def pose_esitmation(frame, aruco_dict_type, mtx, dist):
     text_size, _ = cv2.getTextSize(debug_message, font, font_scale, 1)
     text_x = 10
     text_y = 10 + text_size[1]
+    background_color = (50, 50, 50)  # dark grey background color
 
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     #cv2.aruco_dict = cv2.aruco.Dictionary_get(aruco_dict_type)
@@ -111,6 +112,14 @@ def pose_esitmation(frame, aruco_dict_type, mtx, dist):
                     
                     debug_message='%.2f,%.2f,%.2f' % (tvecs[0]/1e3,tvecs[1]/1e3,tvecs[2]/1e3)
 
+                    # Get the text size
+                    (text_width, text_height), _ = cv2.getTextSize(debug_message, font, font_scale, 1)
+
+                    # Calculate the background rectangle coordinates
+                    background_rect_coords = ((0, 0), (text_width + 10, text_height + 10))  # Adjust padding as needed
+
+                    # Draw the background rectangle
+                    cv2.rectangle(frame, background_rect_coords[0], background_rect_coords[1], background_color, cv2.FILLED)
                     cv2.putText(frame, debug_message, (text_x, text_y), font, font_scale, font_color, 1, line_type)
                 
                     
