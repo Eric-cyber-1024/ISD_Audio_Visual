@@ -72,8 +72,8 @@ if __name__ == '__main__':
 
 
     # 3D object points, assuming the chessboard lies on the X-Y plane (z=0) and square size of 38mm
-    objp = np.zeros((6*9, 3), np.float32)
-    objp[:, :2] = np.mgrid[0:6, 0:9].T.reshape(-1, 2)*square_size
+    objp = np.zeros((n_col*n_row, 3), np.float32)
+    objp[:, :2] = np.mgrid[0:n_row, 0:n_col].T.reshape(-1, 2)*square_size
 
    
 
@@ -93,7 +93,7 @@ if __name__ == '__main__':
             cv.destroyAllWindows()
             break
         gray = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
-        ret, corners = cv.findChessboardCorners(gray, (6, 9), None)
+        ret, corners = cv.findChessboardCorners(gray, (n_row, n_col), None)
         
         if ret:
             corners2 = cv.cornerSubPix(gray, corners, (11, 11), (-1, -1), criteria)
@@ -106,7 +106,10 @@ if __name__ == '__main__':
             # assuming word coordinates lies on the chessboard 
             ret, rvecs, tvecs = cv.solvePnP(objp, corners2, mtx, dist)
 
+            
+
             if ret:
+                
                 debug_message='%.2f,%.2f,%.2f' % (tvecs[0]/1e3,tvecs[1]/1e3,tvecs[2]/1e3)
                 cv.putText(img, debug_message, (text_x, text_y), font, font_scale, font_color, 1, line_type)
                 
@@ -125,7 +128,7 @@ if __name__ == '__main__':
                 cv.imshow('Pose Estimation Cube', imgCube)
             
             
-            k = cv.waitKey(50) & 0xff
+            k = cv.waitKey(10) & 0xff
             if k == 'c':
                 continue
             elif k%256 == 27:
@@ -135,7 +138,7 @@ if __name__ == '__main__':
 
         else:
             cv.imshow('Pose Estimation', img)
-            k = cv.waitKey(50) & 0xff
+            k = cv.waitKey(10) & 0xff
             if k%256 == 27:
                 print("Escape hit, closing...")
                 camera.release()        

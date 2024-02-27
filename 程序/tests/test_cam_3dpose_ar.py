@@ -18,10 +18,15 @@ import yaml
 
 
 def draw(img, corners, imgpts):
-    corner = tuple(corners[0].ravel())
+
+    # why it has to be corners[1]?!
+    corner = tuple(corners[1].ravel())
     
+    # blue -- X
     img = cv2.line(img, (int(corner[0]),int(corner[1])), (int(imgpts[0][0][0]),int(imgpts[0][0][1])), (255, 0, 0), 5)
+    # green -- Y 
     img = cv2.line(img, (int(corner[0]),int(corner[1])), (int(imgpts[1][0][0]),int(imgpts[1][0][1])), (0, 255, 0), 5)
+    # red -- Z
     img = cv2.line(img, (int(corner[0]),int(corner[1])), (int(imgpts[2][0][0]),int(imgpts[2][0][1])), (0, 0, 255), 5)
     return img
 
@@ -33,7 +38,7 @@ def loadCalibrationData(yamlFileName):
     # Extract the camera matrix and distortion coefficients
     camera_matrix = np.array(data['camera_matrix'])
     dist_coeffs = np.array(data['dist_coeff'])
-    print(camera_matrix,dist_coeffs)
+    #print(camera_matrix,dist_coeffs)
     return camera_matrix,dist_coeffs
 
 def pose_esitmation(frame, aruco_dict_type, mtx, dist):
@@ -46,6 +51,18 @@ def pose_esitmation(frame, aruco_dict_type, mtx, dist):
     return:-
     frame - The frame with the axis drawn on it
     '''
+
+    # Define the font settings
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    font_scale = 1.
+    font_color = (255, 255, 255)  # White color
+    line_type = cv2.LINE_AA
+
+    # Write the debug message on the image
+    debug_message = "Debug Message"
+    text_size, _ = cv2.getTextSize(debug_message, font, font_scale, 1)
+    text_x = 10
+    text_y = 10 + text_size[1]
 
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     #cv2.aruco_dict = cv2.aruco.Dictionary_get(aruco_dict_type)
@@ -64,7 +81,7 @@ def pose_esitmation(frame, aruco_dict_type, mtx, dist):
     objp[2]=[38.,0.,0.]
     objp[3]=[38.,38.,0.]
 
-    
+    axis = np.float32([[1, 0, 0], [0, 1, 0], [0, 0, -1]]).reshape(-1, 3)*square_size
 
 
     corners, ids, rejected_img_points = detector.detectMarkers(gray)
@@ -94,7 +111,8 @@ def pose_esitmation(frame, aruco_dict_type, mtx, dist):
                     
                     debug_message='%.2f,%.2f,%.2f' % (tvecs[0]/1e3,tvecs[1]/1e3,tvecs[2]/1e3)
 
-                    #print(debug_message)
+                    cv2.putText(frame, debug_message, (text_x, text_y), font, font_scale, font_color, 1, line_type)
+                
                     
                     # converting Rodrigues format to 3x3 rotation matrix format
                     rotMatrix,_=cv2.Rodrigues(rvecs)
@@ -102,7 +120,7 @@ def pose_esitmation(frame, aruco_dict_type, mtx, dist):
                 
 
                     # project 3D points to image plane
-                    imgpts, jac = cv2.projectPoints(objp, rvecs, tvecs, mtx, dist)
+                    imgpts, jac = cv2.projectPoints(axis, rvecs, tvecs, mtx, dist)
 
                     frame = draw(frame, cc, imgpts)
                     #cv2.imshow('Estimated Pose', img)
@@ -153,7 +171,9 @@ if __name__ == '__main__':
         cv2.imshow('Estimated Pose', output)
 
         key = cv2.waitKey(1) & 0xFF
-        if key == ord('q'):
+
+        # press q or ESC to quit
+        if key == ord('q') or (key%256)==27:
             break
 
     video.release()
