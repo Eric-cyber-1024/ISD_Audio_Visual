@@ -15,6 +15,7 @@ from utils import ARUCO_DICT
 import argparse
 import time
 import yaml
+import datetime
 
 try:
     from roypypack import roypy  # package installation
@@ -26,10 +27,16 @@ import threading
 from sample_camera_info import print_camera_info
 from roypy_sample_utils import CameraOpener, add_camera_opener_options
 from roypy_platform_utils import PlatformHelper
+from data_logger import DataLogger
+
+
 
 
 # Add[support for pmd flexx2 depth camera],Brian,29 Feb 2024
-K=3
+K=5
+DEPTH_CAM_WIDTH =224
+DEPTH_CAM_HEIGHT=172
+
 mouseX = 0
 mouseY = 0
 
@@ -82,8 +89,12 @@ class MyListener(roypy.IDepthDataListener):
         confidence = data[:, :, 4]
 
         #print(depth[172//2][224//2])
-        z = depth[mouseY//K][mouseX//K]
-        self.get3DCoordinates(mouseX//K,mouseY//K,z)
+        
+        # comment out, Brian, 29 Feb 2024
+        yy = (mouseY%(DEPTH_CAM_HEIGHT*K))//K
+        xx = mouseX//K
+        z = depth[yy][xx]
+        self.get3DCoordinates(xx,yy,z)
         
         
 
@@ -125,13 +136,18 @@ class MyListener(roypy.IDepthDataListener):
         zImg = cv2.cvtColor(cv2.resize(zImage8,[zImage8.shape[1]*K,zImage8.shape[0]*K]),cv2.COLOR_GRAY2BGR)
         gImg = cv2.cvtColor(cv2.resize(grayImage8,[grayImage8.shape[1]*K,grayImage8.shape[0]*K]),cv2.COLOR_GRAY2BGR)
         
-        # marker mouseX, mouseY on zImg,gImg
-        cv2.circle(zImg,(mouseX,mouseY),1,(0,0,255))
-        cv2.circle(gImg,(mouseX,mouseY),1,(0,0,255))
+        #print(mouseX,mouseY)
 
-        cv2.imshow('Depth',zImg)
-        cv2.imshow('Gray', gImg)
-        cv2.setMouseCallback('Gray',draw_circle)
+        # Vertically stack the frames
+        stacked_frame = np.vstack((zImg,gImg))
+        # marker mouseX, mouseY on stacked_frame
+        cv2.circle(stacked_frame,(mouseX,mouseY%(DEPTH_CAM_HEIGHT*K)),3,(0,0,255),-1)
+        cv2.circle(stacked_frame,(mouseX,mouseY%(DEPTH_CAM_HEIGHT*K)+(DEPTH_CAM_HEIGHT*K)),3,(0,0,255),-1)
+
+        cv2.imshow('depth_plus_IR',stacked_frame)
+        #cv2.imshow('Depth',zImg)
+        #cv2.imshow('Gray', gImg)
+        cv2.setMouseCallback('depth_plus_IR',draw_circle)
         
 
         
@@ -215,7 +231,9 @@ def depthcam_main():
     parser = argparse.ArgumentParser (usage = __doc__)
     add_camera_opener_options (parser)
     options = parser.parse_args()
-   
+    
+    # for testing only
+    options.rrf = 'meetingroom4.rrf'
     opener = CameraOpener (options)
 
     try:
@@ -426,7 +444,18 @@ if __name__ == '__main__':
     
     # k = np.load(calibration_matrix_path)
     # d = np.load(distortion_coefficients_path)
-    
+
+
+    # initialize data logger
+
+    # get current timestamp and generat the log file 
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    logger = DataLogger(log_interval=1, file_path="log/%s_data.log" %(timestamp))  # Specify the data file path
+    # Start the logging process
+    logger.start_logging()
+    print('data logger started')
+
+
     # load calibration data
     k,d = loadCalibrationData('20240226_1255_1m6_calibration_err0_05.yaml')
 
@@ -457,3 +486,6 @@ if __name__ == '__main__':
 
     video.release()
     cv2.destroyAllWindows()
+
+    # stop data logger
+    logger.stop_logging()
