@@ -1,7 +1,4 @@
 '''
-Sample Usage:-
-python pose_estimation.py --K_Matrix calibration_matrix.npy --D_Coeff distortion_coefficients.npy --type DICT_5X5_100
-
 Dependency:
 opencv-contrib-python==4.7.0.72
 
@@ -41,6 +38,7 @@ K=5
 DEPTH_CAM_WIDTH =224
 DEPTH_CAM_HEIGHT=172
 
+remoteHostIPAddr=''
 endDepthCamFlag=False
 applyEqHistDepthCamFlag=False
 targetPosDepthCam='' # target position returned from depth camera, in string format
@@ -338,9 +336,11 @@ def depthcam_main():
     platformhelper = PlatformHelper()
     parser = argparse.ArgumentParser (usage = __doc__)
     add_camera_opener_options (parser)
+    parser.add_argument("-ip","--ip",type=str,required=True,help="remote rpi3 ip address")
+    
     options = parser.parse_args()
 
-    
+    delattr(options,"ip")
     
     # for testing only
     #options.rrf = 'meetingroom4.rrf'
@@ -553,15 +553,17 @@ if __name__ == '__main__':
     ap = argparse.ArgumentParser()
     # ap.add_argument("-k", "--K_Matrix", required=True, help="Path to calibration matrix (numpy file)")
     # ap.add_argument("-d", "--D_Coeff", required=True, help="Path to distortion coefficients (numpy file)")
+    ap.add_argument("-ip","--ip",type=str,required=True,help="remote rpi3 ip address")
     ap.add_argument("-t", "--type", type=str, default="DICT_ARUCO_ORIGINAL", help="Type of ArUCo tag to detect")
     args = vars(ap.parse_args())
 
+    # get remote rpi3 ip address
+    remoteHostIPAddr=args["ip"]
     
-    if ARUCO_DICT.get(args["type"], None) is None:
-        print(f"ArUCo tag type '{args['type']}' is not supported")
-        sys.exit(0)
+    
+    
 
-    aruco_dict_type = ARUCO_DICT[args["type"]]
+    aruco_dict_type = ARUCO_DICT["DICT_ARUCO_ORIGINAL"]
 
     # calibration_matrix_path = args["K_Matrix"]
     # distortion_coefficients_path = args["D_Coeff"]
@@ -609,7 +611,7 @@ if __name__ == '__main__':
         elif key == ord('n'):
             talkboxLocIndex = showDialogSelectTalkboxLocIndex()
             if talkboxLocIndex>=0 and talkboxLocIndex<30:
-                set_testrig_XY_byIndex('192.168.70.52',talkboxLocIndex)
+                set_testrig_XY_byIndex(remoteHostIPAddr,talkboxLocIndex)
 
         elif key == ord('m'):
             logger.add_data('positon changed!!')
