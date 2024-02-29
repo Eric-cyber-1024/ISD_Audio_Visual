@@ -31,6 +31,20 @@ def draw(img, corners, imgpts):
     return img
 
 
+def getOrientation(rvecs,tvecs):
+    # converting Rodrigues format to 3x3 rotation matrix format
+    R_c = cv2.Rodrigues(rvecs)[0]
+    t_c = -np.matmul(R_c, tvecs)
+    T_c = np.hstack([R_c, t_c])
+    alpha, beta, gamma = cv2.decomposeProjectionMatrix(T_c)[-1]
+    
+    # Convert euler angles to roll-pitch-yaw of a camera with X forward and Y left
+    roll = beta
+    pitch = -alpha - 90
+    yaw = gamma + 90
+
+    return roll,pitch,yaw
+
 def loadCalibrationData(yamlFileName):
     with open(yamlFileName, 'r') as file:
         data = yaml.safe_load(file)
@@ -109,8 +123,11 @@ def pose_esitmation(frame, aruco_dict_type, mtx, dist):
                 ret, rvecs, tvecs = cv2.solvePnP(objp,cc, mtx, dist)
 
                 if ret:
+
+                    roll,pitch,yaw = getOrientation(rvecs,tvecs)
                     
-                    debug_message='%.2f,%.2f,%.2f' % (tvecs[0]/1e3,tvecs[1]/1e3,tvecs[2]/1e3)
+                    tvecs = tvecs*2.
+                    debug_message='%.2f,%.2f,%.2f,(%d,%d),(%.1f,%.1f,%.1f)' % (tvecs[0]/1e3,tvecs[1]/1e3,tvecs[2]/1e3,int(cc[1][0][0]),int(cc[1][0][1]),roll,pitch,yaw)
 
                     # Get the text size
                     (text_width, text_height), _ = cv2.getTextSize(debug_message, font, font_scale, 1)
@@ -123,9 +140,7 @@ def pose_esitmation(frame, aruco_dict_type, mtx, dist):
                     cv2.putText(frame, debug_message, (text_x, text_y), font, font_scale, font_color, 1, line_type)
                 
                     
-                    # converting Rodrigues format to 3x3 rotation matrix format
-                    rotMatrix,_=cv2.Rodrigues(rvecs)
-                    #print(rotMatrix)
+                    
                 
 
                     # project 3D points to image plane
