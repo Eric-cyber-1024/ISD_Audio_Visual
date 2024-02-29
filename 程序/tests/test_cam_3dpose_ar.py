@@ -580,6 +580,7 @@ if __name__ == '__main__':
     # Start the logging process
     logger.start_logging()
     print('data logger started')
+    logger.add_data('ISD Microphone Array System Started')
 
 
     # load calibration data

@@ -193,26 +193,36 @@ print("m1:{},m2:{},m3:{},m4:{}\n".format(message1,message2,message3,message4))
 #    sys.exit(1)
 #host, port, mode, mic = sys.argv[1:5]
 
-if len(sys.argv) != 7:
-    print("usage:", sys.argv[0], "<host> <port> <mode> <mic> <mic_vol> <mic_disable>")
+if len(sys.argv) != 9:
+    print("usage:", sys.argv[0], "<host> <port> <mode> <mic> <mic_gain> <mic_disable> <set_test> <mic_delay")
     sys.exit(1)
-host, port, mode, mic, mic_vol, mic_disable = sys.argv[1:7]
+host, port, mode, mic, mic_vol, mic_disable, set_test,mic_delay = sys.argv[1:9]
 
 message5 = int(sys.argv[3])
 message6 = int(sys.argv[4])
 message7 = int(sys.argv[5])
 message8 = int(sys.argv[6])
+message9 = int(sys.argv[7])
+message10 = int(sys.argv[8])
 
 while True:
     try:
-        while(input("Please input 'start' to send:")!='start' ):
-            pass
+#org        while(input("Please input 'start' to send:")!='start' ):
+#org            pass
+        while True:
+            inStr = input("Please input 'start' to send:")
+            if inStr=='start':
+                break
+            elif inStr.find('n')==0:
+                message6=int(inStr[1:])
+                break
+        
         sel = selectors.DefaultSelector()     #wx add can work looply
         start_connections(host, int(port))
    #     global sendFlag,sendBuf
         #org sendBuf=bytes([message1,message2,message3,message4])
         #sendBuf=bytes([message1,message2,message3,message4,message5,message6])
-        sendBuf=bytes([message1,message2,message3,message4,message5,message6,message7,message8])
+        sendBuf=bytes([message1,message2,message3,message4,message5,message6,message7,message8,message9,message10])
         sendFlag=True
         while True:
             events = sel.select(timeout=None)
