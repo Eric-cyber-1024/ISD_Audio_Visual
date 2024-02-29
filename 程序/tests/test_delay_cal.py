@@ -44,7 +44,7 @@ MIC_NAMES      = np.array([
 ],dtype='U3')
 
 
-def getMicPositions():
+def getMicPositions(xOffset,yOffset,zOffset):
     '''
     
     get 3d coordinates of the microphones of the microphone array
@@ -60,6 +60,11 @@ def getMicPositions():
 
     overall = np.concatenate((outer,mid,inner,ref),axis=1)
     overall = np.concatenate([overall,np.zeros((1,NUM_OF_MICS+1))],axis=0)
+
+    overall[0,:]+=xOffset
+    overall[1,:]+=yOffset
+    overall[2,:]+=zOffset
+    
     
     return overall.T
 
@@ -67,7 +72,7 @@ def delay_calculation(src_position):
     src_position = np.array(src_position)  # this_location=[6, actual.x, acutal.y]
     
     
-    mic_position = getMicPositions()  # getting mic position
+    mic_position = getMicPositions(0,0.5,0)  # getting mic position
     mic_ref_ori = mic_position[0]     # set as the top mic
 
     
@@ -115,5 +120,5 @@ def delay_calculation(src_position):
     return delay_phase
 
 
-
-delay_calculation([0,0,6.])
+if __name__ == '__main__':
+    delay_calculation([0,0,3.7])
