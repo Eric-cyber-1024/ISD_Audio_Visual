@@ -16,6 +16,33 @@ import argparse
 import time
 import yaml
 
+try:
+    from roypypack import roypy  # package installation
+except ImportError:
+    import roypy  # local installation
+import queue
+import sys
+import threading
+from sample_camera_info import print_camera_info
+from roypy_sample_utils import CameraOpener, add_camera_opener_options
+from roypy_platform_utils import PlatformHelper
+
+
+# Add[for getting moving averages],Brian,29 Feb 2024
+class MovingAverageCalculator:
+    def __init__(self, nSamples):
+        self.nSamples = nSamples
+        self.window = []
+    
+    def calculate_moving_average(self, x):
+        self.window.append(x)
+
+        if len(self.window) > self.nSamples:
+            self.window.pop(0)
+
+        average = sum(self.window) / len(self.window)
+        return average
+
 
 def draw(img, corners, imgpts):
 
