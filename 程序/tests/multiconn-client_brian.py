@@ -230,7 +230,11 @@ while True:
             inStr = input("Please input 'start' to send:")
             if inStr=='start':
                 break
+            elif inStr=='getparams':
+                print([message1,message2,message3,message4,message5,message6,message7,message8]) 
+                pass
             elif inStr.find('n')==0:
+                print('****** Selected mic index=%s' %(inStr[1:]))
                 message6=int(inStr[1:])
                 break
         
