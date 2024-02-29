@@ -612,6 +612,8 @@ if __name__ == '__main__':
             talkboxLocIndex = showDialogSelectTalkboxLocIndex()
             if talkboxLocIndex>=0 and talkboxLocIndex<30:
                 set_testrig_XY_byIndex(remoteHostIPAddr,talkboxLocIndex)
+                # log the event
+                logger.add_data('talkbox location moved to index# %d' %(talkboxLocIndex))
 
         elif key == ord('m'):
             logger.add_data('positon changed!!')
