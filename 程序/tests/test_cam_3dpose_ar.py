@@ -16,6 +16,10 @@ import argparse
 import time
 import yaml
 import datetime
+import paramiko
+import tkinter as tk
+from tkinter import simpledialog
+
 
 try:
     from roypypack import roypy  # package installation
@@ -37,8 +41,67 @@ K=5
 DEPTH_CAM_WIDTH =224
 DEPTH_CAM_HEIGHT=172
 
+endDepthCamFlag=False
+applyEqHistDepthCamFlag=False
+targetPosDepthCam='' # target position returned from depth camera, in string format
+
 mouseX = 0
 mouseY = 0
+LogInterval=1  # secs to log data once
+prev_save_time = time.time()  # Initialize the previous save time
+
+
+def showDialogSelectTalkboxLocIndex():
+    root = tk.Tk()
+    root.withdraw()
+
+    number = simpledialog.askinteger("Select Talkbox Loc Index", "Select Talkbox Loc Index")
+    
+    if number is None:
+        return -1
+    else:
+        return number
+
+
+# code to run on remote rpi3 
+# Function to execute the SSH command
+def execute_ssh_command(hostname,sCmd):
+    # Create an SSH client
+    client = paramiko.SSHClient()
+    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+
+    try:
+        # Connect to the remote server
+        client.connect(hostname, username='pi', password='pi')
+
+        # Run the remote command
+        stdin, stdout, stderr = client.exec_command(sCmd)
+
+        # Read the output of the command
+        output = stdout.read().decode()
+
+        # Print the output
+        print(output)
+        logger.add_data(output)
+        
+
+    finally:
+        # Close the SSH connection
+        client.close()
+
+def set_testrig_XY_byIndex(hostname,index):
+
+    sPortName='/dev/ttyACM0'
+    sCmd = 'cd ~/workspace/python ; python test_xy_uart.py %s %d' %(sPortName,index)
+    
+    # Create a thread for executing the SSH command
+    ssh_thread = threading.Thread(target=execute_ssh_command,args=(hostname,sCmd))
+
+    # Start the thread
+    ssh_thread.start()
+
+    # Wait for the SSH thread to complete
+    ssh_thread.join()
 
 
 def draw_circle(event,x,y,flags,param):
@@ -60,6 +123,8 @@ class MyListener(roypy.IDepthDataListener):
         self.queue = q
 
     def get3DCoordinates(self,u,v,z):
+        global targetPosDepthCam
+
         M = self.cameraMatrix
         fx= M[0][0]
         fy= M[1][1]
@@ -68,7 +133,9 @@ class MyListener(roypy.IDepthDataListener):
         x = (u-cx)*(z/fx)
         y = (v-cy)*(z/fy)
 
-        print(x,y,z)
+        # save x,y,z to targetPosDepthCam
+        targetPosDepthCam = 'dcam,%.2f,%.2f,%.2f' %(x,y,z)
+        #print(targetPosDepthCam)
 
     
 
@@ -78,15 +145,32 @@ class MyListener(roypy.IDepthDataListener):
         
 
     def paint (self, data):
+
+        global stacked_frame
         """Called in the main thread, with data containing one of the items that was added to the
         queue in onNewData.
         """
+
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        font_scale = 1.
+        font_color = (0, 0, 255)  # White color
+        line_type = cv2.LINE_AA
+
+        # Write the debug message on the image
+        debug_message = "Debug Message"
+        text_size, _ = cv2.getTextSize(debug_message, font, font_scale, 1)
+        text_x = 10
+        text_y = 10 + text_size[1]
+        background_color = (50, 50, 50)  # dark grey background color
+
         # mutex to lock out changes to the distortion while drawing
         self.lock.acquire()
 
-        depth = data[:, :, 2]
-        gray = data[:, :, 3]
+        depth = data[:, :, 2]   # float64
+        gray = data[:, :, 3]    # float64
         confidence = data[:, :, 4]
+
+        
 
         #print(depth[172//2][224//2])
         
@@ -127,8 +211,16 @@ class MyListener(roypy.IDepthDataListener):
             zImage8 = cv2.undistort(zImage8,self.cameraMatrix,self.distortionCoefficients)
             grayImage8 = cv2.undistort(grayImage8,self.cameraMatrix,self.distortionCoefficients)
 
-        # equalize grayImage8
-        grayImage8 = cv2.equalizeHist(grayImage8)    
+        # equalize grayImage8 if needed
+        if applyEqHistDepthCamFlag:
+            grayImage8 = cv2.equalizeHist(grayImage8)
+        else:
+            # Create a CLAHE object
+            #clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+
+            # Apply CLAHE to the image
+            #grayImage8 = clahe.apply(grayImage8)
+            pass
 
         # finally show the images
         
@@ -137,6 +229,9 @@ class MyListener(roypy.IDepthDataListener):
         gImg = cv2.cvtColor(cv2.resize(grayImage8,[grayImage8.shape[1]*K,grayImage8.shape[0]*K]),cv2.COLOR_GRAY2BGR)
         
         #print(mouseX,mouseY)
+        
+
+
 
         # Vertically stack the frames
         stacked_frame = np.vstack((zImg,gImg))
@@ -144,14 +239,21 @@ class MyListener(roypy.IDepthDataListener):
         cv2.circle(stacked_frame,(mouseX,mouseY%(DEPTH_CAM_HEIGHT*K)),3,(0,0,255),-1)
         cv2.circle(stacked_frame,(mouseX,mouseY%(DEPTH_CAM_HEIGHT*K)+(DEPTH_CAM_HEIGHT*K)),3,(0,0,255),-1)
 
+
+        # Get the text size
+        (text_width, text_height), _ = cv2.getTextSize(targetPosDepthCam, font, font_scale, 1)
+
+        # Calculate the background rectangle coordinates
+        background_rect_coords = ((0, 0), (text_width + 10, text_height + 10))  # Adjust padding as needed
+
+        # Draw the background rectangle
+        cv2.rectangle(stacked_frame, background_rect_coords[0], background_rect_coords[1], background_color, cv2.FILLED)
+        cv2.putText(stacked_frame, targetPosDepthCam, (text_x, text_y), font, font_scale, font_color, 2, line_type)
+    
+
         cv2.imshow('depth_plus_IR',stacked_frame)
-        #cv2.imshow('Depth',zImg)
-        #cv2.imshow('Gray', gImg)
         cv2.setMouseCallback('depth_plus_IR',draw_circle)
         
-
-        
-
         self.lock.release()
         self.done = True
 
@@ -193,13 +295,15 @@ class MyListener(roypy.IDepthDataListener):
 
     # Map the gray values from the camera to 0..255
     def adjustGrayValue(self,grayValue):
-        clampedVal = min(600,grayValue)
-        newGrayValue = clampedVal / 600 * 255
+        clampedVal = min(1000,grayValue)
+        newGrayValue = (clampedVal/1000.)*255
         return newGrayValue
 
 def process_event_queue (q, painter):
+    global endDepthCamFlag
+    global applyEqHistDepthCamFlag
 
-    while True:
+    while not endDepthCamFlag:
         try:
             
             # try to retrieve an item from the queue.
@@ -219,8 +323,12 @@ def process_event_queue (q, painter):
             currentKey = cv2.waitKey(1)
             if currentKey == ord('d'):
                 painter.toggleUndistort()
-            # close if escape key pressed
-            if currentKey == 27: 
+            elif currentKey == ord('h'):
+                # toggle applying Histogram Equalization
+                applyEqHistDepthCamFlag = not applyEqHistDepthCamFlag
+
+            # close if esc/q pressed
+            elif currentKey == 27 or currentKey == ord('q'):
                 break
 
 # depth camera main
@@ -231,9 +339,11 @@ def depthcam_main():
     parser = argparse.ArgumentParser (usage = __doc__)
     add_camera_opener_options (parser)
     options = parser.parse_args()
+
+    
     
     # for testing only
-    options.rrf = 'meetingroom4.rrf'
+    #options.rrf = 'meetingroom4.rrf'
     opener = CameraOpener (options)
 
     try:
@@ -333,10 +443,12 @@ def pose_esitmation(frame, aruco_dict_type, mtx, dist):
     frame - The frame with the axis drawn on it
     '''
 
+    global prev_save_time, targetPosDepthCam, stacked_frame
+
     # Define the font settings
     font = cv2.FONT_HERSHEY_SIMPLEX
     font_scale = 1.
-    font_color = (255, 255, 255)  # White color
+    font_color = (0, 0, 255)  # red color
     line_type = cv2.LINE_AA
 
     # Write the debug message on the image
@@ -355,13 +467,13 @@ def pose_esitmation(frame, aruco_dict_type, mtx, dist):
     detector = cv2.aruco.ArucoDetector(arucoDict, arucoParams)
 
     # 3D object points, assuming the chessboard lies on the X-Y plane (z=0) and square size of 38mm
-    square_size=38
+    square_size=38*2
     objp = np.zeros((4, 3), np.float32)
     #objp[:, :2] = np.mgrid[0:2, 0:2].T.reshape(-1, 2)*square_size
-    objp[0]=[0.,38.,0.]
+    objp[0]=[0.,square_size*1.,0.]
     objp[1]=[0.,0.,0.]
-    objp[2]=[38.,0.,0.]
-    objp[3]=[38.,38.,0.]
+    objp[2]=[square_size*1.,0.,0.]
+    objp[3]=[square_size*1.,square_size*1.,0.]
 
     axis = np.float32([[1, 0, 0], [0, 1, 0], [0, 0, -1]]).reshape(-1, 3)*square_size
 
@@ -393,8 +505,17 @@ def pose_esitmation(frame, aruco_dict_type, mtx, dist):
 
                     roll,pitch,yaw = getOrientation(rvecs,tvecs)
                     
-                    tvecs = tvecs*2.
+                    
                     debug_message='%.2f,%.2f,%.2f,(%d,%d),(%.1f,%.1f,%.1f)' % (tvecs[0]/1e3,tvecs[1]/1e3,tvecs[2]/1e3,int(cc[1][0][0]),int(cc[1][0][1]),roll,pitch,yaw)
+
+                    # logging 
+                    # Get the current system time
+                    current_time = time.time()
+
+                    if current_time - prev_save_time >= LogInterval:
+                        logger.add_data('cam,%s' %(debug_message))
+                        logger.add_data(targetPosDepthCam)
+                        prev_save_time = current_time  # Update the previous save time
 
                     # Get the text size
                     (text_width, text_height), _ = cv2.getTextSize(debug_message, font, font_scale, 1)
@@ -415,11 +536,14 @@ def pose_esitmation(frame, aruco_dict_type, mtx, dist):
 
                     frame = draw(frame, cc, imgpts)
                     #cv2.imshow('Estimated Pose', img)
+
+
                     
 
     return frame
 
 if __name__ == '__main__':
+
 
     opencv_version = cv2.__version__
 
@@ -477,12 +601,22 @@ if __name__ == '__main__':
         output = pose_esitmation(frame, aruco_dict_type, k, d)
 
         cv2.imshow('Estimated Pose', output)
-
         key = cv2.waitKey(1) & 0xFF
 
         # press q or ESC to quit
         if key == ord('q') or (key%256)==27:
             break
+        elif key == ord('n'):
+            talkboxLocIndex = showDialogSelectTalkboxLocIndex()
+            if talkboxLocIndex>=0 and talkboxLocIndex<30:
+                set_testrig_XY_byIndex('192.168.70.52',talkboxLocIndex)
+
+        elif key == ord('m'):
+            logger.add_data('positon changed!!')
+
+
+    # end depthcam 
+    endDepthCamFlag=True
 
     video.release()
     cv2.destroyAllWindows()
