@@ -29,6 +29,9 @@ def read_serial_data(ser):
         if line.find('Read after trigger')>=0:
             print(line)
             logger.add_data(line)
+            # if its the last shot, print sth to indicate
+            if line.find('j=7')>0:
+                print('ready for next microphone....')
         #    break
 
 def start_connections(host, port):
