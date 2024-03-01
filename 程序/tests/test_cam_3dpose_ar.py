@@ -293,8 +293,8 @@ class MyListener(roypy.IDepthDataListener):
 
     # Map the gray values from the camera to 0..255
     def adjustGrayValue(self,grayValue):
-        clampedVal = min(1000,grayValue)
-        newGrayValue = (clampedVal/1000.)*255
+        clampedVal = min(600,grayValue)
+        newGrayValue = (clampedVal/600.)*255
         return newGrayValue
 
 def process_event_queue (q, painter):
