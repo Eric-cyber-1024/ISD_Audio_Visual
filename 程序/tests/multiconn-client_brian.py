@@ -105,12 +105,7 @@ if __name__ == '__main__':
 
 
 
-    # Configure the serial port
-    ser = serial.Serial('COM15', 115200)
-
-    # Start a separate thread to read data from the serial port
-    serial_thread = threading.Thread(target=read_serial_data, args=(ser,), daemon=True)
-    serial_thread.start()
+    
 
 
 
@@ -143,15 +138,24 @@ if __name__ == '__main__':
     #    sys.exit(1)
     #host, port, mode, mic = sys.argv[1:5]
 
-    if len(sys.argv) != 7:
-        print("usage:", sys.argv[0], "<host> <port> <mode> <mic> <mic_vol> <mic_disable>")
+    if len(sys.argv) != 8:
+        print("usage:", sys.argv[0], "<host> <port> <mode> <mic> <mic_vol> <mic_disable> <comport name>")
         sys.exit(1)
-    host, port, mode, mic, mic_vol, mic_disable = sys.argv[1:7]
+    host, port, mode, mic, mic_vol, mic_disable, comportName = sys.argv[1:8]
 
     message5 = int(sys.argv[3])
     message6 = int(sys.argv[4])
     message7 = int(sys.argv[5])
     message8 = int(sys.argv[6])
+
+    # if comportName not 'nil' and starts with 'COM'
+    if comportName!='nil' and comportName.find('COM')==0:
+        # Configure the serial port
+        ser = serial.Serial(sys.argv[7], 115200)
+
+        # Start a separate thread to read data from the serial port
+        serial_thread = threading.Thread(target=read_serial_data, args=(ser,), daemon=True)
+        serial_thread.start()
 
     while True:
         try:
