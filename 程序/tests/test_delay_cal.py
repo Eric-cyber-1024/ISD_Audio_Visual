@@ -70,6 +70,20 @@ def getMicPositions(xOffset,yOffset,zOffset):
     return overall.T
 
 def delay_calculation(src_position):
+    '''
+    Calculates the delay phase for a given source position based on the microphone positions.
+
+    Parameters:
+        src_position (list or array): The source position in the format [x, y].
+
+    Returns:
+        tuple: A tuple containing the following:
+            - delay_phase (ndarray): The delay phase for each microphone.
+            - raw_delay (ndarray): The raw delay values for each microphone.
+            - sorted_micNames (ndarray): The sorted microphone names.
+
+    '''
+
     src_position = np.array(src_position)  # this_location=[6, actual.x, acutal.y]
     
     
@@ -98,7 +112,7 @@ def delay_calculation(src_position):
         # get the distance between mics and source
         vec_diff = src_position - mic_position[i] # get the vector difference first
         magnitude_s2p[i] = np.linalg.norm(vec_diff, axis=0, keepdims=True)
-        print(magnitude_s2p[i]*1e6/SPEED_OF_SOUND)
+        # print(magnitude_s2p[i]*1e6/SPEED_OF_SOUND)
 
     delay = np.zeros((NUM_OF_MICS))
     for i in range(NUM_OF_MICS):
@@ -124,7 +138,7 @@ def delay_calculation(src_position):
     delay_phase = delay_phase + minimum
     delay_phase = np.reshape(delay_phase, NUM_OF_MICS)
 
-    return delay_phase,raw_delay
+    return delay_phase,raw_delay,sorted_micNames 
 
 
 if __name__ == '__main__':
