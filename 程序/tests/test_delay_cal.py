@@ -58,14 +58,15 @@ def getMicPositions(xOffset,yOffset,zOffset):
     inner = INNER_RADIUS*np.array([np.sin(angles2),np.cos(angles2)])
     ref   = np.array([[0],[0]]) # at the center of the microphone array, a virtual one
 
-    overall = np.concatenate((outer,mid,inner,ref),axis=1)
+    overall = np.concatenate((outer,inner,mid,ref),axis=1)
     overall = np.concatenate([overall,np.zeros((1,NUM_OF_MICS+1))],axis=0)
 
     overall[0,:]+=xOffset
     overall[1,:]+=yOffset
     overall[2,:]+=zOffset
     
-    
+    sorted_indices = np.argsort(MIC_NAMES)
+    overall = overall[:,sorted_indices]
     return overall.T
 
 def delay_calculation(src_position):
@@ -73,7 +74,10 @@ def delay_calculation(src_position):
     
     
     mic_position = getMicPositions(0,0.5,0)  # getting mic position
-    mic_ref_ori = mic_position[0]     # set as the top mic
+
+    sorted_micNames = np.sort(MIC_NAMES)
+    
+    mic_ref_ori = mic_position[sorted_micNames=='M01'][0]    
 
     
 
@@ -100,6 +104,9 @@ def delay_calculation(src_position):
     for i in range(NUM_OF_MICS):
         delay[i] = - (magnitude_s2r - magnitude_s2p[i]) / SPEED_OF_SOUND
 
+    # save a copy of the raw delays
+    raw_delay = delay
+
     # delay adjustments to get the delays need to add to match all the mic signals with the one with max. delay
     delay = max(delay)-delay
     delay_phase = delay*48000.  # 48KHz
@@ -117,7 +124,7 @@ def delay_calculation(src_position):
     delay_phase = delay_phase + minimum
     delay_phase = np.reshape(delay_phase, NUM_OF_MICS)
 
-    return delay_phase
+    return delay_phase,raw_delay
 
 
 if __name__ == '__main__':
