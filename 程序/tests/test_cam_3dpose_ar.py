@@ -34,7 +34,7 @@ from data_logger import DataLogger
 
 
 # Add[support for pmd flexx2 depth camera],Brian,29 Feb 2024
-K=5
+K=4
 DEPTH_CAM_WIDTH =224
 DEPTH_CAM_HEIGHT=172
 
@@ -336,11 +336,14 @@ def depthcam_main():
     platformhelper = PlatformHelper()
     parser = argparse.ArgumentParser (usage = __doc__)
     add_camera_opener_options (parser)
+    parser.add_argument('-cam','--cam',type=str,required=True,help='camera index')
     parser.add_argument("-ip","--ip",type=str,required=True,help="remote rpi3 ip address")
     
     options = parser.parse_args()
 
+    # delete some previous arguments
     delattr(options,"ip")
+    delattr(options,"cam")
     
     # for testing only
     #options.rrf = 'meetingroom4.rrf'
@@ -553,6 +556,7 @@ if __name__ == '__main__':
     ap = argparse.ArgumentParser()
     # ap.add_argument("-k", "--K_Matrix", required=True, help="Path to calibration matrix (numpy file)")
     # ap.add_argument("-d", "--D_Coeff", required=True, help="Path to distortion coefficients (numpy file)")
+    ap.add_argument('-cam','--cam',type=str,required=True,help='camera index')
     ap.add_argument("-ip","--ip",type=str,required=True,help="remote rpi3 ip address")
     ap.add_argument("-t", "--type", type=str, default="DICT_ARUCO_ORIGINAL", help="Type of ArUCo tag to detect")
     args = vars(ap.parse_args())
@@ -560,7 +564,7 @@ if __name__ == '__main__':
     # get remote rpi3 ip address
     remoteHostIPAddr=args["ip"]
     
-    
+    cameraIndx = int(args['cam'])
     
 
     aruco_dict_type = ARUCO_DICT["DICT_ARUCO_ORIGINAL"]
@@ -592,7 +596,7 @@ if __name__ == '__main__':
     depthcam_thread.start()
 
 
-    video = cv2.VideoCapture(1)
+    video = cv2.VideoCapture(cameraIndx)
     time.sleep(2.0)
 
     while True:
