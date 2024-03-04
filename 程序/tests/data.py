@@ -264,6 +264,13 @@ if __name__ == '__main__':
         # df_cam_summary['average_loc2']
 
 
+    plt.figure()
+    plt.plot(df_cam_summary['average_loc'][:,0]*100,-df_cam_summary['average_loc'][:,1]*100,'*')
+    plt.title('talkbox locations')
+    plt.xlabel('x/cm')
+    plt.ylabel('y/cm')
+    plt.savefig('output/talkboxLocs.png')
+
     plt.show()
     # compare the above two
 

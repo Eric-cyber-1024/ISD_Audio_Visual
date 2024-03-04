@@ -10,11 +10,16 @@ import numpy as np ###### require install and adjust to certain edition 1.13.3
 import serial
 import threading
 import datetime
+import time
+import keyboard
 from data_logger import DataLogger
 
 sel = selectors.DefaultSelector()
 sendBuf=b'SET0'
 RecvBuf=[]
+micIndx = 1          # microphone index, from 1 to 29 
+nextMicFlag=False    # True to get delays from FPGA from mic at index micIndx
+nextCycleFlag=False  # True to indicate the start of a new cycle
 sendFlag=False
 MIC_NUMBER=32
 INDEX =[x for x in range (MIC_NUMBER )]
@@ -22,6 +27,8 @@ INDEX =[x for x in range (MIC_NUMBER )]
 
 # Function to read data from the serial port
 def read_serial_data(ser):
+    global nextCycleFlag,nextMicFlag, micIndx
+
     while True:
         line = ser.readline().decode('ISO-8859-1').strip()
         #print(line)
@@ -31,7 +38,17 @@ def read_serial_data(ser):
             logger.add_data(line)
             # if its the last shot, print sth to indicate
             if line.find('j=7')>0:
-                print('ready for next microphone....')
+                print('ready for next microphone...., currently at mic# %d' %(micIndx))
+                # increment micIndx if micIndx<29
+                if micIndx<29:
+                    micIndx+=1
+                    nextMicFlag=True
+                else:
+                    # reset micIndex and nextMicFlag
+                    micIndx = 1
+                    nextMicFlag=True
+                    # raise wait next cycle flag
+                    nextCycleFlag=True
         #    break
 
 def start_connections(host, port):
@@ -143,7 +160,9 @@ if __name__ == '__main__':
 
     if len(sys.argv) != 8:
         print("usage:", sys.argv[0], "<host> <port> <mode> <mic> <mic_vol> <mic_disable> <comport name>")
-        sys.exit(1)
+        logger.stop_logging()
+        exit()
+
     host, port, mode, mic, mic_vol, mic_disable, comportName = sys.argv[1:8]
 
     message5 = int(sys.argv[3])
@@ -160,21 +179,44 @@ if __name__ == '__main__':
         serial_thread = threading.Thread(target=read_serial_data, args=(ser,), daemon=True)
         serial_thread.start()
 
+    nextCycleFlag=True # start with a new cycle
+    nextMicFlag = True # enabled to get mic delays
+    micIndx     = 1    # always start from m#1 
     while True:
         try:
-            while True:
-                inStr = input("Please input 'start' to send:")
-                if inStr=='start':
-                    break
-                elif inStr=='getparams':
-                    print([message1,message2,message3,message4,message5,message6,message7,message8]) 
-                    pass
-                elif inStr.find('n')==0:
-                    sMsg = '****** Selected mic index=%s' %(inStr[1:])
-                    print(sMsg)
-                    logger.add_data(sMsg)
-                    message6=int(inStr[1:])
-                    break
+            # while True:
+            #     inStr = input("Please input 'start' to send:")
+            #     if inStr=='start':
+            #         break
+            #     elif inStr=='getparams':
+            #         print([message1,message2,message3,message4,message5,message6,message7,message8]) 
+            #         pass
+            #     elif inStr.find('n')==0:
+            #         sMsg = '****** Selected mic index=%s' %(inStr[1:])
+            #         print(sMsg)
+            #         logger.add_data(sMsg)
+            #         micIndx =int(inStr[1:])
+            #         message6=micIndx
+            #         break
+
+            # wait until nextMicFlag is True
+            while not nextMicFlag:
+                time.sleep(0.1)
+
+                if keyboard.is_pressed('q'):  # Check if 'q' key is pressed
+                    print('q pressed')
+
+            if nextCycleFlag:
+                inStr = input("press any keys to start a new cycle...")
+                nextCycleFlag=False
+            
+            # sleep for 3 secs first
+            time.sleep(3)
+            nextMicFlag=False
+            sMsg = '****** Selected mic index=%d' %(micIndx)
+            print(sMsg)
+            logger.add_data(sMsg)
+            message6=micIndx
             
             sel = selectors.DefaultSelector()     #wx add can work looply
             start_connections(host, int(port))
