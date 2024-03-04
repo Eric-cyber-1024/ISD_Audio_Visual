@@ -188,7 +188,11 @@ if __name__ == '__main__':
 
       
     # get delays for each of the talkbox indices
-    
+
+    # create "delay.csv" to dump data
+    f = open('delays.csv','w')
+    f.close()
+
     for i in range(6):
 
         # get talkbox location name
@@ -215,6 +219,8 @@ if __name__ == '__main__':
         # Rearrange the data based on the sorted indices
         fpgaDelays = filtered_data[sorted_indices]
 
+        
+
         vec = df_cam_summary['average_loc'][i][:3]
         vec[:2]=vec[:2]*-1
         #vec[0]-=0.1
@@ -224,6 +230,12 @@ if __name__ == '__main__':
         # we consider only 2:2+29 only
         mic_names= mic_names[2:2+29]
         refDelay = refDelay[2:2+29]*48e3
+
+        # export fpga delays to "delay.csv"
+        with open('delays.csv','a') as f:
+            fpgaDelayMax = np.max(fpgaDelays)
+            for k, fpgaDelay in enumerate(fpgaDelays):
+                f.write('%s,%s,%.0f,%.0f\n' %(talkbox_loc_name,mic_names[k],np.round(fpgaDelay),np.round(fpgaDelayMax)-np.round(fpgaDelay)))
 
         plt.figure(figsize=(10,6))
 
