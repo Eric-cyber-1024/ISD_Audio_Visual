@@ -17,6 +17,10 @@ import paramiko
 import tkinter as tk
 from tkinter import simpledialog
 import serial
+import socket
+import selectors
+import types
+import keyboard
 
 try:
     from roypypack import roypy  # package installation
@@ -29,7 +33,7 @@ from sample_camera_info import print_camera_info
 from roypy_sample_utils import CameraOpener, add_camera_opener_options
 from roypy_platform_utils import PlatformHelper
 from data_logger import DataLogger
-
+from test_delay_cal import *
 
 
 
@@ -49,23 +53,129 @@ LogInterval=1  # secs to log data once
 prev_save_time = time.time()  # Initialize the previous save time
 
 # Add,Brian,05 Mar 2024
+sel = selectors.DefaultSelector()
+sendBuf=b'SET0'
+RecvBuf=[]
 micIndx = 1          # microphone index, from 1 to 29 
 nextMicFlag=False    # True to get delays from FPGA from mic at index micIndx
 nextCycleFlag=False  # True to indicate the start of a new cycle
 sendFlag=False
 stopSerialThread=True# True to stop serial port thread
+MIC_NUMBER=32
+INDEX =[x for x in range (MIC_NUMBER )]
+
+
+# add,Brian,05 Mar 2024
+def prepareMicDelaysPacket(payload):
+    '''
+    prepare packet for mic delays
+
+    payload -- list of bytes to be sent 
+
+    return packet = payload + checksum (xor all bytes in payload)
+
+    '''
+    checksum = 0
+    for byte in payload:
+        checksum ^= byte
+    packet = bytes(payload) + bytes([checksum])
+
+    return packet
+
+# add,Brian,05 Mar 2024
+def validateMicDelaysPacket(packet):
+    payload = packet[:-1]
+    checksum = packet[-1]
+
+    calculated_checksum = 0
+    for byte in payload:
+        calculated_checksum ^= byte
+
+    if checksum == calculated_checksum:
+        return True
+    else:
+        return False
+
+
+def start_connections(host, port):
+    server_addr = (host, port)
+    print("starting connection to ",  server_addr)
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.setblocking(False)
+    sock.connect_ex(server_addr)
+    events = selectors.EVENT_READ | selectors.EVENT_WRITE
+    data = types.SimpleNamespace(
+            outb=b"",
+    )
+    sel.register(sock, events,data=data)
+
+def service_connection(key, mask,host,port):
+    sock = key.fileobj
+    data = key.data
+    if mask & selectors.EVENT_READ:
+        recv_data = sock.recv(1024)  # Should be ready to read
+        if recv_data:
+            print("received", repr(recv_data) )
+            print("closing connection")
+            sel.unregister(sock)
+            sock.close()
+        elif not recv_data:
+            print("closing connection")
+            sel.unregister(sock)
+            sock.close()
+    if mask & selectors.EVENT_WRITE:
+        global sendFlag
+        if sendFlag==True:      
+            data.outb = sendBuf
+            print("sending", repr(data.outb), "to connection", host, port)
+            sent = sock.send(data.outb)  # Should be ready to write
+            sendFlag=False
+
+def struct_packet(RW_field,mode,mic_gain,mic_num,en_bm,en_bc,delay_binary_output_x,mic_en,type,reserved):
+     #convert into binary form 
+#     MIC_change = np.asarray(list(map(int,bin (int(MIC_change))[2:].zfill(4))))
+#     MIC_change = [0,1,1,1]
+     this_mic_no  = decToBin(mic_num,5)
+     this_type=decToBin(type,2)
+     this_reserved=decToBin(reserved,4)
+#     MC_BM_packet = BM_MC_status(BM_MC_bit_received)
+#     delay_time   = delay_binary_output
+#     mic_ONOFF = mic_onoff_ID
+ #    Channel = np.asarray(list(map(int,bin (int(choice))[2:].zfill(2)))) # register change ch num and turn into binary
+     #putting them into array order 
+     return np.hstack((RW_field,mode,mic_gain,this_mic_no,en_bm,en_bc,delay_binary_output_x,mic_en,this_type,this_reserved))
+
+
+# create mic ID in Binary form 
+def decToBin(this_value,bin_num):
+    num = bin(this_value)[2:].zfill(bin_num)
+    num = list(map(int,num)) # convert list str to int 
+    return num 
+
+def BintoINT(Binary):
+    integer = 0 
+    result_hex = 0 
+    for x in range(len(Binary)):
+        integer = integer + Binary[x]*2**(len(Binary)-x-1)
+    result_hex = hex(integer)
+    return result_hex
+
+
 
 # Function to read data from the serial port
 def read_serial_data(ser):
-    global nextCycleFlag,nextMicFlag, micIndx, stopSerialThread
+    global nextCycleFlag,nextMicFlag, micIndx, stopSerialThread,debug_message,targetPosDepthCam,loggerFPGA,loggerDebug
 
     while not stopSerialThread:
         line = ser.readline().decode('ISO-8859-1').strip()
-        #print(line)
+        print(line)
+        
         
         if line.find('Read after trigger')>=0:
             print(line)
-            logger.add_data(line)
+            # log fpga message from UART
+            loggerFPGA.add_data(line)
+            
             # if its the last shot, print sth to indicate
             if line.find('j=7')>0:
                 print('ready for next microphone...., currently at mic# %d' %(micIndx))
@@ -81,6 +191,127 @@ def read_serial_data(ser):
                     nextCycleFlag=True
 
     print('leaving serial port thread')
+
+
+def fpgaCommHandler():
+
+    global sendFlag, sendBuf,sel,nextCycleFlag,nextMicFlag,micIndx,debug_message
+
+    RW_field=[1,1]
+    mode=0
+    mic_gain=[1,0]
+    mic_num=0
+    en_bm=1
+    en_bc=1
+    mic_en=1
+    type=0
+    reserved=0
+    dummy = [0,0,0,0,1,0,0,1,1,0,1,0,0]
+    message=struct_packet(RW_field,mode,mic_gain,mic_num,en_bm,en_bc,dummy,mic_en,type,reserved)
+    #print(message)
+    messagehex = BintoINT(message)
+    print(messagehex)
+    message1 = int(messagehex[2:4],16) # hex at  1 and 2  
+    message2 = int(messagehex[4:6],16) # hex at  3 and 4 
+    message3 = int(messagehex[6:8],16)  # hex at  5 and 6 
+    message4 = int(messagehex[8:],16)
+    print("m1:{},m2:{},m3:{},m4:{}\n".format(message1,message2,message3,message4))
+
+    inStr = input('Please input FPGA commandline here...')
+    
+    while len(inStr.split())!=8:
+        inStr = input('incorrect number of arguments, please try again')
+    
+    host, port, mode, mic, mic_vol, mic_disable, set_test,mic_delay = inStr.split()
+
+    message5 = int(mode)
+    message6 = int(mic)
+    message7 = int(mic_vol)
+    message8 = int(mic_disable)
+    message9 = int(set_test)
+    message10 = int(mic_delay)
+
+    
+    nextCycleFlag=True # start with a new cycle
+    nextMicFlag = True # enabled to get mic delays
+    micIndx     = 1    # always start from m#1 
+    calibratedFlag=False # True to send estimated mic delays to FPGA
+    while True:
+        try:
+            # wait until nextMicFlag is True
+            while not nextMicFlag:
+                time.sleep(0.1)
+
+                if keyboard.is_pressed('q'):  # Check if 'q' key is pressed
+                    print('q pressed')
+
+            if nextCycleFlag:
+                inStr = input("press any keys to start a new cycle...")
+                nextCycleFlag=False
+            
+            # sleep for 3 secs first
+            time.sleep(3)
+            nextMicFlag=False
+            sMsg = '****** Selected mic index=%d' %(micIndx)
+            print(sMsg)
+            loggerFPGA.add_data(sMsg)
+            message6=micIndx
+            
+            sel = selectors.DefaultSelector()     #wx add can work looply
+            start_connections(host, int(port))
+
+            sendBuf=bytes([message1,message2,message3,message4,message5,message6,message7,message8,message9,message10])
+
+            # obtain mic delays from 3d coordinate or zeros
+            payload = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+            if mode=='2':
+                # estimate 32 mic delays from 3d coordinate
+                
+                # step 1, get 3d coordinates from debug_message
+                # Parse the string and extract the first three float values
+                values = debug_message.split(",")[:3]
+                vec = np.array([float(value) for value in values])
+                print(vec)
+                _,refDelay,_ = delay_calculation(vec)   
+                refDelay = refDelay*48e3
+                refDelay = np.max(refDelay)-refDelay
+                refDelay = np.round(refDelay)
+
+                #convert refDelay to byte
+                #but make sure that they are within 0 to 255 first!!
+                assert (refDelay>=0).all() and (refDelay<=255).all()
+
+                # payload = [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10,
+                #         0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e,0x1f,0x20]
+
+                refDelay = refDelay.astype(np.uint8)
+                payload = refDelay.tobytes()
+                print(refDelay)
+                print(payload)
+                print(sendBuf)
+
+                
+
+            packet = prepareMicDelaysPacket(payload)
+            
+            sendBuf+=packet
+            print(sendBuf)
+            sendFlag=True
+            while True:
+                events = sel.select(timeout=None)
+                if events:
+                    for key, mask in events:
+                        service_connection(key, mask,host,int(port))
+                # Check for a socket being monitored to continue.
+                if not sel.get_map():
+                    print("exit 2")
+                    break
+        except KeyboardInterrupt:
+            print("caught keyboard interrupt, exiting")
+            break
+        finally:
+            print("exit 3")
+            sel.close()
 
 
 def showDialogSelectTalkboxLocIndex():
@@ -189,8 +420,8 @@ class MyListener(roypy.IDepthDataListener):
         line_type = cv2.LINE_AA
 
         # Write the debug message on the image
-        debug_message = "Debug Message"
-        text_size, _ = cv2.getTextSize(debug_message, font, font_scale, 1)
+        
+        text_size, _ = cv2.getTextSize("Debug Message", font, font_scale, 1)
         text_x = 10
         text_y = 10 + text_size[1]
         background_color = (50, 50, 50)  # dark grey background color
@@ -301,7 +532,7 @@ class MyListener(roypy.IDepthDataListener):
         self.cameraMatrix[1,2] = lensParameters['cy']
         self.cameraMatrix[2,2] = 1
 
-        print(self.cameraMatrix)
+        #print(self.cameraMatrix)
 
         # Construct the distortion coefficients
         # k1 k2 p1 p2 k3
@@ -482,7 +713,7 @@ def pose_esitmation(frame, aruco_dict_type, mtx, dist):
     frame - The frame with the axis drawn on it
     '''
 
-    global prev_save_time, targetPosDepthCam, stacked_frame
+    global prev_save_time, targetPosDepthCam, stacked_frame, debug_message
 
     # Define the font settings
     font = cv2.FONT_HERSHEY_SIMPLEX
@@ -491,8 +722,8 @@ def pose_esitmation(frame, aruco_dict_type, mtx, dist):
     line_type = cv2.LINE_AA
 
     # Write the debug message on the image
-    debug_message = "Debug Message"
-    text_size, _ = cv2.getTextSize(debug_message, font, font_scale, 1)
+    
+    text_size, _ = cv2.getTextSize("Debug Message", font, font_scale, 1)
     text_x = 10
     text_y = 10 + text_size[1]
     background_color = (50, 50, 50)  # dark grey background color
@@ -619,10 +850,21 @@ if __name__ == '__main__':
     # get current timestamp and generat the log file 
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     logger = DataLogger(log_interval=1, file_path="log/%s_data.log" %(timestamp))  # Specify the data file path
+    loggerFPGA = DataLogger(log_interval=1, file_path="log/%s_fpga.log" %(timestamp))  # Specify the data file path
+    loggerDebug = DataLogger(log_interval=1, file_path="log/%s_debug.log" %(timestamp))  # Specify the data file path
+    
     # Start the logging process
     logger.start_logging()
     print('data logger started')
     logger.add_data('ISD Microphone Array System Started')
+
+    loggerFPGA.start_logging()
+    print('data logger (FPGA) started')
+    loggerFPGA.add_data('ISD Microphone Array System (FPGA Communication) Started')
+
+    loggerDebug.start_logging()
+    print('data logger (debug) started')
+    loggerDebug.add_data('ISD Microphone Array System (debug) Started')
 
 
     # load calibration data
@@ -643,6 +885,10 @@ if __name__ == '__main__':
         stopSerialThread=False
         serial_thread = threading.Thread(target=read_serial_data, args=(ser,), daemon=True)
         serial_thread.start()
+
+    # start thread to handle FPGA socket communication
+    fpgaCommThread = threading.Thread(target=fpgaCommHandler,daemon=True)
+    fpgaCommThread.start()
 
 
     video = cv2.VideoCapture(cameraIndx)
@@ -681,7 +927,12 @@ if __name__ == '__main__':
 
     # stop data logger
     logger.stop_logging()
+    loggerFPGA.stop_logging()
+    loggerDebug.stop_logging()
 
     # stop serial port thread
     stopSerialThread=True
+
+    # close selectors
+    sel.close()
     

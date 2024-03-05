@@ -36,7 +36,7 @@ class DataLogger:
             timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
             log_entries = [f"{timestamp}: {data}\n" for data in self.data]
 
-            with open(self.file_path, "a") as file:
+            with open(self.file_path, "a",encoding='utf-8') as file:
                 file.writelines(log_entries)
 
             self.data.clear()
