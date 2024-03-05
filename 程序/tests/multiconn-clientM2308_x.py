@@ -15,6 +15,37 @@ sendFlag=False
 MIC_NUMBER=32
 INDEX =[x for x in range (MIC_NUMBER )]
 
+# add,Brian,05 Mar 2024
+def prepareMicDelaysPacket(payload):
+    '''
+    prepare packet for mic delays
+
+    payload -- list of bytes to be sent 
+
+    '''
+    header = bytes([0xaa])
+    checksum = 0
+    for byte in payload:
+        checksum ^= byte
+    packet = header + bytes(payload) + bytes([checksum])
+
+    return packet
+
+# add,Brian,05 Mar 2024
+def validateMicDelaysPacket(packet):
+    header = packet[0]
+    payload = packet[1:-1]
+    checksum = packet[-1]
+
+    calculated_checksum = 0
+    for byte in payload:
+        calculated_checksum ^= byte
+
+    if header == 0xaa and checksum == calculated_checksum:
+        return True
+    else:
+        return False
+
 def start_connections(host, port):
     server_addr = (host, port)
     print("starting connection to ",  server_addr)
@@ -193,17 +224,27 @@ print("m1:{},m2:{},m3:{},m4:{}\n".format(message1,message2,message3,message4))
 #    sys.exit(1)
 #host, port, mode, mic = sys.argv[1:5]
 
-if len(sys.argv) != 9:
-    print("usage:", sys.argv[0], "<host> <port> <mode> <mic> <mic_gain> <mic_disable> <set_test> <mic_delay")
-    sys.exit(1)
-host, port, mode, mic, mic_vol, mic_disable, set_test,mic_delay = sys.argv[1:9]
+# commented,Brian,05 Mar 2024
+# if len(sys.argv) != 9:
+#     print("usage:", sys.argv[0], "<host> <port> <mode> <mic> <mic_gain> <mic_disable> <set_test> <mic_delay>")
+#     sys.exit(1)
+# host, port, mode, mic, mic_vol, mic_disable, set_test,mic_delay = sys.argv[1:9]
 
-message5 = int(sys.argv[3])
-message6 = int(sys.argv[4])
-message7 = int(sys.argv[5])
-message8 = int(sys.argv[6])
-message9 = int(sys.argv[7])
-message10 = int(sys.argv[8])
+# message5 = int(sys.argv[3])
+# message6 = int(sys.argv[4])
+# message7 = int(sys.argv[5])
+# message8 = int(sys.argv[6])
+# message9 = int(sys.argv[7])
+# message10 = int(sys.argv[8])
+
+# testing only
+host = '127.0.0.1'
+port = '5004'
+message5 = 5
+message7 = 7
+message8 = 8
+message9 = 9
+message10= 10
 
 while True:
     try:
@@ -222,7 +263,20 @@ while True:
    #     global sendFlag,sendBuf
         #org sendBuf=bytes([message1,message2,message3,message4])
         #sendBuf=bytes([message1,message2,message3,message4,message5,message6])
-        sendBuf=bytes([message1,message2,message3,message4,message5,message6,message7,message8,message9,message10])
+        
+
+        # test,Brian,05 Mar 2024
+        payload = [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10,
+           0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e]
+
+        packet = prepareMicDelaysPacket(payload)
+        if validateMicDelaysPacket(packet):
+            print('packet ok')
+        else:
+            print('packet not ok')
+        
+        #sendBuf=bytes([message1,message2,message3,message4,message5,message6,message7,message8,message9,message10])
+        sendBuf = packet
         sendFlag=True
         while True:
             events = sel.select(timeout=None)
