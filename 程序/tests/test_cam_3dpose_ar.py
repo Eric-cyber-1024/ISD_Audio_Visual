@@ -16,7 +16,7 @@ import datetime
 import paramiko
 import tkinter as tk
 from tkinter import simpledialog
-
+import serial
 
 try:
     from roypypack import roypy  # package installation
@@ -47,6 +47,40 @@ mouseX = 0
 mouseY = 0
 LogInterval=1  # secs to log data once
 prev_save_time = time.time()  # Initialize the previous save time
+
+# Add,Brian,05 Mar 2024
+micIndx = 1          # microphone index, from 1 to 29 
+nextMicFlag=False    # True to get delays from FPGA from mic at index micIndx
+nextCycleFlag=False  # True to indicate the start of a new cycle
+sendFlag=False
+stopSerialThread=True# True to stop serial port thread
+
+# Function to read data from the serial port
+def read_serial_data(ser):
+    global nextCycleFlag,nextMicFlag, micIndx, stopSerialThread
+
+    while not stopSerialThread:
+        line = ser.readline().decode('ISO-8859-1').strip()
+        #print(line)
+        
+        if line.find('Read after trigger')>=0:
+            print(line)
+            logger.add_data(line)
+            # if its the last shot, print sth to indicate
+            if line.find('j=7')>0:
+                print('ready for next microphone...., currently at mic# %d' %(micIndx))
+                # increment micIndx if micIndx<29
+                if micIndx<29:
+                    micIndx+=1
+                    nextMicFlag=True
+                else:
+                    # reset micIndex and nextMicFlag
+                    micIndx = 1
+                    nextMicFlag=True
+                    # raise wait next cycle flag
+                    nextCycleFlag=True
+
+    print('leaving serial port thread')
 
 
 def showDialogSelectTalkboxLocIndex():
@@ -336,6 +370,7 @@ def depthcam_main():
     platformhelper = PlatformHelper()
     parser = argparse.ArgumentParser (usage = __doc__)
     add_camera_opener_options (parser)
+    parser.add_argument('-com','--com',type=str,required=True,help='comport name')
     parser.add_argument('-cam','--cam',type=str,required=True,help='camera index')
     parser.add_argument("-ip","--ip",type=str,required=True,help="remote rpi3 ip address")
     
@@ -344,6 +379,7 @@ def depthcam_main():
     # delete some previous arguments
     delattr(options,"ip")
     delattr(options,"cam")
+    delattr(options,'com')
     
     # for testing only
     #options.rrf = 'meetingroom4.rrf'
@@ -556,6 +592,7 @@ if __name__ == '__main__':
     ap = argparse.ArgumentParser()
     # ap.add_argument("-k", "--K_Matrix", required=True, help="Path to calibration matrix (numpy file)")
     # ap.add_argument("-d", "--D_Coeff", required=True, help="Path to distortion coefficients (numpy file)")
+    ap.add_argument('-com','--com',type=str,required=True,help='comport name')
     ap.add_argument('-cam','--cam',type=str,required=True,help='camera index')
     ap.add_argument("-ip","--ip",type=str,required=True,help="remote rpi3 ip address")
     ap.add_argument("-t", "--type", type=str, default="DICT_ARUCO_ORIGINAL", help="Type of ArUCo tag to detect")
@@ -566,6 +603,7 @@ if __name__ == '__main__':
     
     cameraIndx = int(args['cam'])
     
+    comportName= args['com']
 
     aruco_dict_type = ARUCO_DICT["DICT_ARUCO_ORIGINAL"]
 
@@ -594,6 +632,17 @@ if __name__ == '__main__':
     # run depth camera 
     depthcam_thread = threading.Thread(target=depthcam_main, daemon=True)
     depthcam_thread.start()
+
+
+    # if comportName not 'nil' and starts with 'COM'
+    if comportName!='nil' and comportName.find('COM')==0:
+        # start serial port thread
+        ser = serial.Serial(comportName, 115200)
+
+        # Start a separate thread to read data from the serial port
+        stopSerialThread=False
+        serial_thread = threading.Thread(target=read_serial_data, args=(ser,), daemon=True)
+        serial_thread.start()
 
 
     video = cv2.VideoCapture(cameraIndx)
@@ -632,3 +681,7 @@ if __name__ == '__main__':
 
     # stop data logger
     logger.stop_logging()
+
+    # stop serial port thread
+    stopSerialThread=True
+    
