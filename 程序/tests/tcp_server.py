@@ -49,6 +49,20 @@ def parseDataBytes(data):
         field_value = getattr(tCmd,field_name)
         print(field_name + ':', hex(field_value))
 
+# add[validating new packet to set all 30 mic delays], Brian, 05 Mar 2025
+def validateMicDelaysPacket(packet):
+    header = packet[0]
+    payload = packet[1:-1]
+    checksum = packet[-1]
+
+    calculated_checksum = 0
+    for byte in payload:
+        calculated_checksum ^= byte
+
+    if header == 0xaa and checksum == calculated_checksum:
+        return True
+    else:
+        return False
 
 # Define the server's IP address and port
 SERVER_IP  = "127.0.0.1"
@@ -74,6 +88,7 @@ while True:
     # Receive data from the client
     data = client_socket.recv(1024)
     
+
     
     # parse data bytes
     parseDataBytes(data)
