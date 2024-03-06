@@ -271,6 +271,8 @@ def fpgaCommHandler():
                 # Parse the string and extract the first three float values
                 values = debug_message.split(",")[:3]
                 vec = np.array([float(value) for value in values])
+                # add back[have to multiply x,y coordinates by -1!!],Brian,05 Mar 2024
+                vec[:2]=vec[:2]*-1
                 print(vec)
                 _,refDelay,_ = delay_calculation(vec)   
                 refDelay = refDelay*48e3
