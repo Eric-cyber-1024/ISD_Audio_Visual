@@ -5,6 +5,9 @@ from tkinter import Tk
 from tkinter.filedialog import askopenfilename
 import matplotlib.pylab as plt
 from test_delay_cal import *
+import yaml
+import math
+import os
 
 
 
@@ -135,6 +138,254 @@ def logToDf(filepath):
     return df_cam, df_dcam
 
 
+def loadCalibrationData(yamlFileName):
+    with open(yamlFileName, 'r') as file:
+        data = yaml.safe_load(file)
+    # Extract the camera matrix and distortion coefficients
+    camera_matrix = np.array(data['camera_matrix'])
+    dist_coeffs = np.array(data['dist_coeff'])
+    #print(camera_matrix,dist_coeffs)
+    return camera_matrix,dist_coeffs
+
+
+def plotDelay(talkbox_locs, df_cam_summary, df_fpga_summary, ):
+
+   
+    for i in range(len(talkbox_locs)):
+
+        # get talkbox location name
+        talkbox_loc_name = talkbox_locs[i]
+
+        # step 1. from df_cam_summary['end_timestamp'] and look for corresponding data from df_fpga_summary
+        cameraStartTime = df_cam_summary['start_timestamp'][i]
+        cameraEndTime   = df_cam_summary['end_timestamp'][i]
+        startIndx = np.argmax(df_fpga_summary['start_timestamp'] > cameraStartTime)
+        endIndx = np.where(df_fpga_summary['end_timestamp']   < cameraEndTime)[0][-1]
+        
+
+        micIndices = df_fpga_summary['mic index'][startIndx:endIndx+1]
+        fpgaDelays = df_fpga_summary['average_delay'][startIndx:endIndx+1]
+
+        
+        # Filter the indices and data arrays between 0 and 29
+        filtered_indices = micIndices[(micIndices >= 0) & (micIndices <= 29)]
+        filtered_data    = fpgaDelays[(micIndices >= 0) & (micIndices <= 29)]
+
+        # Get the sorted indices
+        sorted_indices = np.argsort(filtered_indices)
+
+        # Rearrange the data based on the sorted indices
+        fpgaDelays = filtered_data[sorted_indices]
+
+        vec = df_cam_summary['average_loc'][i][:3]
+        vec[:2]=vec[:2]*-1
+        print("vec: ", vec)
+        #vec[0]-=0.1
+        #vec[1]-=0.09
+        _,refDelay,mic_names = delay_calculation(vec)
+        
+        # we consider only 2:2+29 only
+        mic_names= mic_names[2:2+29]
+        refDelay = refDelay[2:2+29]*48e3
+
+        plt.figure(figsize=(10,6))
+
+        # subplot #1
+        plt.subplot(211)
+        plt.plot(mic_names,np.round(refDelay),'+-')
+        plt.plot(mic_names,np.round(fpgaDelays),'*-')
+        plt.title('talkbox pos # %d' %(talkbox_loc_name))
+        
+        #plt.xlabel('mic name')
+        combined = np.concatenate((refDelay, fpgaDelays))
+        min_value = np.min(combined)
+        max_value = np.max(combined)
+        plt.yticks(range(int(min_value)-1,int(max_value)+1))
+        plt.xticks(range(len(mic_names)), mic_names, fontsize=10)
+        plt.grid(True)
+        plt.ylabel('delay/samples')
+        plt.legend(['ref','actual'])
+        
+        # subplot #2, showing differences
+        plt.subplot(212)
+
+        diff = np.round(refDelay)-np.round(fpgaDelays)
+        plt.plot(mic_names,diff,'+-')
+        plt.title('talkbox pos # %d' %(talkbox_loc_name))
+        
+        plt.yticks(range(int(np.min(diff)),int(np.max(diff))))
+        plt.xticks(range(len(mic_names)), mic_names, fontsize=10)
+        plt.grid(True)
+        plt.ylabel('delay/samples')
+        plt.legend(['ref-actual'])
+
+        manager = plt.get_current_fig_manager()
+        manager.full_screen_toggle()
+
+        isOutputDirExist = os.path.exists("output")
+        if not isOutputDirExist:
+            os.makedirs("output")
+
+        plt.savefig('output/%s.png' %(talkbox_loc_name))
+
+
+def plotDelayFar(talkbox_loc_name, df_cam_summary, df_fpga_summary):
+    vectors_uv = [row[3:5] for row in df_cam_summary['average_loc']]
+
+    for i in range(6):
+
+        # get talkbox location name
+        talkbox_loc_name = talkbox_locs[i]
+
+        # step 1. from df_cam_summary['end_timestamp'] and look for corresponding data from df_fpga_summary
+        cameraStartTime = df_cam_summary['start_timestamp'][i]
+        cameraEndTime   = df_cam_summary['end_timestamp'][i]
+        startIndx = np.argmax(df_fpga_summary['start_timestamp'] > cameraStartTime)
+        endIndx = np.where(df_fpga_summary['end_timestamp']   < cameraEndTime)[0][-1]
+        
+
+        micIndices = df_fpga_summary['mic index'][startIndx:endIndx+1]
+        fpgaDelays = df_fpga_summary['average_delay'][startIndx:endIndx+1]
+
+        
+        # Filter the indices and data arrays between 0 and 29
+        filtered_indices = micIndices[(micIndices >= 0) & (micIndices <= 29)]
+        filtered_data    = fpgaDelays[(micIndices >= 0) & (micIndices <= 29)]
+        print("fpgaDelays: ", fpgaDelays)
+        # Get the sorted indices
+        sorted_indices = np.argsort(filtered_indices)
+
+        # Rearrange the data based on the sorted indices
+        fpgaDelays = filtered_data[sorted_indices]
+        
+        vec_uv_c_normalized, refDelayFar, mic_names = delay_calculation_far(vectors_uv[i])
+
+        mic_names = mic_names[2:2+29]
+        refDelayFar = refDelayFar[2:2+29]*48e3
+
+        f1 = plt.figure(figsize=(10,6))
+        plt.subplot(211)
+        plt.plot(mic_names, refDelayFar, "+-")
+        plt.plot(mic_names, fpgaDelays, "*-")
+        plt.title("talkbox pos # %d" %(talkbox_loc_name))
+        plt.xlabel('mic name')
+
+        plt.xticks(range(len(mic_names)), mic_names, fontsize=10)
+        plt.grid(True)
+        plt.ylabel('delay/samples')
+        plt.legend(['refFar','actual'])
+
+        # subplot #2, showing differences
+        plt.subplot(212)
+        diff = np.round(refDelayFar)-np.round(fpgaDelays)
+        plt.plot(mic_names,diff,'+-')
+        plt.title('talkbox pos # %d' %(talkbox_loc_name))
+        
+        plt.yticks(range(int(np.min(diff)),int(np.max(diff))))
+        plt.xticks(range(len(mic_names)), mic_names, fontsize=10)
+        plt.grid(True)
+        plt.ylabel('delay/samples')
+        plt.legend(['refFar-actual'])
+
+        manager = plt.get_current_fig_manager()
+        manager.full_screen_toggle()
+
+        isOutputDirExist = os.path.exists("output")
+        if not isOutputDirExist:
+            os.makedirs("output")
+
+        plt.savefig('output/far_%s.png' %(talkbox_loc_name))
+
+
+def plotTimeDelayError(talkbox_locs, df_cam_summary, df_fpga_summary):
+
+    srcCoordinatesWList = np.zeros((6, 3))
+    srcCoordinatesWList[0] = np.array([38.00, -33.00, 367.00])
+    srcCoordinatesWList[1] = np.array([24.00, -23.00, 367.00])
+    srcCoordinatesWList[2] = np.array([-45.00, -23.00, 364.00])
+    srcCoordinatesWList[3] = np.array([24.00, 22.00, 371.00])
+    srcCoordinatesWList[4] = np.array([-46.00, 23.00, 371.00])
+    srcCoordinatesWList[5] = np.array([-10.00, 0.00, 370.00])
+
+    for i in range(len(talkbox_locs)):
+
+        # get talkbox location name
+        talkbox_loc_name = talkbox_locs[i]
+
+        # step 1. from df_cam_summary['end_timestamp'] and look for corresponding data from df_fpga_summary
+        cameraStartTime = df_cam_summary['start_timestamp'][i]
+        cameraEndTime   = df_cam_summary['end_timestamp'][i]
+        startIndx = np.argmax(df_fpga_summary['start_timestamp'] > cameraStartTime)
+        endIndx = np.where(df_fpga_summary['end_timestamp']   < cameraEndTime)[0][-1]
+        
+
+        micIndices = df_fpga_summary['mic index'][startIndx:endIndx+1]
+        fpgaDelays = df_fpga_summary['average_delay'][startIndx:endIndx+1]
+
+        
+        # Filter the indices and data arrays between 0 and 29
+        filtered_indices = micIndices[(micIndices >= 0) & (micIndices <= 29)]
+        filtered_data    = fpgaDelays[(micIndices >= 0) & (micIndices <= 29)]
+
+        # Get the sorted indices
+        sorted_indices = np.argsort(filtered_indices)
+
+        # Rearrange the data based on the sorted indices
+        fpgaDelays = filtered_data[sorted_indices]
+
+        vec = df_cam_summary['average_loc'][i][:3]
+        vec[:2]=vec[:2]*-1
+        #vec[0]-=0.1
+        #vec[1]-=0.09
+
+        _, refDelay1, mic_names = delay_calculation(vec)
+        refDelay2, _ = delay_calculation_eq2(srcCoordinatesWList[i])
+
+        # we consider only 2:2+29 only
+        mic_names= mic_names[2:2+29]
+        refDelay1 = refDelay1[2:2+29]*48e3
+        refDelay2 = refDelay2[2:2+29]*48e3
+
+
+        # # subplot #1
+        f1 = plt.figure(figsize=(10,6))
+        plt.subplot(211)
+        plt.plot(mic_names,refDelay1,'+-')
+        plt.plot(mic_names,refDelay2,'*-')
+        plt.title('talkbox pos # %d' %(talkbox_loc_name))
+        
+        #plt.xlabel('mic name')
+        combined = np.concatenate((refDelay1, refDelay2))
+        min_value = np.min(combined)
+        max_value = np.max(combined)
+        plt.yticks(range(int(min_value)-1,int(max_value)+1))
+        plt.xticks(range(len(mic_names)), mic_names, fontsize=10)
+        plt.grid(True)
+        plt.ylabel('delay/samples')
+        plt.legend(['near-field','far-field'])
+        
+        # subplot #2, showing differences
+        plt.subplot(212)
+
+        diff = refDelay1-refDelay2
+        plt.plot(mic_names,diff,'+-')
+        plt.title('talkbox pos # %d' %(talkbox_loc_name))
+        
+        plt.yticks(range(int(np.min(diff)),int(np.max(diff))))
+        plt.xticks(range(len(mic_names)), mic_names, fontsize=10)
+        plt.grid(True)
+        plt.ylabel('delay/samples')
+        plt.legend(['near-far'])
+
+        manager = plt.get_current_fig_manager()
+        manager.full_screen_toggle()
+
+        isOutputDirExist = os.path.exists("output")
+        if not isOutputDirExist:
+            os.makedirs("output")
+
+        plt.savefig('output/delay_error_%s.png' %(talkbox_loc_name))
+
 
 if __name__ == '__main__':
 
@@ -193,115 +444,44 @@ if __name__ == '__main__':
     f = open('delays.csv','w')
     f.close()
 
-    for i in range(6):
+    ## Jason - 5 Mar 2024
+    # delay_phase,raw_delay,sorted_micNames = delay_calculation([0,0,3.7])
+    # print("raw_delay: ", raw_delay)
 
-        # get talkbox location name
-        talkbox_loc_name = talkbox_locs[i]
+    ## plot delay for near-field, far-field, delay
 
-        # step 1. from df_cam_summary['end_timestamp'] and look for corresponding data from df_fpga_summary
-        cameraStartTime = df_cam_summary['start_timestamp'][i]
-        cameraEndTime   = df_cam_summary['end_timestamp'][i]
-        startIndx = np.argmax(df_fpga_summary['start_timestamp'] > cameraStartTime)
-        endIndx = np.where(df_fpga_summary['end_timestamp']   < cameraEndTime)[0][-1]
-        
-
-        micIndices = df_fpga_summary['mic index'][startIndx:endIndx+1]
-        fpgaDelays = df_fpga_summary['average_delay'][startIndx:endIndx+1]
-
-        
-        # Filter the indices and data arrays between 0 and 29
-        filtered_indices = micIndices[(micIndices >= 0) & (micIndices <= 29)]
-        filtered_data    = fpgaDelays[(micIndices >= 0) & (micIndices <= 29)]
-
-        # Get the sorted indices
-        sorted_indices = np.argsort(filtered_indices)
-
-        # Rearrange the data based on the sorted indices
-        fpgaDelays = filtered_data[sorted_indices]
-
-        
-
-        vec = df_cam_summary['average_loc'][i][:3]
-        vec[:2]=vec[:2]*-1
-        #vec[0]-=0.1
-        #vec[1]-=0.09
-        _,refDelay,mic_names = delay_calculation(vec)
-        
-        # we consider only 2:2+29 only
-        mic_names= mic_names[2:2+29]
-        refDelay = refDelay[2:2+29]*48e3
-
-        # export fpga delays to "delay.csv"
-        with open('delays.csv','a') as f:
-            fpgaDelayMax = np.max(fpgaDelays)
-            for k, fpgaDelay in enumerate(fpgaDelays):
-                f.write('%s,%s,%.0f,%.0f\n' %(talkbox_loc_name,mic_names[k],np.round(fpgaDelay),np.round(fpgaDelayMax)-np.round(fpgaDelay)))
-
-        plt.figure(figsize=(10,6))
-
-        # subplot #1
-        plt.subplot(211)
-        plt.plot(mic_names,np.round(refDelay),'+-')
-        plt.plot(mic_names,np.round(fpgaDelays),'*-')
-        plt.title('talkbox pos # %d' %(talkbox_loc_name))
-        
-        #plt.xlabel('mic name')
-        combined = np.concatenate((refDelay, fpgaDelays))
-        min_value = np.min(combined)
-        max_value = np.max(combined)
-        plt.yticks(range(int(min_value)-1,int(max_value)+1))
-        plt.xticks(range(len(mic_names)), mic_names, fontsize=10)
-        plt.grid(True)
-        plt.ylabel('delay/samples')
-        plt.legend(['ref','actual'])
-        
-        # subplot #2, showing differences
-        plt.subplot(212)
-
-        diff = np.round(refDelay)-np.round(fpgaDelays)
-        plt.plot(mic_names,diff,'+-')
-        plt.title('talkbox pos # %d' %(talkbox_loc_name))
-        
-        plt.yticks(range(int(np.min(diff)),int(np.max(diff))))
-        plt.xticks(range(len(mic_names)), mic_names, fontsize=10)
-        plt.grid(True)
-        plt.ylabel('delay/samples')
-        plt.legend(['ref-actual'])
-
-        manager = plt.get_current_fig_manager()
-        manager.full_screen_toggle()
-        plt.savefig('output/%s.png' %(talkbox_loc_name))
-        # get ref delays based upon the 
-        # df_cam_summary['average_loc'] and
-        # df_cam_summary['average_loc2']
+    plotDelay(talkbox_locs, df_cam_summary, df_fpga_summary)
+    # plotDelayFar(talkbox_locs, df_cam_summary, df_fpga_summary)
+    plotTimeDelayError(talkbox_locs, df_cam_summary, df_fpga_summary)
 
 
-    plt.figure()
-    plt.plot(df_cam_summary['average_loc'][:,0]*100,-df_cam_summary['average_loc'][:,1]*100,'*')
-    plt.title('talkbox locations')
-    plt.xlabel('x/cm')
-    plt.ylabel('y/cm')
-    plt.savefig('output/talkboxLocs.png')
-
-    plt.show()
-    # compare the above two
 
 
-    # plot the results
-    
+
 
     # plt.figure()
     # plt.plot(-(df_cam_vecs[['xv','yv']].values[:,0]),-(df_cam_vecs[['xv','yv']].values[:,1]),'*')
     # plt.plot(-df_dcam_vecs[['xd','yd']].values[:,0],df_dcam_vecs[['xd','yd']].values[:,1],'*')
     
 
-    # print(df_cam_vecs,df_dcam_vecs)
+    # # print(df_cam_vecs,df_dcam_vecs)
 
-    # print("cam: \n", df_cam[:30])
-    # print("dcam: \n", df_dcam[:30])
+    # # print("cam: \n", df_cam[:30])
+    # # print("dcam: \n", df_dcam[:30])
 
 
 
+    # get ref delays based upon the 
+    # df_cam_summary['average_loc'] and
+    # df_cam_summary['average_loc2']    
+    plt.figure()
+    plt.plot(df_cam_summary['average_loc'][:,0]*100,-df_cam_summary['average_loc'][:,1]*100,'*')
+    plt.title('talkbox locations')
+    plt.xlabel('x/cm')
+    plt.ylabel('y/cm')
+    plt.savefig('output/talkboxLocs.png')
+        
     plt.show()
 
+    # # compare the above two
 

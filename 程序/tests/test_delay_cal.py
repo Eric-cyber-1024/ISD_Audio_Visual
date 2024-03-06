@@ -1,5 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import yaml
+import math
 
 NUM_OF_MICS    = 32
 SPEED_OF_SOUND = 340.
@@ -98,6 +100,10 @@ def delay_calculation(src_position):
     # vector difference between ref mic and the source
     source_ref = src_position - mic_ref_ori
 
+    # vector difference between ref mic and the other mics
+    ref_mics = np.zeros((NUM_OF_MICS))
+    # for i in range(NUM_OF_MICS):
+    #     ref_mics[i] = mic_ref_ori - mic_position[i] 
     
     
     # distances of mics vs source
@@ -141,5 +147,71 @@ def delay_calculation(src_position):
     return delay_phase,raw_delay,sorted_micNames 
 
 
+# Jason - 5 Mar 2024
+def delay_calculation_far(vec_uv):
+    
+    # load calibration data
+    k,d = loadCalibrationData('20240226_1255_1m6_calibration_err0_05.yaml')
+    fx, zero, cx, zero, fy, cy, zero, zero, one = list(np.concatenate(k).flat)  
+
+    sorted_micNames = np.sort(MIC_NAMES)
+    mic_position = getMicPositions(0,0.5,0)  # getting mic position
+    mic_ref_ori = mic_position[sorted_micNames=='M01'][0]
+
+    # vector difference between ref mic and the other mic
+    rmk = mic_ref_ori - mic_position
+    
+    vec_uv_c = [(vec_uv[0]-cx)/fx, (vec_uv[1]-cy)/fy, 1]
+    vec_uv_c_normalized = vec_uv_c / np.linalg.norm(vec_uv_c, axis=0)
+    # print("np.linalg.norm(vec_uv_c, axis=0): ", np.linalg.norm(vec_uv_c, axis=0))
+    # print("vec_uv_c_normalized: ", vec_uv_c_normalized)
+
+    delay = np.zeros((NUM_OF_MICS))
+    for i in range(NUM_OF_MICS):
+        delay[i] = np.matmul(rmk[i], np.reshape(vec_uv_c, (-1, 1)))
+
+    delay = delay / SPEED_OF_SOUND / np.linalg.norm(vec_uv_c, axis=0)
+    print("delay: ", delay)
+    return vec_uv_c_normalized, delay, sorted_micNames
+
+
+def delay_calculation_eq2(srcCoordinatesW):
+
+    src_position = srcCoordinatesW
+    mic_position = getMicPositions(0,0.5,0)  # getting mic position
+    sorted_micNames = np.sort(MIC_NAMES)
+    mic_ref_ori = mic_position[sorted_micNames=='M01'][0]  
+
+    # vector difference between ref mic and the other mics
+    ref_mics = np.zeros((NUM_OF_MICS,3))
+    for i in range(NUM_OF_MICS):
+        ref_mics[i] = mic_ref_ori - mic_position[i] 
+
+    src_mag = math.sqrt(src_position[0]**2 + src_position[1]**2 + src_position[2]**2)
+    rs_not = np.array([src_position[0]/src_mag, src_position[1]/src_mag, src_position[2]/src_mag])
+
+    delay = np.zeros((NUM_OF_MICS))
+
+    for i in range(NUM_OF_MICS):
+        delay[i] = np.matmul(ref_mics[i], np.reshape(rs_not, (-1,1))) / SPEED_OF_SOUND
+
+    return delay, sorted_micNames
+
+
+
+def loadCalibrationData(yamlFileName):
+    with open(yamlFileName, 'r') as file:
+        data = yaml.safe_load(file)
+
+    # Extract the camera matrix and distortion coefficients
+    camera_matrix = np.array(data['camera_matrix'])
+    dist_coeffs = np.array(data['dist_coeff'])
+    #print(camera_matrix,dist_coeffs)
+    return camera_matrix,dist_coeffs
+
+
 if __name__ == '__main__':
-    delay_calculation([0,0,3.7])
+
+    delay_phase,raw_delay,sorted_micNames = delay_calculation([0,0,3.7])
+
+
