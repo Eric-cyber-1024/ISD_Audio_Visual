@@ -75,6 +75,8 @@ def fpgaLogToDf(filePath):
                                     decimal_value-=256
 
                             data.append([timestamp,packetIndx,mic_indx, decimal_value])
+                        elif data_line.find('RxBuf=0')>0:
+                            data.append([timestamp,packetIndx,mic_indx, -21])
 
                     packetIndx+=1
 
@@ -338,8 +340,10 @@ def plotTimeDelayError(talkbox_locs, df_cam_summary, df_fpga_summary):
         #vec[0]-=0.1
         #vec[1]-=0.09
 
+        vec[2]*=100.
+
         _, refDelay1, mic_names = delay_calculation(vec)
-        refDelay2, _ = delay_calculation_eq2(srcCoordinatesWList[i])
+        refDelay2, _ = delay_calculation_eq2(vec)
 
         # we consider only 2:2+29 only
         mic_names= mic_names[2:2+29]
@@ -358,7 +362,7 @@ def plotTimeDelayError(talkbox_locs, df_cam_summary, df_fpga_summary):
         combined = np.concatenate((refDelay1, refDelay2))
         min_value = np.min(combined)
         max_value = np.max(combined)
-        plt.yticks(range(int(min_value)-1,int(max_value)+1))
+        #plt.yticks(range(min_value-1,max_value+1))
         plt.xticks(range(len(mic_names)), mic_names, fontsize=10)
         plt.grid(True)
         plt.ylabel('delay/samples')
@@ -371,7 +375,7 @@ def plotTimeDelayError(talkbox_locs, df_cam_summary, df_fpga_summary):
         plt.plot(mic_names,diff,'+-')
         plt.title('talkbox pos # %d' %(talkbox_loc_name))
         
-        plt.yticks(range(int(np.min(diff)),int(np.max(diff))))
+        #plt.yticks(range(int(np.min(diff)),int(np.max(diff))))
         plt.xticks(range(len(mic_names)), mic_names, fontsize=10)
         plt.grid(True)
         plt.ylabel('delay/samples')
@@ -452,7 +456,7 @@ if __name__ == '__main__':
 
     plotDelay(talkbox_locs, df_cam_summary, df_fpga_summary)
     # plotDelayFar(talkbox_locs, df_cam_summary, df_fpga_summary)
-    plotTimeDelayError(talkbox_locs, df_cam_summary, df_fpga_summary)
+    #plotTimeDelayError(talkbox_locs, df_cam_summary, df_fpga_summary)
 
 
 
