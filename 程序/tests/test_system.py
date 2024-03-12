@@ -421,16 +421,10 @@ if __name__ == '__main__':
 
             refDelay = refDelay.astype(np.uint8)
             payload = refDelay.tobytes()
-            print(refDelay)
-            print(payload)
-            print(sendBuf)
+            print('refDelay',refDelay)
+            print('payload',payload)
+            print('sendBuf',sendBuf)
 
-            # inStr = input('please select delay mode')
-            # if inStr=='z':
-            #     payload = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
-            # else:
-
-            payload = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
             packet = prepareMicDelaysPacket(payload)
             if validateMicDelaysPacket(packet):
                 print('packet ok')
