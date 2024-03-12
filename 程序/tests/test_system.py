@@ -76,7 +76,7 @@ class paramsDialog:
         # Set the values as class properties
         self.mode       = int(s.split(':')[0])
         self.micIndx    = int(self.cbx_micIndx.get())
-        self.micGain    = int(self.textbox_1.get())
+        self.micGain    = int(self.tbx_micGain.get())
         self.micDisable = int(self.textbox_2.get())
 
         s = self.cbx_testMode.get()
@@ -130,12 +130,14 @@ class paramsDialog:
         # Create the textboxes with labels
         label_3 = ttk.Label(self.dialog_box, text="mic gain")
         label_3.pack()
-        self.textbox_1 = ttk.Entry(self.dialog_box)
-        self.textbox_1.pack()
+        self.tbx_micGain = ttk.Entry(self.dialog_box)
+        self.tbx_micGain.insert(0,'10')
+        self.tbx_micGain.pack()
 
         label_4 = ttk.Label(self.dialog_box, text="mic disable")
         label_4.pack()
         self.textbox_2 = ttk.Entry(self.dialog_box)
+        self.textbox_2.insert(0,'30')
         self.textbox_2.pack()
 
         label_5 = ttk.Label(self.dialog_box, text="set test")
@@ -148,6 +150,7 @@ class paramsDialog:
         lbl_micDelay = ttk.Label(self.dialog_box, text="mic delay")
         lbl_micDelay.pack()
         self.tbx_micDelay = ttk.Entry(self.dialog_box)
+        self.tbx_micDelay.insert(0,'0')
         self.tbx_micDelay.pack()
 
         lbl_srcPos = ttk.Label(self.dialog_box, text="source pos")
@@ -347,8 +350,7 @@ def BintoINT(Binary):
 
 if __name__ == '__main__':
 
-    params = paramsDialog()
-    params.printParams()
+    
     
     #Z=distance between camera and object, x is left+/right-, y is down+/up-
     this_location=[6, 0.2, 0.3]
@@ -408,7 +410,8 @@ if __name__ == '__main__':
                 inStr = input("Please input 'start' to send:")
                 if inStr=='start':
                     break
-            
+            params = paramsDialog()
+            params.printParams()
             # get parameters from User Interface
             mode        = params.mode
             mic         = params.micIndx
