@@ -24,6 +24,7 @@ INDEX =[x for x in range (MIC_NUMBER )]
 class paramsDialog:
     def __init__(self):
         self.dialog_box = tk.Tk()
+        
         self.dropdown_1 = None
         self.dropdown_2 = None
         self.textbox_1 = None
@@ -39,6 +40,15 @@ class paramsDialog:
                       '5: turn off BM',
                       '6: turn on MC',
                       '7: turn off MC']
+        
+        self.testModes=['0: PS_enMC-0,PS_enBM-0,FFTgain: 2, MIC8-data_bm_n, MIC9-ifftout',
+                        '4: PS_enMC-0,PS_enBM-0,FFTgain: 5, MIC8-data_bm_n, MIC9-ifftout',
+                        '8: PS_enMC-0,PS_enBM-0,FFTgain: 5, MIC8-data_bm_n, MIC9-ifftout, delta_t=0',
+                        '9: PS_enMC-0,PS_enBM-0,FFTgain: 5, MIC8-data_ym_n, MIC9-data_fbf_d_MC',
+                        '10: PS_enMC-0,PS_enBM-0,FFTgain: 5, MIC8-data_ym_n, MIC9-data_fbf_d_MC, delta_t=0',
+                        '11: PS_enMC-0,PS_enBM-0,FFTgain: 5, MIC8-data_bm_n_dly, MIC9-data_bm_0',
+                        '12: PS_enMC-0,PS_enBM-0,FFTgain: 5, MIC8-data_bm_n_dly, MIC9-data_bm_0, delta_t=0',
+                        '13: PS_enMC-0,PS_enBM-0,FFTgain: 5, MIC8-data_bm_0, MIC9-data_ym_0']
         
 
         # set default values of the properties
@@ -69,7 +79,9 @@ class paramsDialog:
         self.micIndx    = int(self.cbx_micIndx.get())
         self.micGain    = int(self.textbox_1.get())
         self.micDisable = int(self.textbox_2.get())
-        self.setTest    = int(self.textbox_3.get())
+
+        s = self.cbx_testMode.get()
+        self.setTest    = int(s.split(':')[0])
         self.micDelay   = int(self.tbx_micDelay.get())
 
         self.srcPos     = np.array(self.tbx_srcPos.get().split(','), dtype=float)
@@ -85,6 +97,10 @@ class paramsDialog:
         self.dialog_box.destroy()
     
     def create_dialog_box(self):
+
+        # Set the title of the dialog box
+        self.dialog_box.title("Set Parameters")
+
         # Create labels for the dropdown lists
         lbl_mode = ttk.Label(self.dialog_box, text="Mode:")
         lbl_mode.pack()
@@ -113,8 +129,10 @@ class paramsDialog:
 
         label_5 = ttk.Label(self.dialog_box, text="set test")
         label_5.pack()
-        self.textbox_3 = ttk.Entry(self.dialog_box)
-        self.textbox_3.pack()
+        
+        longest_text_2 = max([str(value) for value in self.testModes], key=len)
+        self.cbx_testMode = ttk.Combobox(self.dialog_box, values=self.testModes, width=len(longest_text_2))
+        self.cbx_testMode.pack()
 
         lbl_micDelay = ttk.Label(self.dialog_box, text="mic delay")
         lbl_micDelay.pack()
@@ -318,6 +336,7 @@ if __name__ == '__main__':
     params = paramsDialog()
     params.printParams()
     
+    exit()
 
     #Z=distance between camera and object, x is left+/right-, y is down+/up-
     this_location=[6, 0.2, 0.3]
