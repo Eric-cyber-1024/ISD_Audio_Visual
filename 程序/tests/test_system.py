@@ -6,17 +6,19 @@ import sys
 import socket
 import selectors
 import types
+import time
 # wx add
 import math
 import numpy as np ###### require install and adjust to certain edition 1.13.3
 from test_delay_cal import *
 import tkinter as tk
-from tkinter import ttk
+from tkinter import ttk, messagebox
 
 sel = selectors.DefaultSelector()
 sendBuf=b'SET0'
 RecvBuf=[]
 sendFlag=False
+waitFlag=True
 MIC_NUMBER=32
 INDEX =[x for x in range (MIC_NUMBER )]
 
@@ -66,10 +68,7 @@ class paramsDialog:
     def printParams(self):
         print(self.mode,self.micIndx,self.micGain,self.setTest,self.micDelay,self.srcPos)
 
-    
-    def get_user_inputs(self):
-        # Retrieve the selected values from the dropdown lists and textboxes
-
+    def fetchParamsFromUI(self):
         s = self.cbx_mode.get()
         
         
@@ -85,6 +84,11 @@ class paramsDialog:
         self.micDelay   = int(self.tbx_micDelay.get())
 
         self.srcPos     = np.array(self.tbx_srcPos.get().split(','), dtype=float)
+    
+    def get_user_inputs(self):
+        # Retrieve the selected values from the dropdown lists and textboxes
+
+        self.fetchParamsFromUI()
 
         # Destroy the dialog box
         self.dialog_box.destroy()
@@ -95,6 +99,13 @@ class paramsDialog:
         
         # Destroy the dialog box
         self.dialog_box.destroy()
+
+
+    def sendPacket(self):
+        
+        self.fetchParamsFromUI()
+        self.printParams()
+        #messagebox.showinfo("Infor", "blah blah blah...")
     
     def create_dialog_box(self):
 
@@ -150,6 +161,9 @@ class paramsDialog:
 
         cancel_button = ttk.Button(self.dialog_box, text="Cancel", command=self.cancel)
         cancel_button.pack(side=tk.LEFT)
+
+        btnSendPacket = ttk.Button(self.dialog_box, text="Send Packet", command=self.sendPacket)
+        btnSendPacket.pack(side=tk.LEFT)
 
         # Start the main event loop
         self.dialog_box.mainloop()
@@ -384,33 +398,32 @@ if __name__ == '__main__':
     host = '192.168.1.40'
     port = 5004
 
-    mode        = params.mode
-    mic         = params.micIndx
-    mic_gain    = params.micGain
-    mic_disable = params.micDisable
-    set_test    = params.setTest
-    mic_delay   = params.micDelay
+    
 
-    message5  = int(mode)        # mode
-    message6  = int(mic)         # mic
-    message7  = int(mic_gain)    # mic_gain
-    message8  = int(mic_disable) # mic_disable
-    message9  = int(set_test)    # set_test
-    message10 = int(mic_delay)   # mic_delay
-
-
+    waitFlag = True
     while True:
         try:
-    #org        while(input("Please input 'start' to send:")!='start' ):
-    #org            pass
             while True:
+                # wait for signal to leave this wait loop
                 inStr = input("Please input 'start' to send:")
                 if inStr=='start':
                     break
-                elif inStr.find('n')==0:
-                    message6=int(inStr[1:])
-                    break
             
+            # get parameters from User Interface
+            mode        = params.mode
+            mic         = params.micIndx
+            mic_gain    = params.micGain
+            mic_disable = params.micDisable
+            set_test    = params.setTest
+            mic_delay   = params.micDelay
+
+            message5  = int(mode)        # mode
+            message6  = int(mic)         # mic
+            message7  = int(mic_gain)    # mic_gain
+            message8  = int(mic_disable) # mic_disable
+            message9  = int(set_test)    # set_test
+            message10 = int(mic_delay)   # mic_delay
+
             sel = selectors.DefaultSelector()     #wx add can work looply
             start_connections(host, int(port))
     #     global sendFlag,sendBuf
@@ -468,4 +481,5 @@ if __name__ == '__main__':
         finally:
             print("exit 3")
             sel.close()
+
 
