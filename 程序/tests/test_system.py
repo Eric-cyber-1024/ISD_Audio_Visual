@@ -336,8 +336,6 @@ if __name__ == '__main__':
     params = paramsDialog()
     params.printParams()
     
-    exit()
-
     #Z=distance between camera and object, x is left+/right-, y is down+/up-
     this_location=[6, 0.2, 0.3]
     delay=delay_calculation_v1(this_location)
