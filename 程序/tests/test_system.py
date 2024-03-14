@@ -43,14 +43,19 @@ class paramsDialog:
                       '6: turn on MC',
                       '7: turn off MC']
         
-        self.testModes=['0: PS_enMC-0,PS_enBM-0,FFTgain: 2, MIC8-data_bm_n, MIC9-ifftout',
-                        '4: PS_enMC-0,PS_enBM-0,FFTgain: 5, MIC8-data_bm_n, MIC9-ifftout',
-                        '8: PS_enMC-0,PS_enBM-0,FFTgain: 5, MIC8-data_bm_n, MIC9-ifftout, delta_t=0',
-                        '9: PS_enMC-0,PS_enBM-0,FFTgain: 5, MIC8-data_ym_n, MIC9-data_fbf_d_MC',
-                        '10: PS_enMC-0,PS_enBM-0,FFTgain: 5, MIC8-data_ym_n, MIC9-data_fbf_d_MC, delta_t=0',
-                        '11: PS_enMC-0,PS_enBM-0,FFTgain: 5, MIC8-data_bm_n_dly, MIC9-data_bm_0',
-                        '12: PS_enMC-0,PS_enBM-0,FFTgain: 5, MIC8-data_bm_n_dly, MIC9-data_bm_0, delta_t=0',
-                        '13: PS_enMC-0,PS_enBM-0,FFTgain: 5, MIC8-data_bm_0, MIC9-data_ym_0']
+
+
+        self.testModes=[
+            '0: PS_enMC-0,PS_enBM-0,FFTgain: 2, MIC8-data_bm_n, MIC9-ifftout',
+            '4: PS_enMC-0,PS_enBM-0,FFTgain: 5, MIC8-data_bm_n, MIC9-ifftout',
+            '8: PS_enMC-0,PS_enBM-0,FFTgain: 5, MIC8-data_bm_n, MIC9-ifftout, delta_t=0',
+            '9: PS_enMC-0,PS_enBM-0,FFTgain: 5, MIC8-data_bm_n, MIC9-data_fbf_d_MC',
+            '10: PS_enMC-0,PS_enBM-0,FFTgain: 5, MIC8-data_ym_n, MIC9-data_fbf_d_MC, delta_t=0',
+            '11: PS_enMC-0,PS_enBM-0,FFTgain: 5, MIC8-data_bm_n_dly, MIC9-data_bm_0',
+            '12: PS_enMC-0,PS_enBM-0,FFTgain: 5, MIC8-data_bm_n_dly, MIC9-data_bm_0, delta_t=0',
+            '13: PS_enMC-0,PS_enBM-0,FFTgain: 5, MIC8-data_bm_0, MIC9-data_ym_0',
+            '14: PS_enMC-0,PS_enBM-0,FFTgain: 5, MIC8-data_ym_judge, MIC9-data_bm_0'
+        ]
         
 
         # set default values of the properties
@@ -64,7 +69,24 @@ class paramsDialog:
         
         self.create_dialog_box()
 
-    
+    def setUI(self,modeIndx,micIndx,sMicGain,sMicDelay,setTestIndx,sSrcPos):
+        '''
+        prepare UI with certain values
+
+        mode       -- dropdown list
+        mic index  -- dropdown list
+        set test   -- dropdown list
+        mic gain   -- textbox
+        mic delay  -- textbox
+        src pos    -- textbox
+
+        '''
+        self.cbx_micIndx  = 0
+        self.cbx_testMode = 0
+        self.tbx_micDelay = sMicDelay
+        self.tbx_micGain  = sMicGain
+        self.tbx_srcPos   = sSrcPos
+
     def printParams(self):
         print(self.mode,self.micIndx,self.micGain,self.setTest,self.micDelay,self.srcPos)
 
@@ -84,6 +106,13 @@ class paramsDialog:
         self.micDelay   = int(self.tbx_micDelay.get())
 
         self.srcPos     = np.array(self.tbx_srcPos.get().split(','), dtype=float)
+
+        self.sMode      = self.cbx_mode.get()
+        self.sMicIndx   = self.cbx_micIndx.get()
+        self.sMicGain   = self.tbx_micGain.get()
+        self.sMicDelay  = self.tbx_micDelay.get()
+        self.sSetTest   = self.cbx_testMode.get()
+        self.sSrcPos    = self.tbx_srcPos.get()
     
     def get_user_inputs(self):
         # Retrieve the selected values from the dropdown lists and textboxes
@@ -403,6 +432,7 @@ if __name__ == '__main__':
     
 
     waitFlag = True
+    savedCopy= []
     while True:
         try:
             while True:
@@ -419,6 +449,17 @@ if __name__ == '__main__':
             mic_disable = params.micDisable
             set_test    = params.setTest
             mic_delay   = params.micDelay
+
+
+            # save a copy of the parameters (string format)
+            savedCopy = [
+                        params.sMode,
+                        params.sMicIndx,   
+                        params.sMicGain,  
+                        params.sMicDelay,  
+                        params.sSetTest,  
+                        params.sSrcPos
+                        ]   
 
             message5  = int(mode)        # mode
             message6  = int(mic)         # mic
