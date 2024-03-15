@@ -26,6 +26,30 @@ PORT      =5004
 INDEX =[x for x in range (MIC_NUMBER )]
 
 
+
+class PointSelectionGUI(tk.Frame):
+    def __init__(self, master, points, *args, **kwargs):
+        super().__init__(master, *args, **kwargs)
+        self.master = master
+        self.canvas = tk.Canvas(self, width=400, height=400)
+        self.canvas.pack()
+        self.points = points
+        self.draw_points()
+        self.canvas.bind("<Button-1>", self.on_click)
+
+    def draw_points(self):
+        for i, (x, y) in enumerate(self.points):
+            self.canvas.create_oval(x - 5, y - 5, x + 5, y + 5, fill="red")
+            self.canvas.create_text(x, y - 10, text=f"{i}", fill="black")
+
+    def on_click(self, event):
+        x, y = event.x, event.y
+        for i, (px, py) in enumerate(self.points):
+            if abs(px - x) <= 5 and abs(py - y) <= 5:
+                print("Clicked on point index:", i)
+                break
+
+
 class paramsDialog:
     def __init__(self):
         self.dialog_box = tk.Tk()
@@ -303,6 +327,15 @@ class paramsDialog:
 
         btnSendPacket = ttk.Button(self.dialog_box, text="Send Packet", command=self.sendPacket)
         btnSendPacket.pack(side=tk.LEFT)
+
+
+        # Create a list of points
+        # pts = getMicPositions(0,0.5,0)
+        # points = [(pt[0]*500,pt[1]*500) for pt in pts]
+
+        # # Create the PointSelectionGUI and embed it in the main window
+        # point_selection = PointSelectionGUI(self.dialog_box, points)
+        # point_selection.pack(side=tk.LEFT, padx=10, pady=10)
 
         # Start the main event loop
         self.dialog_box.mainloop()
