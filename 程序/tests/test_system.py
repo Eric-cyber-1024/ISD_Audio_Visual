@@ -45,7 +45,7 @@ class paramsDialog:
                       '6: turn on MC',
                       '7: turn off MC']
         
-
+        self.micNames=["M{:02d}".format(i) for i in range(1, 33)]
 
         self.testModes=[
             '0: PS_enMC-0,PS_enBM-0,FFTgain: 2, MIC8-data_bm_n, MIC9-ifftout',
@@ -93,13 +93,11 @@ class paramsDialog:
         print(self.mode,self.micIndx,self.micGain,self.setTest,self.micDelay,self.srcPos)
 
     def fetchParamsFromUI(self):
-        s = self.cbx_mode.get()
-        
-        
         
         # Set the values as class properties
+        s = self.cbx_mode.get()
         self.mode       = int(s.split(':')[0])
-        self.micIndx    = int(self.cbx_micIndx.get())
+        self.micIndx    = self.micNames.index(self.cbx_micIndx.get())
         self.micGain    = int(self.tbx_micGain.get())
         self.micDisable = int(self.textbox_2.get())
 
@@ -147,17 +145,79 @@ class paramsDialog:
 
 
     def sendPacket(self):
+        sendBuf=b'SET0'
         
         self.fetchParamsFromUI()
         self.printParams()
-        #messagebox.showinfo("Infor", "blah blah blah...")
+    
+        #Z=distance between camera and object, x is left+/right-, y is down+/up-
+        this_location=[6, 0.2, 0.3]
+        delay=delay_calculation_v1(this_location)
+        print(delay)
+        #converting the delay into binary format 
+        delay_binary_output = delay_to_binary(delay)
+        #print(delay_binary_output)
+        #need to do later
+        RW_field=[1,1]
+        mode=0
+        mic_gain=[1,0]
+        mic_num=0
+        en_bm=1
+        en_bc=1
+        mic_en=1
+        type=0
+        reserved=0
+        message=struct_packet(RW_field,mode,mic_gain,mic_num,en_bm,en_bc,delay_binary_output[0],mic_en,type,reserved)
+        print(message)
+        messagehex = BintoINT(message)
+        print(messagehex)
+        message1 = int(messagehex[2:4],16) # hex at  1 and 2  
+        message2 = int(messagehex[4:6],16) # hex at  3 and 4 
+        message3 = int(messagehex[6:8],16)  # hex at  5 and 6 
+        message4 = int(messagehex[8:],16)
+        print("m1:{},m2:{},m3:{},m4:{}\n".format(message1,message2,message3,message4))
+    
 
-        packet = b'hey there!'
+        message5  = int(self.mode)        # mode
+        message6  = int(self.micIndx)     # mic
+        message7  = int(self.micGain)     # mic_gain
+        message8  = int(self.micDisable)  # mic_disable
+        message9  = int(self.setTest)     # set_test
+        message10 = int(self.micDelay)    # mic_delay
+ 
+        
+        _,refDelay,_ = delay_calculation(self.srcPos)   
+        refDelay = refDelay*48e3
+        refDelay = np.max(refDelay)-refDelay
+        refDelay = np.round(refDelay)
 
-        if send_and_receive_packet(HOST_NAME,PORT,packet,timeout=1):
-            print('ok')
+        #convert refDelay to byte
+        #but make sure that they are within 0 to 255 first!!
+        assert (refDelay>=0).all() and (refDelay<=255).all()
+
+            
+        refDelay = refDelay.astype(np.uint8)
+        payload = refDelay.tobytes()
+        print('refDelay',refDelay)
+        print('payload',payload)
+        print('sendBuf',sendBuf)
+
+        packet = prepareMicDelaysPacket(payload)
+        if validateMicDelaysPacket(packet):
+            print('packet ok')
         else:
-            print('not ok')
+            print('packet not ok')
+            
+        sendBuf=bytes([message1,message2,message3,message4,message5,message6,message7,message8,message9,message10])
+            
+        # append packet to sendBuf
+        sendBuf += packet
+        
+
+        if send_and_receive_packet(HOST_NAME,PORT,sendBuf,timeout=3):
+            print('data transmission ok')
+        else:
+            print('data transmission failed')
     
     def create_dialog_box(self):
 
@@ -170,13 +230,15 @@ class paramsDialog:
 
         # Create the first dropdown list
         self.cbx_mode = ttk.Combobox(self.dialog_box, values=self.modes)
+        self.cbx_mode.current(0)
         self.cbx_mode.pack()
 
         lbl_micIndx = ttk.Label(self.dialog_box, text="Mic#:")
         lbl_micIndx.pack()
 
         # Create the second dropdown list
-        self.cbx_micIndx = ttk.Combobox(self.dialog_box, values=[i for i in range(32)])
+        self.cbx_micIndx = ttk.Combobox(self.dialog_box, values=self.micNames)
+        self.cbx_micIndx.current(0)
         self.cbx_micIndx.pack()
 
         # Create the textboxes with labels
@@ -197,6 +259,7 @@ class paramsDialog:
         
         longest_text_2 = max([str(value) for value in self.testModes], key=len)
         self.cbx_testMode = ttk.Combobox(self.dialog_box, values=self.testModes, width=len(longest_text_2))
+        self.cbx_testMode.current(4)
         self.cbx_testMode.pack()
 
         lbl_micDelay = ttk.Label(self.dialog_box, text="mic delay")
@@ -208,6 +271,7 @@ class paramsDialog:
         lbl_srcPos = ttk.Label(self.dialog_box, text="source pos")
         lbl_srcPos.pack()
         self.tbx_srcPos = ttk.Entry(self.dialog_box)
+        self.tbx_srcPos.insert(0,'0,0,0')
         self.tbx_srcPos.pack()
 
         # revise[removed ok, cancel buttons],Brian,15 Mar 2024
@@ -459,128 +523,8 @@ if __name__ == '__main__':
     message3 = int(messagehex[6:8],16)  # hex at  5 and 6 
     message4 = int(messagehex[8:],16)
     print("m1:{},m2:{},m3:{},m4:{}\n".format(message1,message2,message3,message4))
-    #org if len(sys.argv) != 3:
-    #org    print("usage:", sys.argv[0], "<host> <port> ")
-    #org   sys.exit(1)
-    #org host, port = sys.argv[1:3]
-
-    #if len(sys.argv) != 5:
-    #    print("usage:", sys.argv[0], "<host> <port> <mode> <mic>")
-    #    sys.exit(1)
-    #host, port, mode, mic = sys.argv[1:5]
-
-
     
+    params = paramsDialog()
+    params.printParams()
 
-
-    # if len(sys.argv) != 9:
-    #     print("usage:", sys.argv[0], "<host> <port> <mode> <mic> <mic_gain> <mic_disable> <set_test> <mic_delay>")
-    #     sys.exit(1)
-    # host, port, mode, mic, mic_vol, mic_disable, set_test,mic_delay = sys.argv[1:9]
-
-    host = '192.168.1.40'
-    port = 5004
-
-    
-
-    waitFlag = True
-    savedCopy= []
-    while True:
-        try:
-            while True:
-                # wait for signal to leave this wait loop
-                inStr = input("Please input 'start' to send:")
-                if inStr=='start':
-                    break
-            params = paramsDialog()
-            params.printParams()
-
-            exit()
-
-            # get parameters from User Interface
-            mode        = params.mode
-            mic         = params.micIndx
-            mic_gain    = params.micGain
-            mic_disable = params.micDisable
-            set_test    = params.setTest
-            mic_delay   = params.micDelay
-
-            
-
-
-            # save a copy of the parameters (string format)
-            savedCopy = [
-                        params.sMode,
-                        params.sMicIndx,   
-                        params.sMicGain,  
-                        params.sMicDelay,  
-                        params.sSetTest,  
-                        params.sSrcPos
-                        ]   
-
-            message5  = int(mode)        # mode
-            message6  = int(mic)         # mic
-            message7  = int(mic_gain)    # mic_gain
-            message8  = int(mic_disable) # mic_disable
-            message9  = int(set_test)    # set_test
-            message10 = int(mic_delay)   # mic_delay
-
-            sel = selectors.DefaultSelector()     #wx add can work looply
-            start_connections(host, int(port))
-    #     global sendFlag,sendBuf
-            #org sendBuf=bytes([message1,message2,message3,message4])
-            #sendBuf=bytes([message1,message2,message3,message4,message5,message6])
-            
-            
-
-            # test,Brian,05 Mar 2024
-            # payload = [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10,
-            #    0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e,0x1f,0x20]
-
-            
-            _,refDelay,_ = delay_calculation(params.srcPos)   
-            refDelay = refDelay*48e3
-            refDelay = np.max(refDelay)-refDelay
-            refDelay = np.round(refDelay)
-
-            #convert refDelay to byte
-            #but make sure that they are within 0 to 255 first!!
-            assert (refDelay>=0).all() and (refDelay<=255).all()
-
-            # payload = [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10,
-            #         0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e,0x1f,0x20]
-
-            refDelay = refDelay.astype(np.uint8)
-            payload = refDelay.tobytes()
-            print('refDelay',refDelay)
-            print('payload',payload)
-            print('sendBuf',sendBuf)
-
-            packet = prepareMicDelaysPacket(payload)
-            if validateMicDelaysPacket(packet):
-                print('packet ok')
-            else:
-                print('packet not ok')
-            
-            sendBuf=bytes([message1,message2,message3,message4,message5,message6,message7,message8,message9,message10])
-            
-            # append packet to sendBuf
-            sendBuf += packet
-            sendFlag=True
-            while True:
-                events = sel.select(timeout=None)
-                if events:
-                    for key, mask in events:
-                        service_connection(key, mask)
-                # Check for a socket being monitored to continue.
-                if not sel.get_map():
-                    print("exit 2")
-                    break
-        except KeyboardInterrupt:
-            print("caught keyboard interrupt, exiting")
-            sys.exit(1)
-        finally:
-            print("exit 3")
-            sel.close()
-
-
+    exit()
