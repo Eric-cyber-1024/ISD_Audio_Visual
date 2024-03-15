@@ -20,6 +20,8 @@ RecvBuf=[]
 sendFlag=False
 waitFlag=True
 MIC_NUMBER=32
+HOST_NAME ='192.168.1.40'
+PORT      =5004
 INDEX =[x for x in range (MIC_NUMBER )]
 
 
@@ -120,14 +122,28 @@ class paramsDialog:
         self.fetchParamsFromUI()
 
         # Destroy the dialog box
-        self.dialog_box.destroy()
+        #self.dialog_box.destroy()
     
     def cancel(self):
         # Set all values to -1
-        self.dropdown_value_1 = self.dropdown_value_2 = self.textbox_value_1 = self.textbox_value_2 = self.textbox_value_3 = self.textbox_value_4 = -1
-        
+        self.mode       = -1
+        self.micIndx    = -1
+        self.micGain    = -1
+        self.micDisable = -1
+
+        self.setTest    = -1
+        self.micDelay   = -1
+
+        self.srcPos     = np.array([-1.0,-1.0,-1.0])
+
+        self.sMode      = '-1'
+        self.sMicIndx   = '-1'
+        self.sMicGain   = '-1'
+        self.sMicDelay  = '-1'
+        self.sSetTest   = '-1'
+        self.sSrcPos    = '-1,-1,-1'
         # Destroy the dialog box
-        self.dialog_box.destroy()
+        #self.dialog_box.destroy()
 
 
     def sendPacket(self):
@@ -135,6 +151,13 @@ class paramsDialog:
         self.fetchParamsFromUI()
         self.printParams()
         #messagebox.showinfo("Infor", "blah blah blah...")
+
+        packet = b'hey there!'
+
+        if send_and_receive_packet(HOST_NAME,PORT,packet,timeout=1):
+            print('ok')
+        else:
+            print('not ok')
     
     def create_dialog_box(self):
 
@@ -187,12 +210,13 @@ class paramsDialog:
         self.tbx_srcPos = ttk.Entry(self.dialog_box)
         self.tbx_srcPos.pack()
 
-        # Create the buttons
-        ok_button = ttk.Button(self.dialog_box, text="OK", command=self.get_user_inputs)
-        ok_button.pack(side=tk.LEFT)
+        # revise[removed ok, cancel buttons],Brian,15 Mar 2024
+        # # Create the buttons
+        # ok_button = ttk.Button(self.dialog_box, text="OK", command=self.get_user_inputs)
+        # ok_button.pack(side=tk.LEFT)
 
-        cancel_button = ttk.Button(self.dialog_box, text="Cancel", command=self.cancel)
-        cancel_button.pack(side=tk.LEFT)
+        # cancel_button = ttk.Button(self.dialog_box, text="Cancel", command=self.cancel)
+        # cancel_button.pack(side=tk.LEFT)
 
         btnSendPacket = ttk.Button(self.dialog_box, text="Send Packet", command=self.sendPacket)
         btnSendPacket.pack(side=tk.LEFT)
@@ -201,6 +225,34 @@ class paramsDialog:
         self.dialog_box.mainloop()
 
 
+def send_and_receive_packet(host, port, packet, timeout=1):
+    # Create a socket object
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+    # Set the timeout
+    sock.settimeout(timeout)
+
+    try:
+        sock.connect((host, port))  # connect to the server
+        # Send the packet
+        sock.send(packet)
+
+        # Wait for the return packet
+        data = sock.recv(1024)
+
+        # Check if the received data matches the expected return packet
+        if data == b'copy':
+            return True
+        else:
+            return False
+
+    except socket.timeout:
+        print('socket timeout!!')
+        return False
+
+    finally:
+        # Close the socket
+        sock.close()
 
 
 # add,Brian,05 Mar 2024
@@ -442,6 +494,9 @@ if __name__ == '__main__':
                     break
             params = paramsDialog()
             params.printParams()
+
+            exit()
+
             # get parameters from User Interface
             mode        = params.mode
             mic         = params.micIndx
@@ -449,6 +504,8 @@ if __name__ == '__main__':
             mic_disable = params.micDisable
             set_test    = params.setTest
             mic_delay   = params.micDelay
+
+            
 
 
             # save a copy of the parameters (string format)
