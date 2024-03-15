@@ -13,6 +13,7 @@ import numpy as np ###### require install and adjust to certain edition 1.13.3
 from test_delay_cal import *
 import tkinter as tk
 from tkinter import ttk, messagebox
+from data_logger import DataLogger
 
 sel = selectors.DefaultSelector()
 sendBuf=b'SET0'
@@ -148,7 +149,7 @@ class paramsDialog:
         self.lbl_info.config(text='%s, %s' %(timestamp,sMsg))
 
     def sendPacket(self):
-
+        global logger
         # clear lbl_info first
         self.showInfo('')
         sendBuf=b'SET0'
@@ -160,6 +161,7 @@ class paramsDialog:
         this_location=[6, 0.2, 0.3]
         delay=delay_calculation_v1(this_location)
         print(delay)
+        logger.add_data('%s,%s' %('delay',np.array2string(delay)))
         #converting the delay into binary format 
         delay_binary_output = delay_to_binary(delay)
         #print(delay_binary_output)
@@ -208,6 +210,9 @@ class paramsDialog:
         print('payload',payload)
         print('sendBuf',sendBuf)
 
+        
+
+        
         packet = prepareMicDelaysPacket(payload)
         if validateMicDelaysPacket(packet):
             print('packet ok')
@@ -219,12 +224,16 @@ class paramsDialog:
         # append packet to sendBuf
         sendBuf += packet
         
+        logger.add_data('data,%s,%s,%s' %(bytes(sendBuf),np.array2string(refDelay),np.array2string(self.srcPos)))
+
 
         if send_and_receive_packet(HOST_NAME,PORT,sendBuf,timeout=3):
             print('data transmission ok')
             self.showInfo('tx ok')
+            logger.add_data('tx ok')
         else:
             print('data transmission failed')
+            logger.add_data('tx failed')
     
     def create_dialog_box(self):
 
@@ -505,7 +514,10 @@ def BintoINT(Binary):
 
 if __name__ == '__main__':
 
-    
+    # initialize logger
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    logger = DataLogger(log_interval=1, file_path="log/%s_sys.log" %(timestamp))  # Specify the data file path
+    logger.start_logging()
     
     #Z=distance between camera and object, x is left+/right-, y is down+/up-
     this_location=[6, 0.2, 0.3]
@@ -537,4 +549,5 @@ if __name__ == '__main__':
     params = paramsDialog()
     params.printParams()
 
+    logger.stop_logging()
     exit()
