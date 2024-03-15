@@ -6,7 +6,7 @@ import sys
 import socket
 import selectors
 import types
-import time
+import time, datetime
 # wx add
 import math
 import numpy as np ###### require install and adjust to certain edition 1.13.3
@@ -143,8 +143,14 @@ class paramsDialog:
         # Destroy the dialog box
         #self.dialog_box.destroy()
 
+    def showInfo(self,sMsg):
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        self.lbl_info.config(text='%s, %s' %(timestamp,sMsg))
 
     def sendPacket(self):
+
+        # clear lbl_info first
+        self.showInfo('')
         sendBuf=b'SET0'
         
         self.fetchParamsFromUI()
@@ -216,6 +222,7 @@ class paramsDialog:
 
         if send_and_receive_packet(HOST_NAME,PORT,sendBuf,timeout=3):
             print('data transmission ok')
+            self.showInfo('tx ok')
         else:
             print('data transmission failed')
     
@@ -259,7 +266,7 @@ class paramsDialog:
         
         longest_text_2 = max([str(value) for value in self.testModes], key=len)
         self.cbx_testMode = ttk.Combobox(self.dialog_box, values=self.testModes, width=len(longest_text_2))
-        self.cbx_testMode.current(4)
+        self.cbx_testMode.current(3)
         self.cbx_testMode.pack()
 
         lbl_micDelay = ttk.Label(self.dialog_box, text="mic delay")
@@ -273,6 +280,9 @@ class paramsDialog:
         self.tbx_srcPos = ttk.Entry(self.dialog_box)
         self.tbx_srcPos.insert(0,'0,0,0')
         self.tbx_srcPos.pack()
+
+        self.lbl_info   = ttk.Label(self.dialog_box,text='')
+        self.lbl_info.pack()
 
         # revise[removed ok, cancel buttons],Brian,15 Mar 2024
         # # Create the buttons
