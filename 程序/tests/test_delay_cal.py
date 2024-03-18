@@ -71,7 +71,7 @@ def getMicPositions(xOffset,yOffset,zOffset):
     overall = overall[:,sorted_indices]
     return overall.T
 
-def delay_calculation(src_position):
+def delay_calculation(src_position,xOffset,yOffset,zOffset):
     '''
     Calculates the delay phase for a given source position based on the microphone positions.
 
@@ -89,7 +89,7 @@ def delay_calculation(src_position):
     src_position = np.array(src_position)  # this_location=[6, actual.x, acutal.y]
     
     
-    mic_position = getMicPositions(0,0.5,0)  # getting mic position
+    mic_position = getMicPositions(xOffset,yOffset,zOffset)  # getting mic position
 
     sorted_micNames = np.sort(MIC_NAMES)
     
