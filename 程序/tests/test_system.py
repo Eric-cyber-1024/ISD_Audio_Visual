@@ -24,7 +24,7 @@ MIC_NUMBER=32
 HOST_NAME ='192.168.1.40'
 PORT      =5004
 INDEX =[x for x in range (MIC_NUMBER )]
-sVersion = '0.1'
+sVersion = '0.2'
 
 
 class PointSelectionGUI(tk.Frame):
@@ -272,7 +272,7 @@ class paramsDialog:
         logger.add_data('data,%s,%s,%s' %(bytes(sendBuf),np.array2string(refDelay),np.array2string(self.srcPos)))
 
 
-        if send_and_receive_packet(HOST_NAME,PORT,sendBuf,timeout=3):
+        if send_and_receive_packet(self.hostIP,self.hostPort,sendBuf,timeout=3):
             print('data transmission ok')
             self.showInfo('tx ok')
             logger.add_data('tx ok')
