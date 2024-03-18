@@ -29,11 +29,12 @@ sVersion = '0.2'
 
 
 class PointSelectionGUI(tk.Frame):
-    def __init__(self, master, points, *args, **kwargs):
-        super().__init__(master, *args, **kwargs)
+    def __init__(self, master, points, callback):
+        super().__init__(master)
         self.master = master
         self.canvas = tk.Canvas(self, width=400, height=400)
         self.canvas.pack()
+        self.callback = callback
 
         # frame_width = 5
         # self.canvas.create_rectangle(
@@ -62,7 +63,8 @@ class PointSelectionGUI(tk.Frame):
         x, y = event.x, event.y
         for i, (px, py) in enumerate(self.points):
             if abs(px - x) <= 5 and abs(py - y) <= 5:
-                print("Clicked on point index:", i)
+                #print("Clicked on point index:", i)
+                self.callback('%d' %(i))
                 break
 
 
@@ -191,6 +193,12 @@ class paramsDialog:
     def showInfo(self,sMsg):
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         self.lbl_info.config(text='%s, %s' %(timestamp,sMsg))
+
+    def send_message(self, message):
+        # Process the message in the main application
+        # change cbx_micIndx according to message
+        if message!='0':
+            self.cbx_micIndx.current(int(message)-1)
 
     def sendPacket(self):
         global logger
@@ -386,8 +394,8 @@ class paramsDialog:
         points = [(pt[0]*500+200,200-pt[1]*500) for pt in pts]
 
         # # Create the PointSelectionGUI and embed it in the main window
-        point_selection = PointSelectionGUI(self.dialog_box, points)
-        point_selection.pack(side=tk.LEFT, padx=10, pady=10)
+        self.point_selection = PointSelectionGUI(self.dialog_box, points,self.send_message)
+        self.point_selection.pack(side=tk.LEFT, padx=10, pady=10)
 
 
         btnSendPacket = ttk.Button(self.dialog_box, text="Send Packet", command=self.sendPacket)
