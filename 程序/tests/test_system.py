@@ -199,6 +199,8 @@ class paramsDialog:
         # change cbx_micIndx according to message
         if message!='0':
             self.cbx_micIndx.current(int(message)-1)
+        else:
+            messagebox.showinfo(title="Alert",message='M00 does not exist actually!')
 
     def sendPacket(self):
         global logger
