@@ -204,7 +204,7 @@ class paramsDialog:
         this_location=[6, 0.2, 0.3]
 
         # revised[add offsets],Brian,18 Mar 2024
-        delay=delay_calculation_v1(this_location,self.xOffset,self.yOffset,self.zOffset)
+        delay=delay_calculation_v1(this_location)
         print(delay)
         logger.add_data('%s,%s' %('delay',np.array2string(delay)))
         #converting the delay into binary format 
@@ -239,7 +239,7 @@ class paramsDialog:
         message10 = int(self.micDelay)    # mic_delay
  
         
-        _,refDelay,_ = delay_calculation(self.srcPos)   
+        _,refDelay,_ = delay_calculation(self.srcPos,self.xOffset,self.yOffset,self.zOffset)   
         refDelay = refDelay*48e3
         refDelay = np.max(refDelay)-refDelay
         refDelay = np.round(refDelay)
