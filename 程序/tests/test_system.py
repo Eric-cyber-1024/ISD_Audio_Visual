@@ -2,6 +2,7 @@
 # 
 # pop up dialog box to let users to input parameters and then generate a packet to send to FPGA @192.168.1.40 , port = 5004
 
+import os
 import sys
 import socket
 import selectors
@@ -601,6 +602,14 @@ def BintoINT(Binary):
 
 
 if __name__ == '__main__':
+
+    # Check if the folder exists
+    if not os.path.exists('log'):
+        # Create the folder
+        os.makedirs('log')
+        print("log folder created successfully.")
+    else:
+        print("log folder already exists.")
 
     # initialize logger
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
