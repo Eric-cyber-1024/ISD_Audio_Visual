@@ -239,7 +239,7 @@ class paramsDialog:
         message10 = int(self.micDelay)    # mic_delay
  
         
-        _,refDelay,_ = delay_calculation(self.srcPos,self.xOffset,self.yOffset,self.zOffset)   
+        _,refDelay,_ = delay_calculation(self.srcPos,self.offsets[0],self.offsets[1],self.offsets[2])   
         refDelay = refDelay*48e3
         refDelay = np.max(refDelay)-refDelay
         refDelay = np.round(refDelay)
