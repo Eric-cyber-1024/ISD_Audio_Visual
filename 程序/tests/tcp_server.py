@@ -87,11 +87,12 @@ while True:
     
     # Receive data from the client
     data = client_socket.recv(1024)
-    
+    print(data)
 
-    
+    ret = client_socket.send(b'copy')
+    print('sent %d' %(ret))
     # parse data bytes
-    parseDataBytes(data)
+    #parseDataBytes(data)
 
     
     # Send a response back to the client
