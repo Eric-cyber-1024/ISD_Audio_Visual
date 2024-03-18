@@ -24,7 +24,7 @@ MIC_NUMBER=32
 HOST_NAME ='192.168.1.40'
 PORT      =5004
 INDEX =[x for x in range (MIC_NUMBER )]
-
+sVersion = '0.1'
 
 
 class PointSelectionGUI(tk.Frame):
@@ -33,6 +33,17 @@ class PointSelectionGUI(tk.Frame):
         self.master = master
         self.canvas = tk.Canvas(self, width=400, height=400)
         self.canvas.pack()
+
+        # frame_width = 5
+        # self.canvas.create_rectangle(
+        #     frame_width,
+        #     frame_width,
+        #     400 - frame_width,
+        #     400 - frame_width,
+        #     outline='black',
+        #     width=frame_width
+        # )
+
         self.points = points
         self.draw_points()
         self.canvas.bind("<Button-1>", self.on_click)
@@ -40,7 +51,11 @@ class PointSelectionGUI(tk.Frame):
     def draw_points(self):
         for i, (x, y) in enumerate(self.points):
             self.canvas.create_oval(x - 5, y - 5, x + 5, y + 5, fill="red")
-            self.canvas.create_text(x, y - 10, text=f"{i}", fill="black")
+            if i<10:
+                self.canvas.create_text(x, y - 10, text=f"M0{i}", fill="black")
+            else:
+                self.canvas.create_text(x, y - 10, text=f"M{i}", fill="black")
+
 
     def on_click(self, event):
         x, y = event.x, event.y
@@ -53,14 +68,6 @@ class PointSelectionGUI(tk.Frame):
 class paramsDialog:
     def __init__(self):
         self.dialog_box = tk.Tk()
-        
-        self.dropdown_1 = None
-        self.dropdown_2 = None
-        self.textbox_1 = None
-        self.textbox_2 = None
-        self.textbox_3 = None
-        self.textbox_4 = None
-
         self.modes = ['0: normal', 
                       '1: cal',
                       '2: cal verify',
@@ -86,12 +93,15 @@ class paramsDialog:
         
 
         # set default values of the properties
+        self.hostIP='192.168.1.40'
+        self.hostPort=5004
         self.mode = 0
         self.micIndx = 0
         self.micGain = 0
         self.micDisable = 0
         self.setTest = 0
         self.micDelay = 0
+        self.offsets= np.array([0,0,0])
         self.srcPos = np.array([0,0,0])
         
         self.create_dialog_box()
@@ -115,12 +125,17 @@ class paramsDialog:
         self.tbx_srcPos   = sSrcPos
 
     def printParams(self):
-        print(self.mode,self.micIndx,self.micGain,self.setTest,self.micDelay,self.srcPos)
+        print(self.hostIP,self.hostPort,self.mode,self.micIndx,self.micGain,self.setTest,self.micDelay,self.srcPos,self.offsets)
 
     def fetchParamsFromUI(self):
         
         # Set the values as class properties
         s = self.cbx_mode.get()
+
+        self.hostIP     = self.tbx_hostIP.get()
+        self.hostPort   = int(self.tbx_hostPort.get())
+
+
         self.mode       = int(s.split(':')[0])
         self.micIndx    = self.micNames.index(self.cbx_micIndx.get())
         self.micGain    = int(self.tbx_micGain.get())
@@ -131,6 +146,7 @@ class paramsDialog:
         self.micDelay   = int(self.tbx_micDelay.get())
 
         self.srcPos     = np.array(self.tbx_srcPos.get().split(','), dtype=float)
+        self.offsets    = np.array(self.tbx_offsets.get().split(','), dtype=float)
 
         self.sMode      = self.cbx_mode.get()
         self.sMicIndx   = self.cbx_micIndx.get()
@@ -138,6 +154,7 @@ class paramsDialog:
         self.sMicDelay  = self.tbx_micDelay.get()
         self.sSetTest   = self.cbx_testMode.get()
         self.sSrcPos    = self.tbx_srcPos.get()
+        
     
     def get_user_inputs(self):
         # Retrieve the selected values from the dropdown lists and textboxes
@@ -158,6 +175,7 @@ class paramsDialog:
         self.micDelay   = -1
 
         self.srcPos     = np.array([-1.0,-1.0,-1.0])
+        self.offsets    = np.array([-1.0,-1.0,-1.0])
 
         self.sMode      = '-1'
         self.sMicIndx   = '-1'
@@ -165,6 +183,7 @@ class paramsDialog:
         self.sMicDelay  = '-1'
         self.sSetTest   = '-1'
         self.sSrcPos    = '-1,-1,-1'
+        
         # Destroy the dialog box
         #self.dialog_box.destroy()
 
@@ -183,7 +202,9 @@ class paramsDialog:
     
         #Z=distance between camera and object, x is left+/right-, y is down+/up-
         this_location=[6, 0.2, 0.3]
-        delay=delay_calculation_v1(this_location)
+
+        # revised[add offsets],Brian,18 Mar 2024
+        delay=delay_calculation_v1(this_location,self.xOffset,self.yOffset,self.zOffset)
         print(delay)
         logger.add_data('%s,%s' %('delay',np.array2string(delay)))
         #converting the delay into binary format 
@@ -262,7 +283,21 @@ class paramsDialog:
     def create_dialog_box(self):
 
         # Set the title of the dialog box
-        self.dialog_box.title("Set Parameters")
+        self.dialog_box.title("Set Parameters--v"+sVersion)
+
+
+        lbl_hostIP = ttk.Label(self.dialog_box, text="Host IP")
+        lbl_hostIP.pack()
+        self.tbx_hostIP = ttk.Entry(self.dialog_box)
+        self.tbx_hostIP.insert(0,'192.168.1.40')
+        self.tbx_hostIP.pack()
+
+        lbl_hostPort = ttk.Label(self.dialog_box, text="Host Port")
+        lbl_hostPort.pack()
+        self.tbx_hostPort = ttk.Entry(self.dialog_box)
+        self.tbx_hostPort.insert(0,'5004')
+        self.tbx_hostPort.pack()
+
 
         # Create labels for the dropdown lists
         lbl_mode = ttk.Label(self.dialog_box, text="Mode:")
@@ -282,6 +317,15 @@ class paramsDialog:
         self.cbx_micIndx.pack()
 
         # Create the textboxes with labels
+        
+
+        label_3 = ttk.Label(self.dialog_box, text="mic gain")
+        label_3.pack()
+        self.tbx_micGain = ttk.Entry(self.dialog_box)
+        self.tbx_micGain.insert(0,'10')
+        self.tbx_micGain.pack()
+
+
         label_3 = ttk.Label(self.dialog_box, text="mic gain")
         label_3.pack()
         self.tbx_micGain = ttk.Entry(self.dialog_box)
@@ -314,6 +358,14 @@ class paramsDialog:
         self.tbx_srcPos.insert(0,'0,0,0')
         self.tbx_srcPos.pack()
 
+        lbl_offsets = ttk.Label(self.dialog_box, text="x,y,z Offsets")
+        lbl_offsets.pack()
+        self.tbx_offsets = ttk.Entry(self.dialog_box)
+        self.tbx_offsets.insert(0,'0,0,0')
+        self.tbx_offsets.pack()
+        
+
+
         self.lbl_info   = ttk.Label(self.dialog_box,text='')
         self.lbl_info.pack()
 
@@ -325,17 +377,20 @@ class paramsDialog:
         # cancel_button = ttk.Button(self.dialog_box, text="Cancel", command=self.cancel)
         # cancel_button.pack(side=tk.LEFT)
 
-        btnSendPacket = ttk.Button(self.dialog_box, text="Send Packet", command=self.sendPacket)
-        btnSendPacket.pack(side=tk.LEFT)
+        
 
 
         # Create a list of points
-        # pts = getMicPositions(0,0.5,0)
-        # points = [(pt[0]*500,pt[1]*500) for pt in pts]
+        pts = getMicPositions(0,0,0)
+        points = [(pt[0]*500+200,200-pt[1]*500) for pt in pts]
 
         # # Create the PointSelectionGUI and embed it in the main window
-        # point_selection = PointSelectionGUI(self.dialog_box, points)
-        # point_selection.pack(side=tk.LEFT, padx=10, pady=10)
+        point_selection = PointSelectionGUI(self.dialog_box, points)
+        point_selection.pack(side=tk.LEFT, padx=10, pady=10)
+
+
+        btnSendPacket = ttk.Button(self.dialog_box, text="Send Packet", command=self.sendPacket)
+        btnSendPacket.pack(side=tk.LEFT)
 
         # Start the main event loop
         self.dialog_box.mainloop()
