@@ -1,13 +1,22 @@
 WINDOW_WIDTH = 1920
 WINDOW_HEIGHT = 1080
+# FRAME_WIDTH = 1080
+# FRAME_HEIGHT = 810
+# FRAME_WIDTH = 640
+# FRAME_HEIGHT = 480
+FRAME_WIDTH = 1600
+FRAME_HEIGHT = 800
 BUTTON_BAR_HEIGHT = 200
 
 
 BUTTON_STYLE = """
         QPushButton {
-            background-color: White; 
-            color : Black;
-            border-width: 4px;
+            background: qradialgradient(
+            cx: 0.3, cy: -0.4, fx: 0.3, fy: -0.4,
+            radius: 1.35, stop: 0 #fff, stop: 1 #888
+            );    
+            border: 4px solid #000000;
+            padding: 10px;
             border-radius: 20px;
         }
         QPushButton:hover {
@@ -49,7 +58,7 @@ SLIDER_STYLE = """
             }
 
             QSlider::add-page:horizontal {
-                background: #fff;
+                background: #eee;
                 height: 10px;
             }
 
@@ -81,26 +90,45 @@ SLIDER_STYLE = """
 
 SLIDER_STYLE_2 = """
                 .QSlider {
-                    min-height: 68px;
+                    min-height: 38px;
                     max-height: 68px;
                
                 }
 
                 .QSlider::groove:horizontal {
                  
-                    height: 5px;
+                    height: 10px;
                     background: white;
                     
                 }
 
                 .QSlider::handle:horizontal {
-                    background: Darkgreen;
-                    width: 23px;
-                    height: 100px;
-                    margin: -24px -12px;
+                    background: darkblue;
+                    width: 15px;
+                    height: 50px;
+                    margin: -24px -0px;
                   
                 }
-                            }
+
+                .QSlider::sub-page:horizontal {
+                    background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #1d45a1, stop:1 #1d45a1);
+                    height: 10px;
+                }
+
+                .QSlider::add-page:horizontal {
+                    background: #eee;
+                    height: 10px;
+                }
+
+                
+                .QSlider::groove:horizontal:disabled {
+                    background-color: lightgray;
+                    
+                }
+
+                .QSlider::handle:horizontal:disabled {
+                    background-color: gray;
+                }
         """
 
 RADIO_STYLE = """
@@ -115,3 +143,4 @@ RADIO_STYLE = """
 
 NUM_BUTTON_WIDTH = 200
 NUM_BUTTON_HEIGHT = 100
+NUM_ROUND_BUTTON_SIZE = 80

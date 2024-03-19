@@ -10,17 +10,19 @@ import cv2
 from Style import *
 import numpy as np
 import sounddevice as sd 
-import os 
+import os
 import wavio #pip3 install wavio
 from datetime import datetime
 
 import time
+from sys import exit
 
 from Widget_library import *
 from Event import *
 from Enum_library import  *
 from Delay_Transmission import *
 
+# from pywinauto import Desktop
 current_datetime = datetime.now()
 # Format the date and time
 formatted_datetime = current_datetime.strftime("%m-%d-%y")
@@ -36,7 +38,17 @@ OUTPUT_NAME=""
 display_monitor= 0
 CURRENT_PATH = os.getcwd()
 START_RECORDING = False
-DEBUG = True
+MIC_ON = True
+SOUND_ON = True
+DEBUG = False
+
+def resource_path(relative_path):
+    try:
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath("./res")
+
+    return os.path.join(base_path, relative_path)
 
 def getCameraList():
     # Get available camera indices
@@ -51,7 +63,11 @@ class CameraSelectionDialog(QDialog):
         super().__init__()
 
         self.setWindowTitle("Camera Selection")
-        
+        self.setFixedWidth(550)
+        self.setFixedHeight(200)
+        icon = QtGui.QIcon()
+        icon.addPixmap(QtGui.QPixmap(resource_path("mic_double_FILL0_wght400_GRAD0_opsz24.svg")), QtGui.QIcon.Normal, QtGui.QIcon.Off)
+        self.setWindowIcon(icon)
         self.camera_combo = QComboBox()
         self.camera_combo.addItems(camera_names)
         
@@ -103,23 +119,24 @@ class VideoThread(QThread):
         i = 0
         print(self.camera_index)
         cap = cv2.VideoCapture(self.camera_index)
-        
-        cap.set(3, WINDOW_WIDTH)
-        cap.set(4, WINDOW_HEIGHT)
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
+        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
+
+        print(cap.get(3), cap.get(4))
+
         video_width = int(cap.get(3))
         video_height = int(cap.get(4))
-
         print("Input ratio : ",video_height,video_width)
         while True:
             ret, self.cv_img = cap.read()
             if DEBUG == True:
-                cv2.line(self.cv_img,(int(video_width/4),0) ,(int(video_width/4),int(video_height)) , (255, 100,  15), 2)
-                cv2.line(self.cv_img,(int(video_width*2/4),0) ,(int(video_width*2/4),int(video_height)) , (255, 100,  15), 2)
-                cv2.line(self.cv_img,(int(video_width*3/4),0) ,(int(video_width*3/4),int(video_height)) , (255, 100,  15), 2)
-
-                cv2.line(self.cv_img,(0,int(video_height/4)) ,(int(video_width),int(video_height/4)) , (255, 100,  15), 2)
-                cv2.line(self.cv_img,(0,int(video_height*2/4)) ,(int(video_width),int(video_height*2/4)) , (255, 100,  15), 2)
-                cv2.line(self.cv_img,(0,int(video_height*3/4)) ,(int(video_width),int(video_height*3/4)) , (255, 100,  15), 2)
+                cv2.line(self.cv_img,(int(video_width/4),0) ,(int(video_width/4),int(video_height+95)) , (255, 100,  15), 2)
+                cv2.line(self.cv_img,(int(video_width*2/4),0) ,(int(video_width*2/4),int(video_height+95)) , (255, 100,  15), 2)
+                cv2.line(self.cv_img,(int(video_width*3/4),0) ,(int(video_width*3/4),int(video_height+95)) , (255, 100,  15), 2)
+                
+                cv2.line(self.cv_img,(0,int(video_height/4 + 95)) ,(int(video_width),int(video_height/4 + 95)) , (255, 100,  15), 2)
+                cv2.line(self.cv_img,(0,int(video_height*2/4 + 95)) ,(int(video_width),int(video_height*2/4 + 95)) , (255, 100,  15), 2)
+                cv2.line(self.cv_img,(0,int(video_height*3/4 + 95)) ,(int(video_width),int(video_height*3/4 + 95)) , (255, 100,  15), 2)
             if (START_RECORDING == True):
                 if (i == 0):
                     print("initiate Video")
@@ -180,55 +197,227 @@ class App(QWidget):
             self.ScreenNumber = 1
         else:
             self.ScreenNumber = 0
-        self.setWindowTitle("ISD Mic array Project")
-        self.setStyleSheet("background-color:lightgreen")
+        self.setWindowTitle("ISD UI Mockup — v0.1.2")
+        self.setStyleSheet("background-color:gray")
+        icon = QtGui.QIcon()
+        icon.addPixmap(QtGui.QPixmap(resource_path("mic_double_FILL0_wght400_GRAD0_opsz24.svg")), QtGui.QIcon.Normal, QtGui.QIcon.Off)
+        self.setWindowIcon(icon)
+
         self.index = APP_PAGE.MAIN.value
         self.LPF_Select = Frequency_Selection.LPF_FULL.value
         self.RECORDING = False
+        self.MIC_ON = MIC_ON
+        self.SOUND_ON = SOUND_ON
 
         # create the label that holds the image
         self.image_label = Create_ImageWindow()
+        self.image_label.setMinimumSize(QSize(640, 480))
+        self.image_label.setMaximumSize(QSize(1600, 900))
+        # self.image_label.setFixedSize(QSize(FRAME_WIDTH, FRAME_HEIGHT))
 
         self.ExitButton = Create_Button("Exit",lambda:exit(),BUTTON_STYLE)
-        self.SettingButton = Create_Button("Setting",lambda:switchPage(self,APP_PAGE.SETTING.value),BUTTON_STYLE)
-        self.RecordButton = Create_Button("Record",self.Record_clicked,BUTTON_STYLE_RED)
-        self.text_label = Create_Label()
+        # self.SettingButton = Create_Button("Setting",lambda:switchPage(self,APP_PAGE.SETTING.value),BUTTON_STYLE)
+        # self.RecordButton = Create_Button("Record",self.Record_clicked,BUTTON_STYLE_RED)
+        
+        # Setting Button
+        self.SettingButton = Create_Button("",lambda:switchPage(self,APP_PAGE.SETTING.value), "QPushButton {\n"
+"    color: #333;\n"
+"    border: 0px solid #555;\n"
+"    border-radius: 40px;\n"
+"    border-style: outset;\n"
+"    background: qradialgradient(\n"
+"        cx: 0.3, cy: -0.4, fx: 0.3, fy: -0.4,\n"
+"        radius: 1.35, stop: 0 #fff, stop: 1 #888\n"
+"        );\n"
+"    padding: 5px;\n"
+"    }\n"
+"\n"
+"QPushButton:hover {\n"
+"    background: qradialgradient(\n"
+"        cx: 0.3, cy: -0.4, fx: 0.3, fy: -0.4,\n"
+"        radius: 1.35, stop: 0 #fff, stop: 1 #bbb\n"
+"        );\n"
+"    }\n"
+"\n"
+"QPushButton:pressed {\n"
+"    border-style: inset;\n"
+"    background: qradialgradient(\n"
+"        cx: 0.4, cy: -0.1, fx: 0.4, fy: -0.1,\n"
+"        radius: 1.35, stop: 0 #fff, stop: 1 #ddd\n"
+"        );\n"
+"    }")
+        self.SettingButton.setText("")
+        icon2 = QIcon(resource_path("settings_FILL0_wght400_GRAD0_opsz24.svg"))
+        self.SettingButton.setIcon(icon2)
+        self.SettingButton.setIconSize(QSize(65, 65))
+        self.SettingButton.setObjectName("btnSettings")
+        self.SettingButton.setFixedSize(NUM_ROUND_BUTTON_SIZE, NUM_ROUND_BUTTON_SIZE)
 
+        # Record Button
+        self.icon_startRecord = QIcon(resource_path("radio_button_checked_FILL0_wght400_GRAD0_opsz24.png"))
+        self.icon_stopRecord  = QIcon(resource_path("stop_circle_FILL0_wght400_GRAD0_opsz24.png"))
+        self.RecordButton = Create_Button("",self.Record_clicked,"QPushButton {\n"
+"    color: #333;\n"
+"    border: 0px solid #555;\n"
+"    border-radius: 40px;\n"
+"    border-style: outset;\n"
+"    background: qradialgradient(\n"
+"        cx: 0.3, cy: -0.4, fx: 0.3, fy: -0.4,\n"
+"        radius: 1.35, stop: 0 #fff, stop: 1 #888\n"
+"        );\n"
+"    padding: 5px;\n"
+"    }\n"
+"\n"
+"QPushButton:hover {\n"
+"    background: qradialgradient(\n"
+"        cx: 0.3, cy: -0.4, fx: 0.3, fy: -0.4,\n"
+"        radius: 1.35, stop: 0 #fff, stop: 1 #bbb\n"
+"        );\n"
+"    }\n"
+"\n"
+"QPushButton:pressed {\n"
+"    border-style: inset;\n"
+"    background: qradialgradient(\n"
+"        cx: 0.4, cy: -0.1, fx: 0.4, fy: -0.1,\n"
+"        radius: 1.35, stop: 0 #fff, stop: 1 #ddd\n"
+"        );\n"
+"    }")
+        self.RecordButton.setIcon(self.icon_startRecord)
+        self.RecordButton.setIconSize(QSize(70, 70))
+        self.RecordButton.setObjectName("btnRecord")
+        self.RecordButton.setFixedSize(NUM_ROUND_BUTTON_SIZE, NUM_ROUND_BUTTON_SIZE)
+
+        # Mic On Off Button
+        self.MicOnOffButton = Create_Button("", self.MicOnOff_clicked, "QPushButton {\n"
+"    color: #333;\n"
+"    border: 0px solid #555;\n"
+"    border-radius: 40px;\n"
+"    border-style: outset;\n"
+"    background: qradialgradient(\n"
+"        cx: 0.3, cy: -0.4, fx: 0.3, fy: -0.4,\n"
+"        radius: 1.35, stop: 0 #fff, stop: 1 #888\n"
+"        );\n"
+"    padding: 5px;\n"
+"    }\n"
+"\n"
+"QPushButton:hover {\n"
+"    background: qradialgradient(\n"
+"        cx: 0.3, cy: -0.4, fx: 0.3, fy: -0.4,\n"
+"        radius: 1.35, stop: 0 #fff, stop: 1 #bbb\n"
+"        );\n"
+"    }\n"
+"\n"
+"QPushButton:pressed {\n"
+"    border-style: inset;\n"
+"    background: qradialgradient(\n"
+"        cx: 0.4, cy: -0.1, fx: 0.4, fy: -0.1,\n"
+"        radius: 1.35, stop: 0 #fff, stop: 1 #ddd\n"
+"        );\n"
+"    }")
+        self.MicOnOffButton.setText("")
+        self.icon_micOn = QIcon(resource_path("mic_FILL0_wght400_GRAD0_opsz24.svg"))
+        self.icon_micOff = QIcon(resource_path("mic_off_FILL0_wght400_GRAD0_opsz24.svg"))
+        self.MicOnOffButton.setIconSize(QSize(70, 70))
+        self.MicOnOffButton.setObjectName("btnMicOnOff")
+        self.MicOnOffButton.setFixedSize(NUM_ROUND_BUTTON_SIZE, NUM_ROUND_BUTTON_SIZE)
+        self.MicOnOffButton.setIcon(self.icon_micOn)
+
+        # Volume On Off Button
+        self.SoundOnOffButton = Create_Button("", self.SoundOnOff_clicked, "QPushButton {\n"
+"    color: #333;\n"
+"    border: 0px solid #555;\n"
+"    border-radius: 40px;\n"
+"    border-style: outset;\n"
+"    background: qradialgradient(\n"
+"        cx: 0.3, cy: -0.4, fx: 0.3, fy: -0.4,\n"
+"        radius: 1.35, stop: 0 #fff, stop: 1 #888\n"
+"        );\n"
+"    padding: 5px;\n"
+"    }\n"
+"\n"
+"QPushButton:hover {\n"
+"    background: qradialgradient(\n"
+"        cx: 0.3, cy: -0.4, fx: 0.3, fy: -0.4,\n"
+"        radius: 1.35, stop: 0 #fff, stop: 1 #bbb\n"
+"        );\n"
+"    }\n"
+"\n"
+"QPushButton:pressed {\n"
+"    border-style: inset;\n"
+"    background: qradialgradient(\n"
+"        cx: 0.4, cy: -0.1, fx: 0.4, fy: -0.1,\n"
+"        radius: 1.35, stop: 0 #fff, stop: 1 #ddd\n"
+"        );\n"
+"    }")
+        self.SoundOnOffButton.setText("")
+        self.icon_soundOn = QIcon(resource_path("volume_up_FILL0_wght400_GRAD0_opsz24.svg"))
+        self.icon_soundOff = QIcon(resource_path("volume_off_FILL0_wght400_GRAD0_opsz24.svg"))
+        self.SoundOnOffButton.setIcon(self.icon_soundOn)
+        self.SoundOnOffButton.setIconSize(QSize(70, 70))
+        self.SoundOnOffButton.setObjectName("btnSoundOnOff")
+        self.SoundOnOffButton.setFixedSize(NUM_ROUND_BUTTON_SIZE, NUM_ROUND_BUTTON_SIZE)
+
+        self.sliderMicVol = QSlider()
+        self.sliderMicVol.setOrientation(Qt.Horizontal)
+        self.sliderMicVol.setObjectName("sliderMicVol")
+        self.sliderMicVol.setFixedSize(200, 40)
+        self.sliderMicVol.setStyleSheet(SLIDER_STYLE_2)
+        
+
+        self.sliderSoundVol = QSlider()
+        self.sliderSoundVol.setOrientation(Qt.Horizontal)
+        self.sliderSoundVol.setObjectName("sliderSoundVol")
+        self.sliderSoundVol.setFixedSize(200, 40)
+        self.sliderSoundVol.setStyleSheet(SLIDER_STYLE_2)
+
+        self.text_label = Create_Label()
+        
         #Setting Up Main Page 
         self.MainPage = QGridLayout()
         self.MainPage.setContentsMargins(0,0,0,0)
         self.MainPage.setHorizontalSpacing(0)  # Set horizontal spacing to zero   
-        self.MainPage.setVerticalSpacing(0)
-        self.MainPage.addWidget(self.image_label,0,0,alignment=Qt.AlignCenter)
+        self.MainPage.addWidget(self.image_label,0,0,1,2,alignment=Qt.AlignCenter)
         self.MainPage.setHorizontalSpacing(0)  # Set horizontal spacing to zero   
         self.MainPage.setVerticalSpacing(0)  # Set horizontal spacing to zero   
         
-        
-        self.MainPage_button = QHBoxLayout()
-        self.MainPage_button.addWidget(self.ExitButton,alignment=Qt.AlignLeft)
-        self.MainPage_button.addWidget(self.RecordButton)
-        self.MainPage_button.addWidget(self.SettingButton,alignment=Qt.AlignRight)
+
+        self.MainPage_button = QGridLayout()
+        self.MainPage_button.setContentsMargins(100, 0, 100, 50)
+        self.MainPage_button.addWidget(self.ExitButton, 0, 0, Qt.AlignLeft)
+        self.MainPage_button.addWidget(self.RecordButton, 0, 1, 1, 2, Qt.AlignCenter)
+        self.button_slider_layout = QGridLayout()
+        self.button_slider_layout.addWidget(self.sliderMicVol, 0, 0, 1, 1, Qt.AlignCenter)
+        self.button_slider_layout.addWidget(self.MicOnOffButton, 1, 0, 1, 1, Qt.AlignCenter)
+        self.button_slider_layout.addWidget(self.sliderSoundVol, 0, 1, 1, 1, Qt.AlignCenter)
+        self.button_slider_layout.addWidget(self.SoundOnOffButton, 1, 1, 1, 1, Qt.AlignCenter)
+        self.button_slider_layout.addWidget(self.SettingButton, 0, 3, 2, 1, Qt.AlignCenter)
+        self.button_slider_layout.setSpacing(20)
+        self.MainPage_button.addLayout(self.button_slider_layout, 0, 2, 1, 2, Qt.AlignRight)
+
+
         self.MainPage_button_widget = QWidget()
         self.MainPage_button_widget.setLayout(self.MainPage_button)
         self.MainPage_button_widget.setFixedSize(WINDOW_WIDTH,BUTTON_BAR_HEIGHT)
-        self.MainPage_button_widget.setStyleSheet("background-color:transparent")
+        # self.MainPage_button_widget.setStyleSheet("background-color:transparent; border:1px solid rgb(0, 255, 0);")
         
         if DEBUG == True:
-            self.MainPage.addWidget(self.text_label,0,0,alignment=Qt.AlignRight)
+            self.MainPage.addWidget(self.text_label,0,0,1,2,alignment=Qt.AlignRight)
             self.MainPage.addWidget(self.MainPage_button_widget,1,0,1,2)
         else:
-            self.MainPage.addWidget(self.MainPage_button_widget,0,0,alignment=Qt.AlignBottom)
+            self.MainPage.addWidget(self.MainPage_button_widget,1,0,1,2, Qt.AlignCenter)
             
         #Setting up Setting page for LPF and Gain and Voulme 
         self.GainLabel = QLabel("Mic Array Channel Gain  :")
+        # button_font = QFont("Arial",40)
+        # button_font.setPixelSize(40)
         self.GainLabel.setFont(BUTTON_FONT)
+    
         self.VolumeLabel = QLabel("Mic Array Digital Volume :")
         self.VolumeLabel.setFont(BUTTON_FONT)
-        self.GainFader= Create_Slider(-12,12,0,1,SLIDER_STYLE,update_label)
+        self.GainFader= Create_Slider(-12,12,0,1,SLIDER_STYLE_2,update_label)
         self.VolumeFader = Create_Slider(0,24,0,1,SLIDER_STYLE_2,update_label)
         self.FilterSelectLabel = QLabel("Mic Array Filter Select     :")
         self.FilterSelectLabel.setFont(BUTTON_FONT)
-
 
         self.CheckBox_6kHz = Create_RadioBotton('6khz',lambda:ToggleSelection(self,Frequency_Selection.LPF_6K.value))
         self.CheckBox_12kHz = Create_RadioBotton('12khz',lambda:ToggleSelection(self,Frequency_Selection.LPF_12K.value))
@@ -238,18 +427,20 @@ class App(QWidget):
         self.ApplyButton =Create_Button("Apply",lambda:exit(),BUTTON_STYLE)
 
         self.SettingPage = QGridLayout()
-        self.SettingPage.addWidget(self.GainLabel,1,0)
-        self.SettingPage.addWidget(self.GainFader,1,1,1,5)
-        self.SettingPage.addWidget(self.VolumeLabel,2,0)
-        self.SettingPage.addWidget(self.VolumeFader,2,1,1,5)
-        self.SettingPage.addWidget(self.FilterSelectLabel,3,0)
-        self.SettingPage.addWidget(self.CheckBox_6kHz,3,1)
-        self.SettingPage.addWidget(self.CheckBox_12kHz,3,2)
-        self.SettingPage.addWidget(self.CheckBox_18kHz,3,3)
-        self.SettingPage.addWidget(self.CheckBox_Full,3,4)
+        self.SettingPage.addWidget(self.GainLabel,1,0,1,1)
+        self.SettingPage.addWidget(self.GainFader,1,1,1,4, Qt.AlignHCenter)
 
-        self.SettingPage.addWidget(self.ApplyButton,4,0,1,4,alignment=Qt.AlignRight)
-        self.SettingPage.addWidget(self.BackButton,4,1,1,4,alignment=Qt.AlignRight)
+        self.SettingPage.addWidget(self.VolumeLabel,2,0,1,1)
+        self.SettingPage.addWidget(self.VolumeFader,2,1,1,4, Qt.AlignHCenter)
+
+        self.SettingPage.addWidget(self.FilterSelectLabel,3,0,1,1)
+        self.SettingPage.addWidget(self.CheckBox_6kHz,3,1,1,1,Qt.AlignHCenter)
+        self.SettingPage.addWidget(self.CheckBox_12kHz,3,2,1,1,Qt.AlignHCenter)
+        self.SettingPage.addWidget(self.CheckBox_18kHz,3,3,1,1,Qt.AlignHCenter)
+        self.SettingPage.addWidget(self.CheckBox_Full,3,4,1,1,Qt.AlignHCenter)
+
+        self.SettingPage.addWidget(self.ApplyButton,4,3,1,1, Qt.AlignHCenter)
+        self.SettingPage.addWidget(self.BackButton,4,4,1,1, Qt.AlignHCenter)
                 
         self.SettingPageWidget = QWidget()
         self.SettingPageWidget.setLayout(self.SettingPage)
@@ -267,7 +458,7 @@ class App(QWidget):
 
         self.layout = QVBoxLayout()
         self.layout.addWidget(self.stacked_widget)
-        self.layout.setContentsMargins(0,0,0,0)
+        self.layout.setContentsMargins(0,50,0,0)
         self.layout.addWidget(self.stacked_widget)
         # set the vbox layout as the widgets layout
         self.setLayout(self.layout)
@@ -275,6 +466,8 @@ class App(QWidget):
       
         # self.setGeometry(QApplication.screens()[self.ScreenNumber].geometry())
         # self.showFullScreen()
+
+        
 
         # pop up dialog to select video first
         dialog = CameraSelectionDialog(getCameraList())
@@ -307,7 +500,9 @@ class App(QWidget):
         h, w, ch = rgb_image.shape
         bytes_per_line = ch * w
         convert_to_Qt_format = QtGui.QImage(rgb_image.data, w, h, bytes_per_line, QtGui.QImage.Format_RGB888)
-        p = convert_to_Qt_format.scaled(WINDOW_WIDTH, WINDOW_HEIGHT, Qt.KeepAspectRatio)
+        # p = convert_to_Qt_format.scaled(WINDOW_WIDTH, WINDOW_HEIGHT, Qt.KeepAspectRatio)
+        p = convert_to_Qt_format.scaled(FRAME_WIDTH, FRAME_HEIGHT, Qt.KeepAspectRatio)
+        # p = convert_to_Qt_format.scaled(FRAME_WIDTH, FRAME_HEIGHT, Qt.IgnoreAspectRatio)
         return QPixmap.fromImage(p)
 
     def mousePressEvent(self, event):
@@ -327,27 +522,76 @@ class App(QWidget):
         global START_RECORDING,VIDEO_NAME,AUDIO_NAME,OUTPUT_NAME
         self.RECORDING = not self.RECORDING
         if self.RECORDING == True:
-            self.RecordButton.setStyleSheet("background-color:red ; color :white ;border-width: 4px;border-radius: 20px;")
+            self.RecordButton.setIcon(self.icon_stopRecord)
+            # self.RecordButton.setStyleSheet("background-color:red ; color :white ;border-width: 4px;border-radius: 20px;")
 
             self.text_label.appendPlainText("Recording")
-            start_recording(self)
+            #start_recording(self)
             
         else:
-            self.RecordButton.setStyleSheet(BUTTON_STYLE_RED)
+            # self.RecordButton.setStyleSheet(BUTTON_STYLE_RED)
+            self.RecordButton.setIcon(self.icon_startRecord)
             self.text_label.appendPlainText('Status: Not Recording')
             START_RECORDING=False
-            self.audio_thread.requestInterruption()
-            self.combine_thread = VideoAudioThread(VIDEO_NAME,AUDIO_NAME,OUTPUT_NAME)
-            self.combine_thread.start()        
+            # self.audio_thread.requestInterruption()
+            # print("OUTPUT_NAME: ", OUTPUT_NAME)
+            # self.combine_thread = VideoAudioThread(VIDEO_NAME,AUDIO_NAME,OUTPUT_NAME)
+            # self.combine_thread.start()
+
+    def MicOnOff_clicked(self):
+        self.MIC_ON = not self.MIC_ON
+        if self.MIC_ON == True:
+            self.MicOnOffButton.setIcon(self.icon_micOn)
+            #enable sliderMicVol,Brian,28 Feb 2024
+            self.sliderMicVol.setEnabled(True)
+            
+        else:
+            self.MicOnOffButton.setIcon(self.icon_micOff)
+            #disalbe sliderMicVol,Brian,28 Feb 2024
+            self.sliderMicVol.setEnabled(False)
+            
+            
     
+    def SoundOnOff_clicked(self):
+        self.SOUND_ON = not self.SOUND_ON
+        if self.SOUND_ON == True:
+            self.SoundOnOffButton.setIcon(self.icon_soundOn)
+
+            #enable sliderSoundVol,Brian,28 Feb 2024
+            self.sliderSoundVol.setEnabled(True)
+        else:
+            self.SoundOnOffButton.setIcon(self.icon_soundOff)
+            #disalbe sliderSoundVol,Brian,28 Feb 2024
+            self.sliderSoundVol.setEnabled(False)
+            
+
+    
+# if hasattr(Qt, 'AA_EnableHighDpiScaling'):
+    # QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
+# if hasattr(Qt, 'AA_UseHighDpiPixmaps'):
+#     QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
+
 if __name__=="__main__":
-    
 # Create necessary DIR
-    check_folder_existence(CURRENT_PATH+VIDEO_SAVE_DIRECTORY)
-    check_folder_existence(CURRENT_PATH+VIDEO_SAVE_DIRECTORY+VIDEO_DATE)
-    check_folder_existence(CURRENT_PATH+AUDIO_PATH+"\\"+VIDEO_DATE)
-    check_folder_existence(CURRENT_PATH+OUTPUT_PATH+"\\"+VIDEO_DATE)
+    # removed,Brian,28 Feb 2024
+    # check_folder_existence(CURRENT_PATH+VIDEO_SAVE_DIRECTORY)
+    # check_folder_existence(CURRENT_PATH+VIDEO_SAVE_DIRECTORY+VIDEO_DATE)
+    # check_folder_existence(CURRENT_PATH+AUDIO_PATH+"\\"+VIDEO_DATE)
+    # check_folder_existence(CURRENT_PATH+OUTPUT_PATH+"\\"+VIDEO_DATE)
+    
+    # os.environ["QT_ENABLE_HIGHDPI_SCALING"]   = "2"
+    # os.environ["QT_AUTO_SCREEN_SCALE_FACTOR"] = "0.5"
+    # os.environ["QT_SCALE_FACTOR"]             = "2"
     app = QApplication(sys.argv)
+    
+    # app.setAttribute(Qt.AA_DisableHighDpiScaling)
+    # print(f"Using AA_DisableHighDpiScaling > {QApplication.testAttribute(Qt.AA_DisableHighDpiScaling)}")
+    # print(f"Using AA_UseHighDpiPixmaps    > {QApplication.testAttribute(Qt.AA_UseHighDpiPixmaps)}")
     a = App()
     a.show()
+    print("w, h: ", a.image_label.width(), a.image_label.height())
+    print("x, y: ", a.image_label.x(), a.image_label.y())
     sys.exit(app.exec_())
+
+
+

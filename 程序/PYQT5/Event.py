@@ -3,7 +3,9 @@ from PyQt5.QtWidgets import *
 from PyQt5.QtCore import *
 from PyQt5.QtGui import *
 from Style import *
-from moviepy.editor import VideoFileClip, AudioFileClip
+# from moviepy.editor import VideoFileClip, AudioFileClip
+from moviepy.video.io.VideoFileClip import VideoFileClip
+from moviepy.audio.io.AudioFileClip import AudioFileClip
 import os 
 from Enum_library import  *
 # Create neccessary Directory

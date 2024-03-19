@@ -3,8 +3,17 @@ from PyQt5.QtWidgets import *
 from PyQt5.QtCore import *
 from PyQt5.QtGui import *
 from Style import *
+# from pywinauto import Desktop
+
+# import ctypes
+
+# # not supported in Windows 8.1, use GetScaleFactorForMonitor
+# scaleFactor = ctypes.windll.shcore.GetScaleFactorForDevice(0) / 100
+# print("scale factor: ", scaleFactor)
 
 BUTTON_FONT = QFont("Arial",40)
+BUTTON_FONT.setPixelSize(40)
+# BUTTON_FONT = QFont("Arial",40/scaleFactor)
 Label_Font = QFont("Arial",20)
 
 
@@ -42,6 +51,7 @@ def Create_ImageWindow():
         frame.setFont(QFont("Arial",40))
         frame.setFixedSize(WINDOW_WIDTH,WINDOW_HEIGHT)
         frame.setStyleSheet("background-color:Grey;border-width: 4px;border-radius: 20px;alignment:center")
+        # frame.setStyleSheet("background-color:white;border-width: 4px;alignment:center; border:1px solid rgb(0, 255, 0);")
         frame.setContentsMargins(0,0,0,0)
         return frame
 
