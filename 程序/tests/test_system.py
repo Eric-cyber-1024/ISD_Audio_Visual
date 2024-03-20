@@ -78,7 +78,9 @@ class paramsDialog:
                       '4: turn on BM',
                       '5: turn off BM',
                       '6: turn on MC',
-                      '7: turn off MC']
+                      '7: turn off MC',
+                      '8: BLjudge H_CAFFs readback'
+                    ]
         
         self.micNames=["M{:02d}".format(i) for i in range(1, 33)]
 
