@@ -25,7 +25,7 @@ MIC_NUMBER=32
 HOST_NAME ='192.168.1.40'
 PORT      =5004
 INDEX =[x for x in range (MIC_NUMBER )]
-sVersion = '0.2'
+sVersion = '0.3'
 
 
 class PointSelectionGUI(tk.Frame):
