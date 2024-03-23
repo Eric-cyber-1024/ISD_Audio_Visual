@@ -22,6 +22,10 @@ from Event import *
 from Enum_library import  *
 from Delay_Transmission import *
 
+
+import RealSense_library as RS_lib
+import pyrealsense2 as rs
+
 # from pywinauto import Desktop
 current_datetime = datetime.now()
 # Format the date and time
@@ -41,12 +45,14 @@ START_RECORDING = False
 MIC_ON = True
 SOUND_ON = True
 DEBUG = False
-
+PIXEL_X = 0 
+PIXEL_Y = 0
 def resource_path(relative_path):
     try:
         base_path = sys._MEIPASS
     except Exception:
-        base_path = os.path.abspath("./res")
+        # base_path = os.path.abspath("./res")
+        base_path = os.path.abspath("./程序/PYQT5/res")
 
     return os.path.join(base_path, relative_path)
 
@@ -70,6 +76,8 @@ class CameraSelectionDialog(QDialog):
         self.setWindowIcon(icon)
         self.camera_combo = QComboBox()
         self.camera_combo.addItems(camera_names)
+        self.list = camera_names
+        print(camera_names)
         
         button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         button_box.accepted.connect(self.accept)
@@ -82,7 +90,8 @@ class CameraSelectionDialog(QDialog):
         self.setLayout(layout)
     
     def get_selected_camera_name(self):
-        return self.camera_combo.currentIndex()
+        # return self.camera_combo.currentIndex()
+        return 2,"Depth Camera" #hardcode return depth camera on Eric PC 
 
 
 # Combine As output thread 
@@ -106,59 +115,159 @@ class VideoThread(QThread):
 
     change_pixmap_signal = pyqtSignal(np.ndarray)
     
-    def __init__(self, arg1):
+    def __init__(self, arg1,arg2):
         super().__init__()
         self.camera_index = arg1
-
+        self.camera_name = arg2
     def run(self):
-        global START_RECORDING,VIDEO_NAME,OUTPUT_NAME,AUDIO_NAME
+        global START_RECORDING,VIDEO_NAME,OUTPUT_NAME,AUDIO_NAME,depth_frame
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        font_scale = 1.
+        font_color = (0, 0, 255)  # White color
+        if "Depth" in self.camera_name:
+            print("Using Depth camera")
+            # capture from web cam
+            i = 0
+            # print(self.camera_index)
 
-        
-        
-        # capture from web cam
-        i = 0
-        print(self.camera_index)
-        cap = cv2.VideoCapture(self.camera_index)
-        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
-        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
+            pipeline = rs.pipeline()
+            config = rs.config()
+            # pc = rs.pointcloud()
 
-        print(cap.get(3), cap.get(4))
+            config.enable_stream(rs.stream.depth, RS_lib.DEPTH_CAM_WIDTH, RS_lib.DEPTH_CAM_HEIGHT, rs.format.z16, 30)
+            config.enable_stream(rs.stream.color, RS_lib.COLOR_CAM_WIDTH, RS_lib.COLOR_CAM_HEIGHT, rs.format.bgr8, 30)
 
-        video_width = int(cap.get(3))
-        video_height = int(cap.get(4))
-        print("Input ratio : ",video_height,video_width)
-        while True:
-            ret, self.cv_img = cap.read()
-            if DEBUG == True:
-                cv2.line(self.cv_img,(int(video_width/4),0) ,(int(video_width/4),int(video_height+95)) , (255, 100,  15), 2)
-                cv2.line(self.cv_img,(int(video_width*2/4),0) ,(int(video_width*2/4),int(video_height+95)) , (255, 100,  15), 2)
-                cv2.line(self.cv_img,(int(video_width*3/4),0) ,(int(video_width*3/4),int(video_height+95)) , (255, 100,  15), 2)
+            profile = pipeline.start(config)
+            align = rs.align(rs.stream.color)
+
+            color_profile = rs.video_stream_profile(profile.get_stream(rs.stream.color))
+            color_intrinsics = color_profile.get_intrinsics()
+
+            depth_profile = rs.video_stream_profile(profile.get_stream(rs.stream.depth))
+            depth_intrinsics = depth_profile.get_intrinsics()
+            print("depth_intrinsics: ", depth_intrinsics)
+            w, h = depth_intrinsics.width, depth_intrinsics.height
+
+            depth_sensor = profile.get_device().first_depth_sensor()
+            depth_scale = depth_sensor.get_depth_scale()
+            print("Depth Scale is: " , depth_scale)
+            # for visualization
+            depth_min = 0.1 #meter
+            depth_max = 15.0 #meter
+
+            colorizer = rs.colorizer()
+            colorizer.set_option(rs.option.visual_preset, 1) # 0=Dynamic, 1=Fixed, 2=Near, 3=Far
+            colorizer.set_option(rs.option.min_distance, depth_min)
+            colorizer.set_option(rs.option.max_distance, depth_max)
+
+
+
+            cap = cv2.VideoCapture(self.camera_index)
+            cap.set(cv2.CAP_PROP_FRAME_WIDTH, RS_lib.COLOR_CAM_HEIGHT)
+            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, RS_lib.COLOR_CAM_HEIGHT)
+
+            print(cap.get(3), cap.get(4))
+
+            video_width = int(cap.get(3))
+            video_height = int(cap.get(4))
+            print("Input ratio : ",video_height,video_width)
+            while True:
                 
-                cv2.line(self.cv_img,(0,int(video_height/4 + 95)) ,(int(video_width),int(video_height/4 + 95)) , (255, 100,  15), 2)
-                cv2.line(self.cv_img,(0,int(video_height*2/4 + 95)) ,(int(video_width),int(video_height*2/4 + 95)) , (255, 100,  15), 2)
-                cv2.line(self.cv_img,(0,int(video_height*3/4 + 95)) ,(int(video_width),int(video_height*3/4 + 95)) , (255, 100,  15), 2)
-            if (START_RECORDING == True):
-                if (i == 0):
-                    print("initiate Video")
-                    current_datetime = datetime.now()
-                    formatted_datetime = current_datetime.strftime("[%m-%d-%y]%H_%M_%S")
-                    self.video_name = CURRENT_PATH+VIDEO_SAVE_DIRECTORY+VIDEO_DATE + "\\"+str(formatted_datetime)+'.avi'
-                    self.output_path = CURRENT_PATH+OUTPUT_PATH+VIDEO_DATE+ "\\"+str(formatted_datetime)+'.mp4'
-                    VIDEO_NAME = self.video_name
-                    OUTPUT_NAME=self.output_path
-                    AUDIO_NAME = CURRENT_PATH+AUDIO_PATH+VIDEO_DATE+ "\\"+str(formatted_datetime)+'.wav'
-                    FPS = 25
-                    out = cv2.VideoWriter(self.video_name, cv2.VideoWriter_fourcc('M','J','P','G'), FPS, (video_width,video_height))
-                    i+=1
+                # Get a frameset from the pipeline
+                frameset = pipeline.wait_for_frames()
+
+                # Align the depth frame to the color frame
+                aligned_frameset = align.process(frameset)
+
+                # Get the aligned depth and color frames
+                depth_frame = aligned_frameset.get_depth_frame()
+                color_frame = aligned_frameset.get_color_frame()
+
+                depth_image = np.asanyarray(depth_frame.get_data())
+                color_image = np.asanyarray(color_frame.get_data())
+
+                cv2.circle(color_image,(PIXEL_X,PIXEL_Y),1,font_color,cv2.LINE_AA)
+                cv2.putText(color_image, str(depth_frame.get_distance(PIXEL_X,PIXEL_Y)), (0, 100), font, font_scale, font_color, 2, cv2.LINE_AA)
+                self.cv_img = color_image
+
+                # ret, self.cv_img = cap.read()
+                if DEBUG == True:
+                    cv2.line(self.cv_img,(int(video_width/4),0) ,(int(video_width/4),int(video_height+95)) , (255, 100,  15), 2)
+                    cv2.line(self.cv_img,(int(video_width*2/4),0) ,(int(video_width*2/4),int(video_height+95)) , (255, 100,  15), 2)
+                    cv2.line(self.cv_img,(int(video_width*3/4),0) ,(int(video_width*3/4),int(video_height+95)) , (255, 100,  15), 2)
+                    
+                    cv2.line(self.cv_img,(0,int(video_height/4 + 95)) ,(int(video_width),int(video_height/4 + 95)) , (255, 100,  15), 2)
+                    cv2.line(self.cv_img,(0,int(video_height*2/4 + 95)) ,(int(video_width),int(video_height*2/4 + 95)) , (255, 100,  15), 2)
+                    cv2.line(self.cv_img,(0,int(video_height*3/4 + 95)) ,(int(video_width),int(video_height*3/4 + 95)) , (255, 100,  15), 2)
+                if (START_RECORDING == True):
+                    if (i == 0):
+                        print("initiate Video")
+                        current_datetime = datetime.now()
+                        formatted_datetime = current_datetime.strftime("[%m-%d-%y]%H_%M_%S")
+                        self.video_name = CURRENT_PATH+VIDEO_SAVE_DIRECTORY+VIDEO_DATE + "\\"+str(formatted_datetime)+'.avi'
+                        self.output_path = CURRENT_PATH+OUTPUT_PATH+VIDEO_DATE+ "\\"+str(formatted_datetime)+'.mp4'
+                        VIDEO_NAME = self.video_name
+                        OUTPUT_NAME=self.output_path
+                        AUDIO_NAME = CURRENT_PATH+AUDIO_PATH+VIDEO_DATE+ "\\"+str(formatted_datetime)+'.wav'
+                        FPS = 25
+                        out = cv2.VideoWriter(self.video_name, cv2.VideoWriter_fourcc('M','J','P','G'), FPS, (video_width,video_height))
+                        i+=1
+                    else:
+                        out.write(self.cv_img)
+                    
                 else:
-                    out.write(self.cv_img)
-                
-            else:
-                if (i > 0 ):
-                    out.release()
-                    i=0
-            if ret:
+                    if (i > 0 ):
+                        out.release()
+                        i=0
+                # if ret:
                 self.change_pixmap_signal.emit(self.cv_img)
+            
+        else:
+        
+            # capture from web cam
+            i = 0
+            print(self.camera_index)
+            cap = cv2.VideoCapture(self.camera_index)
+            cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
+            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
+
+            print(cap.get(3), cap.get(4))
+
+            video_width = int(cap.get(3))
+            video_height = int(cap.get(4))
+            print("Input ratio : ",video_height,video_width)
+            while True:
+                ret, self.cv_img = cap.read()
+                if DEBUG == True:
+                    cv2.line(self.cv_img,(int(video_width/4),0) ,(int(video_width/4),int(video_height+95)) , (255, 100,  15), 2)
+                    cv2.line(self.cv_img,(int(video_width*2/4),0) ,(int(video_width*2/4),int(video_height+95)) , (255, 100,  15), 2)
+                    cv2.line(self.cv_img,(int(video_width*3/4),0) ,(int(video_width*3/4),int(video_height+95)) , (255, 100,  15), 2)
+                    
+                    cv2.line(self.cv_img,(0,int(video_height/4 + 95)) ,(int(video_width),int(video_height/4 + 95)) , (255, 100,  15), 2)
+                    cv2.line(self.cv_img,(0,int(video_height*2/4 + 95)) ,(int(video_width),int(video_height*2/4 + 95)) , (255, 100,  15), 2)
+                    cv2.line(self.cv_img,(0,int(video_height*3/4 + 95)) ,(int(video_width),int(video_height*3/4 + 95)) , (255, 100,  15), 2)
+                if (START_RECORDING == True):
+                    if (i == 0):
+                        print("initiate Video")
+                        current_datetime = datetime.now()
+                        formatted_datetime = current_datetime.strftime("[%m-%d-%y]%H_%M_%S")
+                        self.video_name = CURRENT_PATH+VIDEO_SAVE_DIRECTORY+VIDEO_DATE + "\\"+str(formatted_datetime)+'.avi'
+                        self.output_path = CURRENT_PATH+OUTPUT_PATH+VIDEO_DATE+ "\\"+str(formatted_datetime)+'.mp4'
+                        VIDEO_NAME = self.video_name
+                        OUTPUT_NAME=self.output_path
+                        AUDIO_NAME = CURRENT_PATH+AUDIO_PATH+VIDEO_DATE+ "\\"+str(formatted_datetime)+'.wav'
+                        FPS = 25
+                        out = cv2.VideoWriter(self.video_name, cv2.VideoWriter_fourcc('M','J','P','G'), FPS, (video_width,video_height))
+                        i+=1
+                    else:
+                        out.write(self.cv_img)
+                    
+                else:
+                    if (i > 0 ):
+                        out.release()
+                        i=0
+                if ret:
+                    self.change_pixmap_signal.emit(self.cv_img)
 # Audio Thread
 class AudioThread(QThread):
     def run(self):
@@ -197,8 +306,10 @@ class App(QWidget):
             self.ScreenNumber = 1
         else:
             self.ScreenNumber = 0
+        self.ScreenNumber = 0
         self.setWindowTitle("ISD UI Mockup — v0.1.2")
-        self.setStyleSheet("background-color:gray")
+        # self.setStyleSheet("background-color:gray")
+        self.setStyleSheet("background-color:lightgreen") 
         icon = QtGui.QIcon()
         icon.addPixmap(QtGui.QPixmap(resource_path("mic_double_FILL0_wght400_GRAD0_opsz24.svg")), QtGui.QIcon.Normal, QtGui.QIcon.Off)
         self.setWindowIcon(icon)
@@ -464,7 +575,7 @@ class App(QWidget):
         self.setLayout(self.layout)
         self.setFixedSize(WINDOW_WIDTH,WINDOW_HEIGHT)
       
-        # self.setGeometry(QApplication.screens()[self.ScreenNumber].geometry())
+        self.setGeometry(QApplication.screens()[self.ScreenNumber].geometry())
         # self.showFullScreen()
 
         
@@ -474,13 +585,13 @@ class App(QWidget):
 
         # Display the dialog and get the selected camera name
         if dialog.exec_() == QDialog.Accepted:
-            self.selected_camera_index = dialog.get_selected_camera_name()
+            self.selected_camera_index,self.Camera_name = dialog.get_selected_camera_name()
         else:
             print("Exit now...")
             exit()
 
         # create the video capture thread
-        self.video_thread = VideoThread(self.selected_camera_index)
+        self.video_thread = VideoThread(self.selected_camera_index,self.Camera_name)
         self.audio_thread = AudioThread()
         # connect its signal to the update_image slot
         self.video_thread.change_pixmap_signal.connect(self.update_image)
@@ -506,12 +617,18 @@ class App(QWidget):
         return QPixmap.fromImage(p)
 
     def mousePressEvent(self, event):
+        global PIXEL_X,PIXEL_Y
         # Handle mouse press events
         mouse_position = event.pos()
         self.text_label.appendPlainText(f"Clicked on [{mouse_position.x()},{mouse_position.y()}]")
+        PIXEL_X = mouse_position.x()
+        PIXEL_Y =mouse_position.y()
+        print(mouse_position.y(),mouse_position.x())
+
+        print(depth_frame.get_distance(mouse_position.x(),mouse_position.y()))
         row = int(mouse_position.y()) // (WINDOW_HEIGHT // 4 )
         col =int( mouse_position.x()) // (WINDOW_WIDTH // 4)
-        print(row , col )
+        # print(row , col )
         area = row*4 + col +1
         self.text_label.appendPlainText(f"Area: {area}") 
         # message = create_and_send_packet(HOST,PORT, area.to_bytes( 2, byteorder='big'))
