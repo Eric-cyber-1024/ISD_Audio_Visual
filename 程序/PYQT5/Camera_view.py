@@ -45,8 +45,8 @@ START_RECORDING = False
 MIC_ON = True
 SOUND_ON = True
 DEBUG = False
-PIXEL_X = 0 
-PIXEL_Y = 0
+PIXEL_X = 960 
+PIXEL_Y = 540
 def resource_path(relative_path):
     try:
         base_path = sys._MEIPASS
