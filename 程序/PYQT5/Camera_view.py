@@ -123,54 +123,33 @@ class VideoThread(QThread):
         global START_RECORDING,VIDEO_NAME,OUTPUT_NAME,AUDIO_NAME,depth_frame
         font = cv2.FONT_HERSHEY_SIMPLEX
         font_scale = 1.
-        font_color = (0, 0, 255)  # White color
+        font_color = (200, 250, 255)  # White color
         if "Depth" in self.camera_name:
             print("Using Depth camera")
             # capture from web cam
             i = 0
-            # print(self.camera_index)
-
             pipeline = rs.pipeline()
             config = rs.config()
-            # pc = rs.pointcloud()
-
             config.enable_stream(rs.stream.depth, RS_lib.DEPTH_CAM_WIDTH, RS_lib.DEPTH_CAM_HEIGHT, rs.format.z16, 30)
             config.enable_stream(rs.stream.color, RS_lib.COLOR_CAM_WIDTH, RS_lib.COLOR_CAM_HEIGHT, rs.format.bgr8, 30)
 
             profile = pipeline.start(config)
             align = rs.align(rs.stream.color)
-
             color_profile = rs.video_stream_profile(profile.get_stream(rs.stream.color))
-            color_intrinsics = color_profile.get_intrinsics()
-
             depth_profile = rs.video_stream_profile(profile.get_stream(rs.stream.depth))
-            depth_intrinsics = depth_profile.get_intrinsics()
-            print("depth_intrinsics: ", depth_intrinsics)
-            w, h = depth_intrinsics.width, depth_intrinsics.height
 
-            depth_sensor = profile.get_device().first_depth_sensor()
-            depth_scale = depth_sensor.get_depth_scale()
-            print("Depth Scale is: " , depth_scale)
-            # for visualization
+            alpha = 0.2 
+
             depth_min = 0.1 #meter
-            depth_max = 15.0 #meter
+            depth_max = 4.0 #meter
 
             colorizer = rs.colorizer()
             colorizer.set_option(rs.option.visual_preset, 1) # 0=Dynamic, 1=Fixed, 2=Near, 3=Far
             colorizer.set_option(rs.option.min_distance, depth_min)
             colorizer.set_option(rs.option.max_distance, depth_max)
 
+            # frame1_transparent = cv2.addWeighted(, alpha, frame2, 1 - alpha, 0)
 
-
-            cap = cv2.VideoCapture(self.camera_index)
-            cap.set(cv2.CAP_PROP_FRAME_WIDTH, RS_lib.COLOR_CAM_HEIGHT)
-            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, RS_lib.COLOR_CAM_HEIGHT)
-
-            print(cap.get(3), cap.get(4))
-
-            video_width = int(cap.get(3))
-            video_height = int(cap.get(4))
-            print("Input ratio : ",video_height,video_width)
             while True:
                 
                 # Get a frameset from the pipeline
@@ -187,9 +166,16 @@ class VideoThread(QThread):
                 color_image = np.asanyarray(color_frame.get_data())
 
                 cv2.circle(color_image,(PIXEL_X,PIXEL_Y),1,font_color,cv2.LINE_AA)
-                cv2.putText(color_image, str(depth_frame.get_distance(PIXEL_X,PIXEL_Y)), (0, 100), font, font_scale, font_color, 2, cv2.LINE_AA)
-                self.cv_img = color_image
+                distance_f = depth_frame.get_distance(PIXEL_X,PIXEL_Y)
+                distance = "{distance_f:.3f}m"
+                
+                cv2.putText(color_image, distance.format(distance_f = distance_f), (0, 100), font, font_scale, font_color, 2, cv2.LINE_AA)
+                depth_colormap = np.asanyarray(colorizer.colorize(depth_frame).get_data())
 
+                # depth_image_resize = cv2.resize(depth_image, (color_image.shape[1], color_image.shape[0]))
+            
+                color_image = cv2.addWeighted(depth_colormap, alpha, color_image, 1 - alpha, 0)
+                self.cv_img = color_image
                 # ret, self.cv_img = cap.read()
                 if DEBUG == True:
                     cv2.line(self.cv_img,(int(video_width/4),0) ,(int(video_width/4),int(video_height+95)) , (255, 100,  15), 2)
