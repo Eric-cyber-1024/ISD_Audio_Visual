@@ -132,7 +132,7 @@ class VideoThread(QThread):
             i = 0
             pipeline = rs.pipeline()
             config = rs.config()
-            config.enable_stream(rs.stream.depth, RS_lib.DEPTH_CAM_WIDTH, RS_lib.DEPTH_CAM_HEIGHT, rs.format.z16, 30)
+            config.enable_stream(rs.stream.depth, RS_lib.DEPTH_CAM_WIDTH, RS_lib.DEPTH_CAM_HEIGHT, rs.format.z16, 60)
             config.enable_stream(rs.stream.color, RS_lib.COLOR_CAM_WIDTH, RS_lib.COLOR_CAM_HEIGHT, rs.format.bgr8, 30)
 
             profile = pipeline.start(config)
@@ -172,6 +172,16 @@ class VideoThread(QThread):
                 distance_f = depth_frame.get_distance(PIXEL_X,PIXEL_Y)
                 distance = "{distance_f:.3f}m"
                 
+                # depth_intrinsics = depth_profile.get_intrinsics()
+                # depth_scale = pipeline.get_active_profile().get_device().first_depth_sensor().get_depth_scale()
+                # depth_point = rs.rs2_deproject_pixel_to_point(depth_intrinsics, [PIXEL_X,PIXEL_Y], distance_f* depth_scale)
+
+                # depth_point = tuple(round(coord*1000, 3) for coord in depth_point)
+                
+
+
+                cv2.putText(color_image, str(depth_point) , (0, 400), font, font_scale, font_color, 2, cv2.LINE_AA)
+
                 # cv2.putText(color_image, distance.format(distance_f = distance_f), (0, 100), font, font_scale, font_color, 2, cv2.LINE_AA)
                 depth_colormap = np.asanyarray(colorizer.colorize(depth_frame).get_data())
                 cv2.putText(depth_colormap, distance.format(distance_f = distance_f), (0, 100), font, font_scale, font_color, 2, cv2.LINE_AA)
