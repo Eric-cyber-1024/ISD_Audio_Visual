@@ -39,6 +39,8 @@ AUDIO_NAME=""
 VIDEO_NAME =""
 OUTPUT_NAME=""
 
+DEPTH_MAP =False
+
 display_monitor= 0
 CURRENT_PATH = os.getcwd()
 START_RECORDING = False
@@ -123,7 +125,7 @@ class VideoThread(QThread):
         global START_RECORDING,VIDEO_NAME,OUTPUT_NAME,AUDIO_NAME,depth_frame
         font = cv2.FONT_HERSHEY_SIMPLEX
         font_scale = 1.
-        font_color = (200, 250, 255)  # White color
+        font_color = (255, 255, 255)  # White color
         if "Depth" in self.camera_name:
             print("Using Depth camera")
             # capture from web cam
@@ -138,17 +140,18 @@ class VideoThread(QThread):
             color_profile = rs.video_stream_profile(profile.get_stream(rs.stream.color))
             depth_profile = rs.video_stream_profile(profile.get_stream(rs.stream.depth))
 
-            alpha = 0.2 
+            alpha = 0.5 
 
-            depth_min = 0.1 #meter
-            depth_max = 4.0 #meter
+            depth_min = 0.3 #meter
+            depth_max = 5.0 #meter
 
             colorizer = rs.colorizer()
-            colorizer.set_option(rs.option.visual_preset, 1) # 0=Dynamic, 1=Fixed, 2=Near, 3=Far
+            colorizer.set_option(rs.option.visual_preset, 2) # 0=Dynamic, 1=Fixed, 2=Near, 3=Far
             colorizer.set_option(rs.option.min_distance, depth_min)
             colorizer.set_option(rs.option.max_distance, depth_max)
 
             # frame1_transparent = cv2.addWeighted(, alpha, frame2, 1 - alpha, 0)
+        
 
             while True:
                 
@@ -165,17 +168,24 @@ class VideoThread(QThread):
                 depth_image = np.asanyarray(depth_frame.get_data())
                 color_image = np.asanyarray(color_frame.get_data())
 
-                cv2.circle(color_image,(PIXEL_X,PIXEL_Y),1,font_color,cv2.LINE_AA)
+                
                 distance_f = depth_frame.get_distance(PIXEL_X,PIXEL_Y)
                 distance = "{distance_f:.3f}m"
                 
-                cv2.putText(color_image, distance.format(distance_f = distance_f), (0, 100), font, font_scale, font_color, 2, cv2.LINE_AA)
+                # cv2.putText(color_image, distance.format(distance_f = distance_f), (0, 100), font, font_scale, font_color, 2, cv2.LINE_AA)
                 depth_colormap = np.asanyarray(colorizer.colorize(depth_frame).get_data())
+                cv2.putText(depth_colormap, distance.format(distance_f = distance_f), (0, 100), font, font_scale, font_color, 2, cv2.LINE_AA)
+                cv2.circle(depth_colormap,(PIXEL_X,PIXEL_Y),1,font_color,cv2.LINE_AA)
 
+                cv2.putText(color_image, distance.format(distance_f = distance_f), (0, 100), font, font_scale, font_color, 2, cv2.LINE_AA)
+                cv2.circle(color_image,(PIXEL_X,PIXEL_Y),1,font_color,cv2.LINE_AA)
                 # depth_image_resize = cv2.resize(depth_image, (color_image.shape[1], color_image.shape[0]))
-            
-                color_image = cv2.addWeighted(depth_colormap, alpha, color_image, 1 - alpha, 0)
+
+                if ( DEPTH_MAP == True):
+                    color_image = cv2.addWeighted(depth_colormap, alpha, color_image, 1 - alpha, 0)
+                
                 self.cv_img = color_image
+                self.cv_img =  cv2.resize(self.cv_img, (1920,1080))
                 # ret, self.cv_img = cap.read()
                 if DEBUG == True:
                     cv2.line(self.cv_img,(int(video_width/4),0) ,(int(video_width/4),int(video_height+95)) , (255, 100,  15), 2)
@@ -292,7 +302,7 @@ class App(QWidget):
             self.ScreenNumber = 1
         else:
             self.ScreenNumber = 0
-        self.ScreenNumber = 0
+        self.ScreenNumber = 1
         self.setWindowTitle("ISD UI Mockup — v0.1.2")
         # self.setStyleSheet("background-color:gray")
         self.setStyleSheet("background-color:lightgreen") 
@@ -308,9 +318,10 @@ class App(QWidget):
 
         # create the label that holds the image
         self.image_label = Create_ImageWindow()
-        self.image_label.setMinimumSize(QSize(640, 480))
-        self.image_label.setMaximumSize(QSize(1600, 900))
+        # self.image_label.setMinimumSize(QSize(640, 480))
+        # self.image_label.setMaximumSize(QSize(1600, 900))
         # self.image_label.setFixedSize(QSize(FRAME_WIDTH, FRAME_HEIGHT))
+        # self.image_label.setFixedSize(1920, 1080)
 
         self.ExitButton = Create_Button("Exit",lambda:exit(),BUTTON_STYLE)
         # self.SettingButton = Create_Button("Setting",lambda:switchPage(self,APP_PAGE.SETTING.value),BUTTON_STYLE)
@@ -473,9 +484,10 @@ class App(QWidget):
         self.MainPage = QGridLayout()
         self.MainPage.setContentsMargins(0,0,0,0)
         self.MainPage.setHorizontalSpacing(0)  # Set horizontal spacing to zero   
-        self.MainPage.addWidget(self.image_label,0,0,1,2,alignment=Qt.AlignCenter)
-        self.MainPage.setHorizontalSpacing(0)  # Set horizontal spacing to zero   
-        self.MainPage.setVerticalSpacing(0)  # Set horizontal spacing to zero   
+        self.MainPage.setVerticalSpacing(0)
+        self.MainPage.addWidget(self.image_label,0,0,alignment=Qt.AlignCenter)
+        # self.MainPage.setHorizontalSpacing(0)  # Set horizontal spacing to zero   
+        # self.MainPage.setVerticalSpacing(0)  # Set horizontal spacing to zero   
         
 
         self.MainPage_button = QGridLayout()
@@ -490,18 +502,20 @@ class App(QWidget):
         self.button_slider_layout.addWidget(self.SettingButton, 0, 3, 2, 1, Qt.AlignCenter)
         self.button_slider_layout.setSpacing(20)
         self.MainPage_button.addLayout(self.button_slider_layout, 0, 2, 1, 2, Qt.AlignRight)
+        # self.MainPage_button
 
 
         self.MainPage_button_widget = QWidget()
         self.MainPage_button_widget.setLayout(self.MainPage_button)
         self.MainPage_button_widget.setFixedSize(WINDOW_WIDTH,BUTTON_BAR_HEIGHT)
-        # self.MainPage_button_widget.setStyleSheet("background-color:transparent; border:1px solid rgb(0, 255, 0);")
+        self.MainPage_button_widget.setStyleSheet("background-color:transparent")#; border:1px solid rgb(0, 255, 0);")
         
         if DEBUG == True:
             self.MainPage.addWidget(self.text_label,0,0,1,2,alignment=Qt.AlignRight)
             self.MainPage.addWidget(self.MainPage_button_widget,1,0,1,2)
         else:
-            self.MainPage.addWidget(self.MainPage_button_widget,1,0,1,2, Qt.AlignCenter)
+            # pass
+            self.MainPage.addWidget(self.MainPage_button_widget,0,0,alignment=Qt.AlignBottom)
             
         #Setting up Setting page for LPF and Gain and Voulme 
         self.GainLabel = QLabel("Mic Array Channel Gain  :")
@@ -555,14 +569,14 @@ class App(QWidget):
 
         self.layout = QVBoxLayout()
         self.layout.addWidget(self.stacked_widget)
-        self.layout.setContentsMargins(0,50,0,0)
+        self.layout.setContentsMargins(0,0,0,0)
         self.layout.addWidget(self.stacked_widget)
         # set the vbox layout as the widgets layout
         self.setLayout(self.layout)
         self.setFixedSize(WINDOW_WIDTH,WINDOW_HEIGHT)
       
         self.setGeometry(QApplication.screens()[self.ScreenNumber].geometry())
-        # self.showFullScreen()
+        self.showFullScreen()
 
         
 
@@ -597,8 +611,8 @@ class App(QWidget):
         h, w, ch = rgb_image.shape
         bytes_per_line = ch * w
         convert_to_Qt_format = QtGui.QImage(rgb_image.data, w, h, bytes_per_line, QtGui.QImage.Format_RGB888)
-        # p = convert_to_Qt_format.scaled(WINDOW_WIDTH, WINDOW_HEIGHT, Qt.KeepAspectRatio)
-        p = convert_to_Qt_format.scaled(FRAME_WIDTH, FRAME_HEIGHT, Qt.KeepAspectRatio)
+        p = convert_to_Qt_format.scaled(WINDOW_WIDTH, WINDOW_HEIGHT, Qt.KeepAspectRatio)
+        # p = convert_to_Qt_format.scaled(FRAME_WIDTH, FRAME_HEIGHT, Qt.KeepAspectRatio)
         # p = convert_to_Qt_format.scaled(FRAME_WIDTH, FRAME_HEIGHT, Qt.IgnoreAspectRatio)
         return QPixmap.fromImage(p)
 
@@ -622,10 +636,12 @@ class App(QWidget):
 
     
     def Record_clicked(self):
-        global START_RECORDING,VIDEO_NAME,AUDIO_NAME,OUTPUT_NAME
+        global START_RECORDING,VIDEO_NAME,AUDIO_NAME,OUTPUT_NAME,DEPTH_MAP
         self.RECORDING = not self.RECORDING
+        DEPTH_MAP = not DEPTH_MAP
         if self.RECORDING == True:
             self.RecordButton.setIcon(self.icon_stopRecord)
+            # START_RECORDING = True
             # self.RecordButton.setStyleSheet("background-color:red ; color :white ;border-width: 4px;border-radius: 20px;")
 
             self.text_label.appendPlainText("Recording")
