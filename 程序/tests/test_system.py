@@ -339,12 +339,6 @@ class paramsDialog:
         self.tbx_micGain.pack()
 
 
-        label_3 = ttk.Label(self.dialog_box, text="mic gain")
-        label_3.pack()
-        self.tbx_micGain = ttk.Entry(self.dialog_box)
-        self.tbx_micGain.insert(0,'10')
-        self.tbx_micGain.pack()
-
         label_4 = ttk.Label(self.dialog_box, text="mic disable")
         label_4.pack()
         self.textbox_2 = ttk.Entry(self.dialog_box)
