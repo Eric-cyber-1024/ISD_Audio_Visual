@@ -101,27 +101,27 @@ def delay_calculation(src_position,xOffset,yOffset,zOffset):
     source_ref = src_position - mic_ref_ori
 
     # vector difference between ref mic and the other mics
-    ref_mics = np.zeros((NUM_OF_MICS))
+    ref_mics = np.zeros((NUM_OF_MICS+1))
     # for i in range(NUM_OF_MICS):
     #     ref_mics[i] = mic_ref_ori - mic_position[i] 
     
     
     # distances of mics vs source
-    magnitude_s2p = np.zeros((NUM_OF_MICS))
+    magnitude_s2p = np.zeros((NUM_OF_MICS+1))
 
     # distance between ref mic and source
     magnitude_s2r = np.linalg.norm(source_ref, axis=0, keepdims=True)
  
 
     # for each of the mics
-    for i in range(NUM_OF_MICS):
+    for i in range(NUM_OF_MICS+1):
         # get the distance between mics and source
         vec_diff = src_position - mic_position[i] # get the vector difference first
         magnitude_s2p[i] = np.linalg.norm(vec_diff, axis=0, keepdims=True)
         # print(magnitude_s2p[i]*1e6/SPEED_OF_SOUND)
 
-    delay = np.zeros((NUM_OF_MICS))
-    for i in range(NUM_OF_MICS):
+    delay = np.zeros((NUM_OF_MICS+1))
+    for i in range(NUM_OF_MICS+1):
         delay[i] = - (magnitude_s2r - magnitude_s2p[i]) / SPEED_OF_SOUND
 
     # save a copy of the raw delays
@@ -135,14 +135,14 @@ def delay_calculation(src_position,xOffset,yOffset,zOffset):
 
     
     # mic_delay_extra = find_calibration_value(Vision.distance,Vision.x,Vision.y)
-    for i in range(NUM_OF_MICS):
+    for i in range(NUM_OF_MICS+1):
         delay[i] = (delay[i])*1e-6
         delay_phase[i] = delay[i]*48000.
         delay_phase[i] = int(256*delay_phase[i] *(360./512.))
             
     minimum = abs(min(delay_phase))
     delay_phase = delay_phase + minimum
-    delay_phase = np.reshape(delay_phase, NUM_OF_MICS)
+    delay_phase = np.reshape(delay_phase, NUM_OF_MICS+1)
 
     return delay_phase,raw_delay,sorted_micNames 
 
