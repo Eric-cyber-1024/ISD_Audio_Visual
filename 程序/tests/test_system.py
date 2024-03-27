@@ -25,7 +25,7 @@ MIC_NUMBER=32
 HOST_NAME ='192.168.1.40'
 PORT      =5004
 INDEX =[x for x in range (MIC_NUMBER )]
-sVersion = '0.3'
+sVersion = '0.4'
 
 
 class PointSelectionGUI(tk.Frame):
@@ -36,12 +36,12 @@ class PointSelectionGUI(tk.Frame):
         self.canvas.pack()
         self.callback = callback
 
-        # frame_width = 5
+        # frame_width = 2
         # self.canvas.create_rectangle(
         #     frame_width,
         #     frame_width,
-        #     400 - frame_width,
-        #     400 - frame_width,
+        #     300 - frame_width,
+        #     300 - frame_width,
         #     outline='black',
         #     width=frame_width
         # )
@@ -71,16 +71,18 @@ class PointSelectionGUI(tk.Frame):
 class paramsDialog:
     def __init__(self):
         self.dialog_box = tk.Tk()
-        self.modes = ['0: normal', 
-                      '1: cal',
-                      '2: cal verify',
-                      '3: switch mic/output selection',
-                      '4: turn on BM',
-                      '5: turn off BM',
-                      '6: turn on MC',
-                      '7: turn off MC',
-                      '8: BLjudge H_CAFFs readback'
-                    ]
+        self.modes = [
+            '0: normal', 
+            '1: cal',
+            '2: cal verify',
+            '3: switch mic/output selection',
+            '4: turn on BM',
+            '5: turn off BM',
+            '6: turn on MC',
+            '7: turn off MC',
+            '8: BLjudge H_CAFFs readback',
+            '9: WMcal Wm[] readback'
+        ]
         
         self.micNames=["M{:02d}".format(i) for i in range(1, 33)]
 
@@ -105,32 +107,41 @@ class paramsDialog:
         self.micGain = 0
         self.micDisable = 0
         self.setTest = 0
-        self.micDelay = 0
+        self.den_out_sel= 0
+        self.mc_beta_sel= 0
+        self.mc_K_sel   = 0
         self.offsets= np.array([0,0,0])
         self.srcPos = np.array([0,0,0])
         
         self.create_dialog_box()
 
-    def setUI(self,modeIndx,micIndx,sMicGain,sMicDelay,setTestIndx,sSrcPos):
-        '''
-        prepare UI with certain values
+    # removed,Brian,27 Mar 2024
+    # def setUI(self,modeIndx,micIndx,sMicGain,sMicDelay,setTestIndx,sSrcPos):
+    #     '''
+    #     prepare UI with certain values
 
-        mode       -- dropdown list
-        mic index  -- dropdown list
-        set test   -- dropdown list
-        mic gain   -- textbox
-        mic delay  -- textbox
-        src pos    -- textbox
+    #     mode       -- dropdown list
+    #     mic index  -- dropdown list
+    #     set test   -- dropdown list
+    #     mic gain   -- textbox
+    #     mic delay  -- textbox
+    #     src pos    -- textbox
 
-        '''
-        self.cbx_micIndx  = 0
-        self.cbx_testMode = 0
-        self.tbx_micDelay = sMicDelay
-        self.tbx_micGain  = sMicGain
-        self.tbx_srcPos   = sSrcPos
+    #     '''
+    #     self.cbx_micIndx  = 0
+    #     self.cbx_testMode = 0
+    #     self.tbx_micDelay = sMicDelay
+    #     self.tbx_micGain  = sMicGain
+    #     self.tbx_srcPos   = sSrcPos
+        
+    def __str__(self):
+        return f"params,{self.hostIP}, {self.hostPort}, {self.mode},{self.micIndx},{self.micGain},{self.setTest},{self.den_out_sel},{self.mc_beta_sel},{self.mc_K_sel},[{self.srcPos[0]},{self.srcPos[1]},{self.srcPos[2]}],[{self.offsets[0]},{self.offsets[1]},{self.offsets[2]}]"
+
 
     def printParams(self):
-        print(self.hostIP,self.hostPort,self.mode,self.micIndx,self.micGain,self.setTest,self.micDelay,self.srcPos,self.offsets)
+        print(self.hostIP,self.hostPort,self.mode,self.micIndx,self.micGain,self.setTest,self.den_out_sel,self.mc_beta_sel,self.mc_K_sel,self.srcPos,self.offsets)
+        # add[save to log as well],Brian,27 Mar 2024
+        logger.add_data(self.__str__())
 
     def fetchParamsFromUI(self):
         
@@ -148,17 +159,20 @@ class paramsDialog:
 
         s = self.cbx_testMode.get()
         self.setTest    = int(s.split(':')[0])
-        self.micDelay   = int(self.tbx_micDelay.get())
+        self.den_out_sel= int(self.tbx_den_out_sel.get())
+        self.mc_beta_sel= int(self.tbx_mc_beta_sel.get())
+        self.mc_K_sel   = int(self.tbx_mc_K_sel.get())
 
         self.srcPos     = np.array(self.tbx_srcPos.get().split(','), dtype=float)
         self.offsets    = np.array(self.tbx_offsets.get().split(','), dtype=float)
 
-        self.sMode      = self.cbx_mode.get()
-        self.sMicIndx   = self.cbx_micIndx.get()
-        self.sMicGain   = self.tbx_micGain.get()
-        self.sMicDelay  = self.tbx_micDelay.get()
-        self.sSetTest   = self.cbx_testMode.get()
-        self.sSrcPos    = self.tbx_srcPos.get()
+        # removed,Brian,27 Mar 2024
+        # self.sMode      = self.cbx_mode.get()
+        # self.sMicIndx   = self.cbx_micIndx.get()
+        # self.sMicGain   = self.tbx_micGain.get()
+        # self.sMicDelay  = self.tbx_micDelay.get()
+        # self.sSetTest   = self.cbx_testMode.get()
+        # self.sSrcPos    = self.tbx_srcPos.get()
         
     
     def get_user_inputs(self):
@@ -177,7 +191,9 @@ class paramsDialog:
         self.micDisable = -1
 
         self.setTest    = -1
-        self.micDelay   = -1
+        self.den_out_sel= -1
+        self.mc_beta_sel= -1
+        self.mc_K_sel   = -1
 
         self.srcPos     = np.array([-1.0,-1.0,-1.0])
         self.offsets    = np.array([-1.0,-1.0,-1.0])
@@ -249,7 +265,11 @@ class paramsDialog:
         message7  = int(self.micGain)     # mic_gain
         message8  = int(self.micDisable)  # mic_disable
         message9  = int(self.setTest)     # set_test
-        message10 = int(self.micDelay)    # mic_delay
+        message10 = int(self.den_out_sel) # den_out_sel, previously micDelay
+
+        # revise[added message11, message12],Brian, 27 Mar 2024
+        message11 = int(self.mc_beta_sel) # mc_beta_sel
+        message12 = int(self.mc_K_sel)    # mc_K_sel
  
         
         _,refDelay,_ = delay_calculation(self.srcPos,self.offsets[0],self.offsets[1],self.offsets[2])   
@@ -277,7 +297,7 @@ class paramsDialog:
         else:
             print('packet not ok')
             
-        sendBuf=bytes([message1,message2,message3,message4,message5,message6,message7,message8,message9,message10])
+        sendBuf=bytes([message1,message2,message3,message4,message5,message6,message7,message8,message9,message10,message11,message12])
             
         # append packet to sendBuf
         sendBuf += packet
@@ -353,11 +373,26 @@ class paramsDialog:
         self.cbx_testMode.current(3)
         self.cbx_testMode.pack()
 
-        lbl_micDelay = ttk.Label(self.dialog_box, text="mic delay")
-        lbl_micDelay.pack()
-        self.tbx_micDelay = ttk.Entry(self.dialog_box)
-        self.tbx_micDelay.insert(0,'0')
-        self.tbx_micDelay.pack()
+        # revised micDelay to den_out_sel
+        # added widgets for mc_beta_sel, mc_K_sel
+
+        lbl_den_out_sel = ttk.Label(self.dialog_box, text="den_out_sel")
+        lbl_den_out_sel.pack()
+        self.tbx_den_out_sel = ttk.Entry(self.dialog_box)
+        self.tbx_den_out_sel.insert(0,'8')
+        self.tbx_den_out_sel.pack()
+
+        lbl_mc_beta_sel = ttk.Label(self.dialog_box, text="mc_beta_sel")
+        lbl_mc_beta_sel.pack()
+        self.tbx_mc_beta_sel = ttk.Entry(self.dialog_box)
+        self.tbx_mc_beta_sel.insert(0,'4')
+        self.tbx_mc_beta_sel.pack()
+
+        lbl_mc_K_sel = ttk.Label(self.dialog_box, text="mc_K_sel")
+        lbl_mc_K_sel.pack()
+        self.tbx_mc_K_sel = ttk.Entry(self.dialog_box)
+        self.tbx_mc_K_sel.insert(0,'0')
+        self.tbx_mc_K_sel.pack()
 
         lbl_srcPos = ttk.Label(self.dialog_box, text="source pos")
         lbl_srcPos.pack()
@@ -389,7 +424,7 @@ class paramsDialog:
 
         # Create a list of points
         pts = getMicPositions(0,0,0)
-        points = [(pt[0]*500+200,200-pt[1]*500) for pt in pts]
+        points = [(pt[0]*500+150,150-pt[1]*500) for pt in pts]
 
         # # Create the PointSelectionGUI and embed it in the main window
         self.point_selection = PointSelectionGUI(self.dialog_box, points,self.send_message)
