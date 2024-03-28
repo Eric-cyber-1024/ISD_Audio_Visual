@@ -25,7 +25,7 @@ MIC_NUMBER=32
 HOST_NAME ='192.168.1.40'
 PORT      =5004
 INDEX =[x for x in range (MIC_NUMBER )]
-sVersion = '0.4'
+sVersion = '0.5'
 
 
 class PointSelectionGUI(tk.Frame):
@@ -81,7 +81,8 @@ class paramsDialog:
             '6: turn on MC',
             '7: turn off MC',
             '8: BLjudge H_CAFFs readback',
-            '9: WMcal Wm[] readback'
+            '9: WMcal Wm[] readback',
+            '10: en_BM, en_MC condition set in FFT module' #add,Brian,28 Mar 2024
         ]
         
         self.micNames=["M{:02d}".format(i) for i in range(1, 33)]
@@ -110,6 +111,7 @@ class paramsDialog:
         self.den_out_sel= 0
         self.mc_beta_sel= 0
         self.mc_K_sel   = 0
+        self.en_BM_MC_ctrl = 0
         self.offsets= np.array([0,0,0])
         self.srcPos = np.array([0,0,0])
         
@@ -162,6 +164,7 @@ class paramsDialog:
         self.den_out_sel= int(self.tbx_den_out_sel.get())
         self.mc_beta_sel= int(self.tbx_mc_beta_sel.get())
         self.mc_K_sel   = int(self.tbx_mc_K_sel.get())
+        self.en_BM_MC_ctrl = int(self.tbx_en_BM_MC_ctrl.get())
 
         self.srcPos     = np.array(self.tbx_srcPos.get().split(','), dtype=float)
         self.offsets    = np.array(self.tbx_offsets.get().split(','), dtype=float)
@@ -194,6 +197,7 @@ class paramsDialog:
         self.den_out_sel= -1
         self.mc_beta_sel= -1
         self.mc_K_sel   = -1
+        self.en_BM_MC_ctrl = -1
 
         self.srcPos     = np.array([-1.0,-1.0,-1.0])
         self.offsets    = np.array([-1.0,-1.0,-1.0])
@@ -270,6 +274,9 @@ class paramsDialog:
         # revise[added message11, message12],Brian, 27 Mar 2024
         message11 = int(self.mc_beta_sel) # mc_beta_sel
         message12 = int(self.mc_K_sel)    # mc_K_sel
+
+        # revise[added message13],Brian, 28 Mar 2024
+        message13 = int(self.en_BM_MC_ctrl) # en_BM_MC_ctrl
  
         
         _,refDelay,_ = delay_calculation(self.srcPos,self.offsets[0],self.offsets[1],self.offsets[2])   
@@ -297,7 +304,7 @@ class paramsDialog:
         else:
             print('packet not ok')
             
-        sendBuf=bytes([message1,message2,message3,message4,message5,message6,message7,message8,message9,message10,message11,message12])
+        sendBuf=bytes([message1,message2,message3,message4,message5,message6,message7,message8,message9,message10,message11,message12,message13])
             
         # append packet to sendBuf
         sendBuf += packet
@@ -393,6 +400,13 @@ class paramsDialog:
         self.tbx_mc_K_sel = ttk.Entry(self.dialog_box)
         self.tbx_mc_K_sel.insert(0,'0')
         self.tbx_mc_K_sel.pack()
+
+
+        lbl_en_BM_MC_ctrl = ttk.Label(self.dialog_box, text = 'en_BM_MC_ctrl')
+        lbl_en_BM_MC_ctrl.pack()
+        self.tbx_en_BM_MC_ctrl = ttk.Entry(self.dialog_box)
+        self.tbx_en_BM_MC_ctrl.insert(0,'0')
+        self.tbx_en_BM_MC_ctrl.pack()
 
         lbl_srcPos = ttk.Label(self.dialog_box, text="source pos")
         lbl_srcPos.pack()
