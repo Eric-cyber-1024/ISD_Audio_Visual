@@ -82,7 +82,7 @@ class paramsDialog:
             '7: turn off MC',
             '8: BLjudge H_CAFFs readback',
             '9: WMcal Wm[] readback',
-            '10: en_BM, en_MC condition set in FFT module' #add,Brian,28 Mar 2024
+            
         ]
         
         self.micNames=["M{:02d}".format(i) for i in range(1, 33)]
