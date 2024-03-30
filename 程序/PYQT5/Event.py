@@ -18,14 +18,14 @@ def check_folder_existence(folder_path):
 
 
 def update_label(value):
-        # Update the label text with the current slider value
-        print(value)
+    # Update the label text with the current slider value
+    print(value)
 
 
 def start_recording(self):
-        self.is_recording = True
-        self.text_label.appendPlainText('Status: Recording')
-        self.audio_thread.start()
+    self.is_recording = True
+    self.text_label.appendPlainText('Status: Recording')
+    self.audio_thread.start()
 
 def combine_video_audio(video_path, audio_path, output_path):
     global OUTPUT_NAME,AUDIO_NAME,VIDEO_NAME
@@ -44,6 +44,7 @@ def combine_video_audio(video_path, audio_path, output_path):
 
 def switchPage(self,PAGE):         
         self.stacked_widget.setCurrentIndex(PAGE)
+#       self.stackedWidget.setCurrentIndex(PAGE)
 
 
 

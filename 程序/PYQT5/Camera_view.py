@@ -19,9 +19,10 @@ from sys import exit
 
 from Widget_library import *
 from Event import *
-from Enum_library import  *
+from Enum_library import *
 from Delay_Transmission import *
-
+from audio_controller import AudioDeviceDialog, AudioController
+from utility import audio_dev_to_str
 
 import RealSense_library as RS_lib
 import pyrealsense2 as rs
@@ -74,17 +75,19 @@ class CameraSelectionDialog(QDialog):
         self.setFixedWidth(550)
         self.setFixedHeight(200)
         icon = QtGui.QIcon()
-        icon.addPixmap(QtGui.QPixmap(resource_path("mic_double_FILL0_wght400_GRAD0_opsz24.svg")), QtGui.QIcon.Normal, QtGui.QIcon.Off)
+        icon.addPixmap(
+            QtGui.QPixmap(
+                resource_path("mic_double_FILL0_wght400_GRAD0_opsz24.svg")),
+            QtGui.QIcon.Normal, QtGui.QIcon.Off)
         self.setWindowIcon(icon)
         self.camera_combo = QComboBox()
         self.camera_combo.addItems(camera_names)
-        self.list = camera_names
-        print(camera_names)
-        
-        button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+
+        button_box = QDialogButtonBox(QDialogButtonBox.Ok
+                                      | QDialogButtonBox.Cancel)
         button_box.accepted.connect(self.accept)
         button_box.rejected.connect(self.reject)
-        
+
         layout = QVBoxLayout()
         layout.addWidget(self.camera_combo)
         layout.addWidget(button_box)
@@ -96,7 +99,7 @@ class CameraSelectionDialog(QDialog):
         return 2,"Depth Camera" #hardcode return depth camera on Eric PC 
 
 
-# Combine As output thread 
+# Combine As output thread
 class VideoAudioThread(QThread):
     finished = pyqtSignal()
 
@@ -109,7 +112,7 @@ class VideoAudioThread(QThread):
     def run(self):
         print("Combine Video")
         time.sleep(1)
-        combine_video_audio(self.video_path, self.audio_path,self.output_path)
+        combine_video_audio(self.video_path, self.audio_path, self.output_path)
 
 
 # Video Thread

@@ -127,7 +127,17 @@ SLIDER_STYLE_2 = """
                 }
 
                 .QSlider::handle:horizontal:disabled {
-                    background-color: gray;
+                    background-color: #555;
+                }
+
+                .QSlider::sub-page:horizontal:disabled {
+                    background: #aaa;
+                    height: 10px;
+                }
+
+                .QSlider::add-page:horizontal:disabled {
+                    background: #aaa;
+                    height: 10px;
                 }
         """
 
