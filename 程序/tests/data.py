@@ -181,10 +181,12 @@ def plotDelay(talkbox_locs, df_cam_summary, df_fpga_summary, ):
 
         vec = df_cam_summary['average_loc'][i][:3]
         vec[:2]=vec[:2]*-1
-        print("vec: ", vec)
+        #vec[1]*=-1.
+        
+        print("vec: ", vec,talkbox_loc_name)
         #vec[0]-=0.1
         #vec[1]-=0.09
-        _,refDelay,mic_names = delay_calculation(vec)
+        _,refDelay,mic_names = delay_calculation(vec,0,0.5,0)
         
         # we consider only 2:2+29 only
         mic_names= mic_names[2:2+29]
