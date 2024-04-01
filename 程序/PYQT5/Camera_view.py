@@ -138,25 +138,20 @@ class VideoThread(QThread):
         while True:
             ret, self.cv_img = cap.read()
             if DEBUG:
-                cv2.line(self.cv_img, (int(video_width / 4), 0),
-                         (int(video_width / 4), int(video_height + 95)),
-                         (255, 100, 15), 2)
-                cv2.line(self.cv_img, (int(video_width * 2 / 4), 0),
-                         (int(video_width * 2 / 4), int(video_height + 95)),
-                         (255, 100, 15), 2)
-                cv2.line(self.cv_img, (int(video_width * 3 / 4), 0),
-                         (int(video_width * 3 / 4), int(video_height + 95)),
-                         (255, 100, 15), 2)
+                yInterval = video_height//4
+                xInterval = video_width//4
+                gridColor = (255,100,15)
 
-                cv2.line(self.cv_img, (0, int(video_height / 4 + 95)),
-                         (int(video_width), int(video_height / 4 + 95)),
-                         (255, 100, 15), 2)
-                cv2.line(self.cv_img, (0, int(video_height * 2 / 4 + 95)),
-                         (int(video_width), int(video_height * 2 / 4 + 95)),
-                         (255, 100, 15), 2)
-                cv2.line(self.cv_img, (0, int(video_height * 3 / 4 + 95)),
-                         (int(video_width), int(video_height * 3 / 4 + 95)),
-                         (255, 100, 15), 2)
+                # veritical grid lines
+                cv2.line(self.cv_img, (xInterval, 0),  (xInterval, video_height),  gridColor, 2)
+                cv2.line(self.cv_img, (2*xInterval, 0),(2*xInterval, video_height),gridColor, 2)
+                cv2.line(self.cv_img, (3*xInterval, 0),(3*xInterval, video_height),gridColor, 2)
+
+                # horizontal grid lines
+                cv2.line(self.cv_img, (0, yInterval),  (video_width, yInterval),  gridColor, 2)
+                cv2.line(self.cv_img, (0, 2*yInterval),(video_width, 2*yInterval),gridColor, 2)
+                cv2.line(self.cv_img, (0, 3*yInterval),(video_width, 3*yInterval),gridColor, 2)
+
             if START_RECORDING:
                 if (i == 0):
                     print("initiate Video")
