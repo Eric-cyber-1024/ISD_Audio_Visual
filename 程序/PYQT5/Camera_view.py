@@ -25,6 +25,10 @@ from Delay_Transmission import *
 from audio_controller import AudioDeviceDialog, AudioController, MyAudioUtilities
 from utility import audio_dev_to_str
 
+# added[for d435]
+import pyrealsense2 as rs
+
+
 # from pywinauto import Desktop
 current_datetime = datetime.now()
 # Format the date and time
@@ -43,7 +47,7 @@ CURRENT_PATH = os.getcwd()
 START_RECORDING = False
 MIC_ON = True
 SOUND_ON = True
-DEBUG = False
+DEBUG = True
 
 
 def resource_path(relative_path):
@@ -61,6 +65,159 @@ def get_camera_list():
     for i, camera in enumerate(QCameraInfo.availableCameras()):
         available_cameras.append(camera.description())
     return available_cameras
+
+# Add[for getting moving averages],Brian,1 April 2024
+class MovingAverageCalculator:
+
+    def __init__(self, nSamples):
+        self.nSamples = nSamples
+        self.window = []
+
+    def calculate_moving_average(self, x):
+        self.window.append(x)
+
+        if len(self.window) > self.nSamples:
+            self.window.pop(0)
+
+        average = sum(self.window) / len(self.window)
+        return average
+
+class d435():
+    '''
+    class to get access to d435 data
+
+    '''
+
+    DEPTH_CAM_WIDTH  = 1280
+    DEPTH_CAM_HEIGHT = 720
+
+    COLOR_CAM_WIDTH  = 1920
+    COLOR_CAM_HEIGHT = 1080
+
+    def __init__(self):
+        # initialize the moving average calculator, window size =16 samples
+        self.ma = MovingAverageCalculator(nSamples=16)
+
+        # Create a pipeline object to manage streaming
+        self.pipeline = rs.pipeline()
+
+        # Create a config object to configure the streams
+        self.config = rs.config()
+
+        # point cloud
+        pc = rs.pointcloud()
+
+        # Enable the depth and color streams.
+        self.config.enable_stream(rs.stream.depth, d435.DEPTH_CAM_WIDTH, d435.DEPTH_CAM_HEIGHT,
+                            rs.format.z16, 30)
+        self.config.enable_stream(rs.stream.color, d435.COLOR_CAM_WIDTH, d435.COLOR_CAM_HEIGHT,
+                            rs.format.bgr8, 30)
+
+        # Start the pipeline streaming
+        profile = self.pipeline.start(self.config)
+
+        # Create an align object to align the depth and color frames
+        # align = rs.align(rs.stream.color)
+
+        # Get the intrinsics of the color camera
+        self.colorProfile = rs.video_stream_profile(profile.get_stream(rs.stream.color))
+        self.colorIntrinsics = self.colorProfile.get_intrinsics()
+
+        # Get the intrinsics of the depth camera
+        self.depthProfile = rs.video_stream_profile(profile.get_stream(rs.stream.depth))
+        self.depthIntrinsics = self.depthProfile.get_intrinsics()
+        print("depth_intrinsics: ", self.depthIntrinsics)
+        w, h = self.depthIntrinsics.width, self.depthIntrinsics.height
+
+        # Get the depth scale of the depth sensor
+        self.depthSensor = profile.get_device().first_depth_sensor()
+        self.depthScale  = self.depthSensor.get_depth_scale()
+        print("Depth Scale is: ", self.depthScale)
+
+        # Get extrinsics
+        self.depthToColorExtrinsics = self.depthProfile.get_extrinsics_to(self.colorProfile)
+        self.colorToDepthExtrinsics = self.colorProfile.get_extrinsics_to(self.depthProfile)
+
+        # for visualization
+        self.depthMin = 0.1  #meter
+        self.depthMax = 15.0  #meter
+
+        # 2D image coordinate
+        self.i=0  # from mouse x
+        self.j=0  # from mouse y
+
+        # previous mouse x, y
+        self.iPrev=self.i
+        self.jPrev=self.j
+
+        self.point = [-1.,-1.,-1]
+
+        colorizer = rs.colorizer()
+        colorizer.set_option(rs.option.visual_preset,1)  # 0=Dynamic, 1=Fixed, 2=Near, 3=Far
+        colorizer.set_option(rs.option.min_distance, self.depthMin)
+        colorizer.set_option(rs.option.max_distance, self.depthMax)
+
+    def getFrame(self,mousex,mousey):
+        global DEBUG
+
+        self.i = mousex
+        self.j = mousey
+
+        # print(self.i,self.j) # for debugging
+
+        # Get a frameset from the pipeline
+        frameset = self.pipeline.wait_for_frames()
+
+        # Align the depth frame to the color frame
+        # aligned_frameset = align.process(frameset)
+
+        # Get the aligned depth and color frames
+        depthFrame = frameset.get_depth_frame()
+        colorFrame = frameset.get_color_frame()
+        # depth_frame = aligned_frameset.get_depth_frame()
+        # color_frame = aligned_frameset.get_color_frame()
+
+        # Validate that both frames are valid
+        if not depthFrame or not colorFrame:
+            return None,None,None
+        
+        
+
+        # Convert the images to numpy arrays
+        depthImage = np.asanyarray(depthFrame.get_data())
+        colorImage = np.asanyarray(colorFrame.get_data())
+
+        
+        # project color pixel to depth pixel
+        depthPixel = rs.rs2_project_color_pixel_to_depth_pixel(
+            depthFrame.get_data(), self.depthScale, self.depthMin,
+            self.depthMax, self.depthIntrinsics, self.colorIntrinsics,
+            self.depthToColorExtrinsics, self.colorToDepthExtrinsics, [self.i, self.j])
+        
+
+        if depthPixel[0]>=0 and depthPixel[1]>=0:
+            #print("depthPixel: ", depthPixel)
+            depth = depthFrame.get_distance(int(depthPixel[0]),int(depthPixel[1]))
+
+            # project depth pixel to 3D point
+            # x is right+, y is down+, z is forward+
+            self.point = rs.rs2_deproject_pixel_to_point(self.depthIntrinsics,[int(depthPixel[0]), int(depthPixel[1])], depth)
+            
+            x = self.point[0]
+            y = self.point[1]
+            z = self.point[2]
+
+            z = self.ma.calculate_moving_average(z)
+
+            self.point[2]=z
+
+            # print(self.i,self.j,depthPixel,self.point)
+
+
+        # update self.iPrev,jPrev
+        self.iPrev = self.i
+        self.jPrev = self.j
+        return colorImage,depthImage,self.point
 
 
 class CameraSelectionDialog(QDialog):
@@ -92,7 +249,7 @@ class CameraSelectionDialog(QDialog):
         self.setLayout(layout)
 
     def get_selected_camera_name(self):
-        return self.camera_combo.currentIndex()
+        return self.camera_combo.currentIndex(), self.camera_combo.currentText()
 
 
 # Combine As output thread
@@ -116,9 +273,39 @@ class VideoThread(QThread):
 
     change_pixmap_signal = pyqtSignal(np.ndarray)
 
-    def __init__(self, arg1):
+    def __init__(self, camera_index, camera_name):
         super().__init__()
-        self.camera_index = arg1
+        self.camera_index = camera_index
+        self.camera_name  = camera_name
+        self.d435 = None
+        self.mousex=0
+        self.mousey=0
+
+        if self.camera_name == 'Intel(R) RealSense(TM) Depth Camera 435i RGB':
+            self.d435 = d435()
+
+    def setMouseXY(self,mousex,mousey):
+        self.mousex = mousex
+        self.mousey = mousey
+
+    def drawDebugText(self,sMsg):
+        fontFace = cv2.FONT_HERSHEY_SIMPLEX
+        fontScale= 1.2
+        background_color = (50, 50, 50)  # dark grey background color
+        textColor = (0, 0, 255)
+        lineType = cv2.LINE_AA
+        
+        # Get the text size
+        (text_width, text_height), _ = cv2.getTextSize(sMsg, fontFace, fontScale, 1)
+
+        text_x = 10
+        text_y = 10+text_height
+
+        # Calculate the background rectangle coordinates
+        background_rect_coords = ((0, 0), (text_width + 10, text_height + 20))  # Adjust padding as needed
+
+        cv2.rectangle(self.cv_img, background_rect_coords[0], background_rect_coords[1], background_color, cv2.FILLED)
+        cv2.putText(self.cv_img, sMsg, (text_x, text_y), fontFace, fontScale, textColor, 2, lineType)
 
     def run(self):
         global START_RECORDING, VIDEO_NAME, OUTPUT_NAME, AUDIO_NAME
@@ -136,11 +323,30 @@ class VideoThread(QThread):
         video_height = int(cap.get(4))
         print("Input ratio : ", video_height, video_width)
         while True:
-            ret, self.cv_img = cap.read()
+            if self.d435 is not None:
+                self.cv_img, self.depthImg,point = self.d435.getFrame(mousex=self.mousex,mousey=self.mousey)
+                if self.cv_img is None:
+                    ret = False
+                else:
+                    ret = True
+
+            else:
+                ret, self.cv_img = cap.read()
             if DEBUG:
                 yInterval = video_height//4
                 xInterval = video_width//4
                 gridColor = (255,100,15)
+
+                  
+                # draw debug texts on top-left corner
+                pointStr = 'x:%.2f,y:%.2f,z:%.2f' % (point[0], point[1], point[2])
+                self.drawDebugText(pointStr)
+
+                # draw dot of the mouse x,y
+                cv2.circle(self.cv_img, (self.mousex,self.mousey), 3, (0, 0, 255), -1)
+                
+
+
 
                 # veritical grid lines
                 cv2.line(self.cv_img, (xInterval, 0),  (xInterval, video_height),  gridColor, 2)
@@ -259,6 +465,10 @@ class App(QWidget):
         self.RECORDING = False
         self.MIC_ON = MIC_ON
         self.SOUND_ON = SOUND_ON
+
+        self.selected_camera_index = -1
+        self.selected_camera = ''
+        self.d435 = None 
 
         # create the label that holds the image
         self.image_label = Create_ImageWindow()
@@ -587,7 +797,8 @@ class App(QWidget):
         camera_dialog = CameraSelectionDialog(get_camera_list())
         # Display the camera_dialog and get the selected camera name
         if camera_dialog.exec_() == QDialog.Accepted:
-            self.selected_camera_index = camera_dialog.get_selected_camera_name()
+            self.selected_camera_index, self.selected_camera = camera_dialog.get_selected_camera_name()
+            
         else:
             print("Exit now...")
             exit()
@@ -677,7 +888,7 @@ class App(QWidget):
         self.slider_mic_vol.valueChanged.connect(self.audio_inCtrl.set_volume)
 
         # create the video capture thread
-        self.video_thread = VideoThread(self.selected_camera_index)
+        self.video_thread = VideoThread(self.selected_camera_index,self.selected_camera)
         self.audio_thread = AudioThread(self.input_device)
         
         # connect its signal to the update_image slot
@@ -709,6 +920,16 @@ class App(QWidget):
     def mousePressEvent(self, event):
         # Handle mouse press events
         mouse_position = event.pos()
+        # try to get 3d coordinate from camera if it's d435
+        # based on mouse_position.x(), y()
+        if self.selected_camera == 'Intel(R) RealSense(TM) Depth Camera 435i RGB':
+            currentX = mouse_position.x()
+            currentY = mouse_position.y()
+
+            self.video_thread.setMouseXY(currentX,currentY)
+
+
+
         self.text_label.appendPlainText(
             f"Clicked on [{mouse_position.x()},{mouse_position.y()}]")
         row = int(mouse_position.y()) // (WINDOW_HEIGHT // 4)
