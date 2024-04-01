@@ -1,7 +1,7 @@
 from ctypes import cast, POINTER
 from comtypes import CLSCTX_ALL
 
-from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume, IMMDeviceEnumerator, EDataFlow, ERole
+from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume, IMMDeviceEnumerator, EDataFlow, ERole, DEVICE_STATE
 from pycaw.constants import CLSID_MMDeviceEnumerator
 from PyQt5.QtWidgets import QApplication, QInputDialog, QMessageBox, QComboBox, QDialog, QDialogButtonBox, QVBoxLayout, QPushButton
 from PyQt5.QtMultimedia import QAudioDeviceInfo, QAudio, QAudioInput, QAudioFormat
@@ -24,9 +24,11 @@ from comtypes import CLSCTX_ALL
 
 class AudioDeviceDialog(QDialog):
 
-    def __init__(self, input_devices, output_devices, parent=None):
+    def __init__(self, input_devices, output_devices,icon, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Select Audio Devices")
+        self.setWindowIcon(icon)
+        self.setFixedWidth(800)
 
         layout = QVBoxLayout(self)
 
@@ -54,6 +56,7 @@ class AudioDeviceDialog(QDialog):
         # Initialize recording variables
         self.recording = False
         self.frames = []
+
 
     def start_recording(self):
         if not self.recording:
@@ -109,6 +112,9 @@ class AudioDeviceDialog(QDialog):
 
 class MyAudioUtilities(AudioUtilities):
     @staticmethod
+    def dev_to_str(device):
+        return device.FriendlyName
+    @staticmethod
     def GetSpeaker(id=None):
         device_enumerator = comtypes.CoCreateInstance(
             CLSID_MMDeviceEnumerator,
@@ -119,39 +125,117 @@ class MyAudioUtilities(AudioUtilities):
         else:
             speakers = device_enumerator.GetDefaultAudioEndpoint(EDataFlow.eRender.value, ERole.eMultimedia.value)
         return speakers
+    
+    @staticmethod
+    def GetDevice(id=None, default=0):
+        device_enumerator = comtypes.CoCreateInstance(
+            CLSID_MMDeviceEnumerator,
+            IMMDeviceEnumerator,
+            comtypes.CLSCTX_INPROC_SERVER)
+        if id is not None:
+            thisDevice = device_enumerator.GetDevice(id)
+        else:
+            if default == 0:
+                # output
+                thisDevice = device_enumerator.GetDefaultAudioEndpoint(EDataFlow.eRender.value, ERole.eMultimedia.value)
+            else:
+                # input
+                thisDevice = device_enumerator.GetDefaultAudioEndpoint(EDataFlow.eCapture.value, ERole.eMultimedia.value)
+        return thisDevice
+    
+    @staticmethod
+    def GetAudioDevices(direction="in", State = DEVICE_STATE.ACTIVE.value):
+        devices = []
+        # for all use EDataFlow.eAll.value
+        if direction == "in":
+            Flow = EDataFlow.eCapture.value     # 1
+        else:
+            Flow = EDataFlow.eRender.value      # 0
+        
+        deviceEnumerator = comtypes.CoCreateInstance(
+            CLSID_MMDeviceEnumerator,
+            IMMDeviceEnumerator,
+            comtypes.CLSCTX_INPROC_SERVER)
+        if deviceEnumerator is None:
+            return devices
+        
+
+        collection = deviceEnumerator.EnumAudioEndpoints(Flow, State)
+        if collection is None:
+            return devices
+
+        count = collection.GetCount()
+        for i in range(count):
+            dev = collection.Item(i)
+            if dev is not None:
+                if not ": None" in str(AudioUtilities.CreateDevice(dev)):
+                    devices.append(AudioUtilities.CreateDevice(dev))
+        return devices
 
 class AudioController:
 
-    def __init__(self, process_name, input_device, output_device):
-        self.process_name = process_name
-        self.volume = self.process_volume() if self.process_volume() else 1.0
+    def __init__(self, deviceId, sType, sMapping):
+        '''
+        
+        deviceId -- device uuid
+        sType    -- 'input' or 'output' 
+        sMapping -- audio level mapping 'linear' or 'log'
+
+        '''
+        self.volume = 0.0
         self.prev_volume = 0.0
-        self.input_device = input_device
-        self.output_device = output_device
-        # self.sample_rate = 44100    # Hz
+        self.deviceId = deviceId
+        self.devType  = sType
+        self.mapping  = sMapping 
         self.sample_rate = 48000
         self.recording = False
         # self.audio_buffer = []      # Buffer to store recorded audio data
         self.audio_record_queue = queue.Queue()
         self.filename = "recorded_audio.wav"
         self.thread = None
-
-        devicelist = MyAudioUtilities.GetAllDevices()
-        for device in devicelist:
-            # simply select the first active speaker device?,Brian,30 Mar 2024
-            if "Speaker" in str(device) and device.state.value==1:
-                mixer_output = device
-                break
         
-        devices = MyAudioUtilities.GetSpeaker(mixer_output.id)
-        interface = devices.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
-        self.selectedSpeaker = cast(interface, POINTER(IAudioEndpointVolume))
-        print("volume.GetMute(): %s" % self.selectedSpeaker.GetMute())
-        print("volume.GetMasterVolumeLevel(): %s" % self.selectedSpeaker.GetMasterVolumeLevel())
-        print("volume.GetVolumeRange(): (%s, %s, %s)" % self.selectedSpeaker.GetVolumeRange())
+        mixer_output = None
+        # devices = MyAudioUtilities.GetAudioDevices(direction='in')
+        # for dev in devices:
+        #     print('ii--',dev,dev.id)
+        # devices = MyAudioUtilities.GetAudioDevices(direction='out')
+        # for dev in devices:
+        #     print('oo--',dev,dev.id)
+        # devicelist = MyAudioUtilities.GetAllDevices()
+        # for device in devicelist:
+        #     if device.state.value==1:
+        #         print(device)
+        #     if sType == 'output':
+        #         # simply select the first active speaker device?,Brian,30 Mar 2024
+        #         if "Speaker" in str(device) and device.state.value==1:
+        #             mixer_output = device
+        #             break
+        #     elif sType == 'input':
+        #         # simply select the first active speaker device?,Brian,30 Mar 2024
+        #         if "Speaker" in str(device) and device.state.value==1:
+        #             mixer_output = device
+        #             break
+        #     else:
+        #         pass
+        
+        
+        #myDevice = MyAudioUtilities.GetSpeaker(mixer_output.id)
+        if sType=='input':
+            myDevice = MyAudioUtilities.GetDevice(self.deviceId,default=1)
+        else:
+            myDevice = MyAudioUtilities.GetDevice(self.deviceId,default=0)
+
+        interface = myDevice.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
+        self.selectedDevice = cast(interface, POINTER(IAudioEndpointVolume))
+        print("volume.GetMute(): %s" % self.selectedDevice.GetMute())
+        print("volume.GetMasterVolumeLevel(): %s" % self.selectedDevice.GetMasterVolumeLevel())
+        print("volume.GetVolumeRange(): (%s, %s, %s)" % self.selectedDevice.GetVolumeRange())
+
+        # get device dB range
+        self.minDB,self.maxDB,_ = self.selectedDevice.GetVolumeRange()
         # print("volume.SetMasterVolumeLevel()")
-        # self.selectedSpeaker.SetMasterVolumeLevel(-5.0, None)
-        # print("volume.GetMasterVolumeLevel(): %s" % self.selectedSpeaker.GetMasterVolumeLevel())
+        # self.selectedDevice.SetMasterVolumeLevel(-5.0, None)
+        # print("volume.GetMasterVolumeLevel(): %s" % self.selectedDevice.GetMasterVolumeLevel())
 
     
         
@@ -165,13 +249,13 @@ class AudioController:
 
     def mute(self):
         self.prev_volume = self.volume
-        self.volume = 0.0
         self.set_volume(0)
         
 
     def unmute(self):
+        # recover prev_volume
         self.volume = self.prev_volume
-        self.set_volume(self.volume)
+        self.set_volume(self.volume*100)
 
     def process_volume(self):
         sessions = AudioUtilities.GetAllSessions()
@@ -191,20 +275,31 @@ class AudioController:
         # currentVolumeDb = volume.GetMasterVolumeLevel()
         # print(currentVolumeDb)
 
+        # print(self.selectedDevice.GetMasterVolumeLevel())
+
         # input value is between 0 and 100
         volumeVal/=100.
+
+        # save volumeVal to self.volume
+        self.volume = volumeVal
 
         # convert volumeVal to dB
         volumeVal = min(1.0,max(0.0,volumeVal)) # make sure that volumeVal is in the correct range
         if volumeVal>0.:
-            volumeDB = 20*np.log10(volumeVal)/0.6
-            if volumeDB<-65.25:
-                volumeDB = -65.25
+            if self.mapping == 'linear':
+                # simply map volumeVal linearly somewhere between self.minDB and self.maxDB
+                volumeDB = self.minDB + volumeVal*(self.maxDB-self.minDB)
+            else:
+                # log scale mapping, why 0.6?!
+                volumeDB = 20*np.log10(volumeVal)/0.6
+            if volumeDB<self.minDB:
+                volumeDB = self.minDB
         else:
-            volumeDB = -65.25
+            volumeDB = self.minDB
 
-        print(volumeVal,volumeDB)
-        self.selectedSpeaker.SetMasterVolumeLevel(volumeDB, None)
+        print(volumeVal,volumeDB) # for debugging
+        self.selectedDevice.SetMasterVolumeLevel(volumeDB, None)
+
 
         # self.volume = min(1.0, max(0.0, decibels/100.0))
         # print("New Volume: ", self.volume)
@@ -280,16 +375,25 @@ class AudioController:
                 with sf.SoundFile(self.filename, mode='w', samplerate=self.sample_rate, channels=2, subtype=None) as file:
                     # default input & output devices
                     with sd.Stream(samplerate=self.sample_rate, channels=2, callback=self.callback):
-                        # while True:
-                            while self.recording:
-                                audio_output = self.audio_record_queue.get()
-                                file.write(audio_output)
-                            # time.sleep(100)
+                        while self.recording:
+                            if self.audio_record_queue.not_empty:
+                                try:
+                                    audio_output = self.audio_record_queue.get(timeout=1)
+                                    file.write(audio_output)
+                                    time.sleep(1)
+                                except self.audio_record_queue.not_empty:
+                                    continue
+                print('exit thread...')
                 
             if not self.thread:
                 print("start thread")
                 self.thread = threading.Thread(target=recording_thread)
                 self.thread.start()
+        else:
+            print('stopping audio record thread...')
+            # stop the thread here
+            
+            
 
     # def start_stop_recording(self, recording):
     #     print("start_stop_recording ", recording)

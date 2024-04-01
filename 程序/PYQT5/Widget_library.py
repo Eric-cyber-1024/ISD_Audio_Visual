@@ -50,8 +50,10 @@ def Create_ImageWindow():
         frame.setStyleSheet("")
         frame.setFont(QFont("Arial",40))
         frame.setFixedSize(WINDOW_WIDTH,WINDOW_HEIGHT)
-        frame.setStyleSheet("background-color:Grey;border-width: 4px;border-radius: 20px;alignment:center")
-        # frame.setStyleSheet("background-color:white;border-width: 4px;alignment:center; border:1px solid rgb(0, 255, 0);")
+        # revised[add border for debugging],Brian, 1 April 2024
+        # frame.setStyleSheet("background-color:Grey;border-width: 4px;border-radius: 2px;alignment:center; border:1px solid rgb(0, 255, 0);") # for debugging
+        frame.setStyleSheet("background-color:Grey;border-width: 4px;border-radius: 2px;alignment:center; border:") 
+        #frame.setStyleSheet("background-color:white;border-width: 4px;alignment:center; border:1px solid rgb(0, 255, 0);")
         frame.setContentsMargins(0,0,0,0)
         return frame
 
