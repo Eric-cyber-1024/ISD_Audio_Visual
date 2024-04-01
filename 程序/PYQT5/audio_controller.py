@@ -297,7 +297,7 @@ class AudioController:
         else:
             volumeDB = self.minDB
 
-        print(volumeVal,volumeDB) # for debugging
+        # print(volumeVal,volumeDB) # for debugging
         self.selectedDevice.SetMasterVolumeLevel(volumeDB, None)
 
 
