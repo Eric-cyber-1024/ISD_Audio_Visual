@@ -684,8 +684,6 @@ class App(QWidget):
         self.video_thread.change_pixmap_signal.connect(self.update_image)
         # start video thread
         self.video_thread.start()
-        # start audio thread
-        self.audio_thread.start()
 
         
         
