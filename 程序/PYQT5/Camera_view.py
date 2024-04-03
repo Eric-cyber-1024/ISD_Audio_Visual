@@ -337,13 +337,13 @@ class VideoThread(QThread):
                 xInterval = video_width//4
                 gridColor = (255,100,15)
 
-                  
-                # draw debug texts on top-left corner
-                pointStr = 'x:%.2f,y:%.2f,z:%.2f' % (point[0], point[1], point[2])
-                self.drawDebugText(pointStr)
+                if self.camera_name == 'Intel(R) RealSense(TM) Depth Camera 435i RGB':
+                    # draw debug texts on top-left corner
+                    pointStr = 'x:%.2f,y:%.2f,z:%.2f' % (point[0], point[1], point[2])
+                    self.drawDebugText(pointStr)
 
-                # draw dot of the mouse x,y
-                cv2.circle(self.cv_img, (self.mousex,self.mousey), 3, (0, 0, 255), -1)
+                    # draw dot of the mouse x,y
+                    cv2.circle(self.cv_img, (self.mousex,self.mousey), 3, (0, 0, 255), -1)
                 
 
 
