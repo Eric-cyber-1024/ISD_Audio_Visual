@@ -281,7 +281,7 @@ class VideoThread(QThread):
         self.mousex=0
         self.mousey=0
 
-        if self.camera_name == 'Intel(R) RealSense(TM) Depth Camera 435i RGB':
+        if self.camera_name.startswith('Intel(R) RealSense(TM) Depth Camera 435') and self.camera_name.endswith('RGB'):
             self.d435 = d435()
 
     def setMouseXY(self,mousex,mousey):
@@ -312,16 +312,18 @@ class VideoThread(QThread):
 
         # capture from web cam
         i = 0
-        print(self.camera_index)
-        cap = cv2.VideoCapture(self.camera_index)
-        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
-        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
+        # print(self.camera_index)
+        # cap = cv2.VideoCapture(self.camera_index)
+        # cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
+        # cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
 
-        print(cap.get(3), cap.get(4))
+        # print(cap.get(3), cap.get(4))
 
-        video_width = int(cap.get(3))
-        video_height = int(cap.get(4))
-        print("Input ratio : ", video_height, video_width)
+        # video_width = int(cap.get(3))
+        # video_height = int(cap.get(4))
+        # print("Input ratio : ", video_height, video_width)
+        video_width  = 1920
+        video_height = 1080
         while True:
             if self.d435 is not None:
                 self.cv_img, self.depthImg,point = self.d435.getFrame(mousex=self.mousex,mousey=self.mousey)
@@ -337,7 +339,7 @@ class VideoThread(QThread):
                 xInterval = video_width//4
                 gridColor = (255,100,15)
 
-                if self.camera_name == 'Intel(R) RealSense(TM) Depth Camera 435i RGB':
+                if self.camera_name.startswith('Intel(R) RealSense(TM) Depth Camera 435') and self.camera_name.endswith('RGB'):
                     # draw debug texts on top-left corner
                     pointStr = 'x:%.2f,y:%.2f,z:%.2f' % (point[0], point[1], point[2])
                     self.drawDebugText(pointStr)
