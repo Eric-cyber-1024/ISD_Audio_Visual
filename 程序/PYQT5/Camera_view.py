@@ -90,9 +90,11 @@ class d435():
 
     DEPTH_CAM_WIDTH  = 1280
     DEPTH_CAM_HEIGHT = 720
+    DEPTH_FPS        = 30
 
     COLOR_CAM_WIDTH  = 1920
     COLOR_CAM_HEIGHT = 1080
+    COLOR_FPS        = 15   # have to reduced to 15 on Surface Pro 9
 
     def __init__(self):
         # initialize the moving average calculator, window size =16 samples
@@ -109,9 +111,9 @@ class d435():
 
         # Enable the depth and color streams.
         self.config.enable_stream(rs.stream.depth, d435.DEPTH_CAM_WIDTH, d435.DEPTH_CAM_HEIGHT,
-                            rs.format.z16, 30)
+                            rs.format.z16, d435.DEPTH_FPS)
         self.config.enable_stream(rs.stream.color, d435.COLOR_CAM_WIDTH, d435.COLOR_CAM_HEIGHT,
-                            rs.format.bgr8, 30)
+                            rs.format.bgr8, d435.COLOR_FPS)
 
         # Start the pipeline streaming
         profile = self.pipeline.start(self.config)
@@ -166,58 +168,63 @@ class d435():
         # print(self.i,self.j) # for debugging
 
         # Get a frameset from the pipeline
-        frameset = self.pipeline.wait_for_frames()
+        try:
+            frameset = self.pipeline.wait_for_frames()
 
-        # Align the depth frame to the color frame
-        # aligned_frameset = align.process(frameset)
+            # Align the depth frame to the color frame
+            # aligned_frameset = align.process(frameset)
 
-        # Get the aligned depth and color frames
-        depthFrame = frameset.get_depth_frame()
-        colorFrame = frameset.get_color_frame()
-        # depth_frame = aligned_frameset.get_depth_frame()
-        # color_frame = aligned_frameset.get_color_frame()
+            # Get the aligned depth and color frames
+            depthFrame = frameset.get_depth_frame()
+            colorFrame = frameset.get_color_frame()
+       
+            # depth_frame = aligned_frameset.get_depth_frame()
+            # color_frame = aligned_frameset.get_color_frame()
 
-        # Validate that both frames are valid
-        if not depthFrame or not colorFrame:
-            return None,None,None
-        
-        
-
-        # Convert the images to numpy arrays
-        depthImage = np.asanyarray(depthFrame.get_data())
-        colorImage = np.asanyarray(colorFrame.get_data())
-
-        
-        # project color pixel to depth pixel
-        depthPixel = rs.rs2_project_color_pixel_to_depth_pixel(
-            depthFrame.get_data(), self.depthScale, self.depthMin,
-            self.depthMax, self.depthIntrinsics, self.colorIntrinsics,
-            self.depthToColorExtrinsics, self.colorToDepthExtrinsics, [self.i, self.j])
-        
-
-        if depthPixel[0]>=0 and depthPixel[1]>=0:
-            #print("depthPixel: ", depthPixel)
-            depth = depthFrame.get_distance(int(depthPixel[0]),int(depthPixel[1]))
-
-            # project depth pixel to 3D point
-            # x is right+, y is down+, z is forward+
-            self.point = rs.rs2_deproject_pixel_to_point(self.depthIntrinsics,[int(depthPixel[0]), int(depthPixel[1])], depth)
+            # Validate that both frames are valid
+            if not depthFrame or not colorFrame:
+                return None,None,None
             
-            x = self.point[0]
-            y = self.point[1]
-            z = self.point[2]
+            
 
-            z = self.ma.calculate_moving_average(z)
+            # Convert the images to numpy arrays
+            depthImage = np.asanyarray(depthFrame.get_data())
+            colorImage = np.asanyarray(colorFrame.get_data())
 
-            self.point[2]=z
+            
+            # project color pixel to depth pixel
+            depthPixel = rs.rs2_project_color_pixel_to_depth_pixel(
+                depthFrame.get_data(), self.depthScale, self.depthMin,
+                self.depthMax, self.depthIntrinsics, self.colorIntrinsics,
+                self.depthToColorExtrinsics, self.colorToDepthExtrinsics, [self.i, self.j])
+            
 
-            # print(self.i,self.j,depthPixel,self.point)
+            if depthPixel[0]>=0 and depthPixel[1]>=0:
+                #print("depthPixel: ", depthPixel)
+                depth = depthFrame.get_distance(int(depthPixel[0]),int(depthPixel[1]))
+
+                # project depth pixel to 3D point
+                # x is right+, y is down+, z is forward+
+                self.point = rs.rs2_deproject_pixel_to_point(self.depthIntrinsics,[int(depthPixel[0]), int(depthPixel[1])], depth)
+                
+                x = self.point[0]
+                y = self.point[1]
+                z = self.point[2]
+
+                z = self.ma.calculate_moving_average(z)
+
+                self.point[2]=z
+
+                # print(self.i,self.j,depthPixel,self.point)
 
 
-        # update self.iPrev,jPrev
-        self.iPrev = self.i
-        self.jPrev = self.j
-        return colorImage,depthImage,self.point
+            # update self.iPrev,jPrev
+            self.iPrev = self.i
+            self.jPrev = self.j
+            return colorImage,depthImage,self.point
+        except:
+            return None,None,None
+
 
 
 class CameraSelectionDialog(QDialog):
@@ -226,7 +233,7 @@ class CameraSelectionDialog(QDialog):
         super().__init__()
 
         self.setWindowTitle("Camera Selection")
-        self.setFixedWidth(550)
+        self.setFixedWidth(800)
         self.setFixedHeight(200)
         icon = QtGui.QIcon()
         icon.addPixmap(
@@ -340,12 +347,13 @@ class VideoThread(QThread):
                 gridColor = (255,100,15)
 
                 if self.camera_name.startswith('Intel(R) RealSense(TM) Depth Camera 435') and self.camera_name.endswith('RGB'):
-                    # draw debug texts on top-left corner
-                    pointStr = 'x:%.2f,y:%.2f,z:%.2f' % (point[0], point[1], point[2])
-                    self.drawDebugText(pointStr)
+                    if point is not None:
+                        # draw debug texts on top-left corner
+                        pointStr = 'x:%.2f,y:%.2f,z:%.2f' % (point[0], point[1], point[2])
+                        self.drawDebugText(pointStr)
 
-                    # draw dot of the mouse x,y
-                    cv2.circle(self.cv_img, (self.mousex,self.mousey), 3, (0, 0, 255), -1)
+                        # draw dot of the mouse x,y
+                        cv2.circle(self.cv_img, (self.mousex,self.mousey), 3, (0, 0, 255), -1)
                 
 
 
@@ -924,7 +932,7 @@ class App(QWidget):
         mouse_position = event.pos()
         # try to get 3d coordinate from camera if it's d435
         # based on mouse_position.x(), y()
-        if self.selected_camera == 'Intel(R) RealSense(TM) Depth Camera 435i RGB':
+        if self.selected_camera.startswith('Intel(R) RealSense(TM) Depth Camera 435') and self.selected_camera.endswith('RGB'):
             currentX = mouse_position.x()
             currentY = mouse_position.y()
 
