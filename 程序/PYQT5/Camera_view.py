@@ -339,14 +339,21 @@ class VideoThread(QThread):
         video_height = 1080
         while True:
             if self.d435 is not None:
-                self.cv_img, self.depthImg,point = self.d435.getFrame(mousex=self.mousex,mousey=self.mousey)
+                x0 = self.mousex
+                y0 = self.mousey
+                if self.d435.COLOR_CAM_HEIGHT==720:
+                    # assuming that self.cv_img is of 720p!!
+                    # scale down mouse x, y by 1.5 times!!
+                    x0 = int(x0*1./1.5)
+                    y0 = int(y0*1./1.5)
+                self.cv_img, self.depthImg,point = self.d435.getFrame(mousex=x0,mousey=y0)
                 if self.cv_img is None:
                     ret = False
                 else:
                     # add scale self.cv_img if it's not 1080p
                     if self.cv_img.shape[0]<1080:
                         self.cv_img = self.rescale_frame(self.cv_img,150)
-                        print(self.cv_img.shape)
+                        # print(self.cv_img.shape)
                     ret = True
 
             else:
