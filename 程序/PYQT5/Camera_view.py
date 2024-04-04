@@ -92,9 +92,9 @@ class d435():
     DEPTH_CAM_HEIGHT = 720
     DEPTH_FPS        = 30
 
-    COLOR_CAM_WIDTH  = 1920
-    COLOR_CAM_HEIGHT = 1080
-    COLOR_FPS        = 15   # have to reduced to 15 on Surface Pro 9
+    COLOR_CAM_WIDTH  = 1280#1920
+    COLOR_CAM_HEIGHT = 720#1080
+    COLOR_FPS        = 30#15   # have to reduced to 15 on Surface Pro 9
 
     def __init__(self):
         # initialize the moving average calculator, window size =16 samples
@@ -314,6 +314,12 @@ class VideoThread(QThread):
         cv2.rectangle(self.cv_img, background_rect_coords[0], background_rect_coords[1], background_color, cv2.FILLED)
         cv2.putText(self.cv_img, sMsg, (text_x, text_y), fontFace, fontScale, textColor, 2, lineType)
 
+    def rescale_frame(self,frame, percent=75):
+        width  = int(frame.shape[1] * percent/ 100)
+        height = int(frame.shape[0] * percent/ 100)
+        dim = (width, height)
+        return cv2.resize(frame, dim, interpolation =cv2.INTER_AREA)
+
     def run(self):
         global START_RECORDING, VIDEO_NAME, OUTPUT_NAME, AUDIO_NAME
 
@@ -337,6 +343,10 @@ class VideoThread(QThread):
                 if self.cv_img is None:
                     ret = False
                 else:
+                    # add scale self.cv_img if it's not 1080p
+                    if self.cv_img.shape[0]<1080:
+                        self.cv_img = self.rescale_frame(self.cv_img,150)
+                        print(self.cv_img.shape)
                     ret = True
 
             else:
