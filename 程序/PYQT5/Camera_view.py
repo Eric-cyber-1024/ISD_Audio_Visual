@@ -392,18 +392,21 @@ class VideoThread(QThread):
 
         # capture from web cam
         i = 0
-        # print(self.camera_index)
-        # cap = cv2.VideoCapture(self.camera_index)
-        # cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
-        # cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
+        if self.d435 is None:
+            print(self.camera_index)
+            cap = cv2.VideoCapture(self.camera_index)
+            cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
+            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
 
-        # print(cap.get(3), cap.get(4))
+            print(cap.get(3), cap.get(4))
 
-        # video_width = int(cap.get(3))
-        # video_height = int(cap.get(4))
-        # print("Input ratio : ", video_height, video_width)
-        video_width  = 1920
-        video_height = 1080
+            video_width = int(cap.get(3))
+            video_height = int(cap.get(4))
+            print("Input ratio : ", video_height, video_width)
+        else:
+            video_width  = 1920
+            video_height = 1080
+
         while True:
             if self.d435 is not None:
                 x0 = self.mousex
@@ -882,7 +885,7 @@ class App(QWidget):
         self.stacked_widget.addWidget(self.main_page_widget)
         self.stacked_widget.addWidget(self.setting_page_widget)
         self.stacked_widget.addWidget(self.test_page_widget)
-        self.stacked_widget.setCurrentIndex(2)
+        self.stacked_widget.setCurrentIndex(0)
 
         self.layout = QVBoxLayout()
         self.layout.addWidget(self.stacked_widget)
