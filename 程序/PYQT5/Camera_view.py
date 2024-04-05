@@ -909,7 +909,7 @@ class App(QWidget):
         self.stacked_widget.addWidget(self.main_page_widget)
         self.stacked_widget.addWidget(self.setting_page_widget)
         self.stacked_widget.addWidget(self.test_page_widget)
-        self.stacked_widget.setCurrentIndex(2)
+        self.stacked_widget.setCurrentIndex(0)
 
         self.layout = QVBoxLayout()
         self.layout.addWidget(self.stacked_widget)
@@ -1259,23 +1259,26 @@ class App(QWidget):
         mouse_position = event.pos()
         # try to get 3d coordinate from camera if it's d435
         # based on mouse_position.x(), y()
-        if self.selected_camera.startswith('Intel(R) RealSense(TM) Depth Camera 435') and self.selected_camera.endswith('RGB'):
-            currentX = mouse_position.x()
-            currentY = mouse_position.y()
 
-            self.video_thread.setMouseXY(currentX,currentY)
+        # revised[make sure that stacked_widget is at index 0],Brian,05 April 2024
+        if self.stacked_widget.currentIndex()==0:
+            if self.selected_camera.startswith('Intel(R) RealSense(TM) Depth Camera 435') and self.selected_camera.endswith('RGB'):
+                currentX = mouse_position.x()
+                currentY = mouse_position.y()
+
+                self.video_thread.setMouseXY(currentX,currentY)
 
 
 
-        self.text_label.appendPlainText(
-            f"Clicked on [{mouse_position.x()},{mouse_position.y()}]")
-        row = int(mouse_position.y()) // (WINDOW_HEIGHT // 4)
-        col = int(mouse_position.x()) // (WINDOW_WIDTH // 4)
-        print(row, col)
-        area = row * 4 + col + 1
-        self.text_label.appendPlainText(f"Area: {area}")
-        # message = create_and_send_packet(HOST,PORT, area.to_bytes( 2, byteorder='big'))
-        Test_delay_function()
+            self.text_label.appendPlainText(
+                f"Clicked on [{mouse_position.x()},{mouse_position.y()}]")
+            row = int(mouse_position.y()) // (WINDOW_HEIGHT // 4)
+            col = int(mouse_position.x()) // (WINDOW_WIDTH // 4)
+            print(row, col)
+            area = row * 4 + col + 1
+            self.text_label.appendPlainText(f"Area: {area}")
+            # message = create_and_send_packet(HOST,PORT, area.to_bytes( 2, byteorder='big'))
+            Test_delay_function()
 
     def record_button_clicked(self):
         global START_RECORDING, VIDEO_NAME, AUDIO_NAME, OUTPUT_NAME
