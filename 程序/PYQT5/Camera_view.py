@@ -24,7 +24,7 @@ from Event import *
 from Enum_library import *
 from Delay_Transmission import *
 from audio_controller import AudioDeviceDialog, AudioController, MyAudioUtilities
-from utility import audio_dev_to_str
+from utility import audio_dev_to_str, networkController
 
 # added[for d435]
 import pyrealsense2 as rs
@@ -68,20 +68,44 @@ def get_camera_list():
     return available_cameras
 
 
+
+class WorkerTryPing(QObject):
+    finished = pyqtSignal(tuple)
+    progress = pyqtSignal(int)
+
+    def setHostIP(self,hostIP):
+        self.hostIP = hostIP
+
+    def run(self):
+        myNetworkController = networkController()
+        #myNetworkController.list_network_adapters()
+        results = myNetworkController.tryPing(self.hostIP)
+        self.finished.emit(results)
+        
+
 class EchoText(QWidget): 
+
+    def test(self):
+        print('hihi')
   
     def __init__(self, *args, **kwargs): 
         super().__init__(*args, **kwargs) 
         self.layout = QGridLayout() 
         self.setLayout(self.layout) 
   
+        points = [(50, 50), (100, 100), (150, 150), (200, 200)]
+
+
+        #self.canvas = CanvasWidget(points, self.test)
+
         self.textbox = QLineEdit() 
         self.echo_label = QLabel('') 
   
         self.textbox.textChanged.connect(self.textbox_text_changed) 
   
-        self.layout.addWidget(self.textbox, 0, 0) 
-        self.layout.addWidget(self.echo_label, 1, 0) 
+        self.layout.addWidget(self.textbox,0,0,1,1) 
+        self.layout.addWidget(self.echo_label,1,0,1,1) 
+        #self.layout.addWidget(self.canvas,1,0)
   
     def textbox_text_changed(self): 
         self.echo_label.setText(self.textbox.text()) 
@@ -885,7 +909,7 @@ class App(QWidget):
         self.stacked_widget.addWidget(self.main_page_widget)
         self.stacked_widget.addWidget(self.setting_page_widget)
         self.stacked_widget.addWidget(self.test_page_widget)
-        self.stacked_widget.setCurrentIndex(0)
+        self.stacked_widget.setCurrentIndex(2)
 
         self.layout = QVBoxLayout()
         self.layout.addWidget(self.stacked_widget)
@@ -1084,10 +1108,10 @@ class App(QWidget):
         layout = QGridLayout()
         layout.addWidget(QLabel('Test Page'),0,0,1,1)
 
-        #points = [(50, 50), (100, 100), (150, 150), (200, 200)]
+        points = [(50, 50), (100, 100), (150, 150), (200, 200)]
         #point_selection = PointSelectionGUI(points,self.send_message)
-        # echoText = EchoText() 
-        # layout.addWidget(echoText,16,5,1,1)
+        echoText = EchoText() 
+        layout.addWidget(echoText,16,5,1,1)
         
         # Create and add QLabel and QLineEdit widgets dynamically
         for name, properties in name_dict.items():
@@ -1134,9 +1158,13 @@ class App(QWidget):
         btnExitTestPage = QPushButton('Exit Test Page')
         btnExitTestPage.clicked.connect(self.exitTestPage)
 
+
+        self.lbl_msg = QLabel('')
+
         layout.addWidget(btnSendPacket,14,4,1,1)
         layout.addWidget(btnTestPing,14,5,1,1)
         layout.addWidget(btnExitTestPage,14,6,1,1)
+        layout.addWidget(self.lbl_msg,15,0,1,3)
         
         # Set border color and width for the inner layout
         frame = QFrame()
@@ -1171,13 +1199,34 @@ class App(QWidget):
         print(values)
         return values
     
+
+    def updatePingResults(self,results):
+        if results[0]:
+            self.lbl_msg.setText('host is alive')
+        else:
+            self.lbl_msg.setText('host not available!!')
+
+        self.thread.quit()
+        self.thread.wait()
+    
     def testPingHost(self):
         '''
         try to ping host to see if it's alive
 
         '''
-        print('hihi')
-        pass
+        self.lbl_msg.setText('trying to ping host...')
+        textboxes = self.test_page_widget.findChildren(QLineEdit)
+        hostIPs = [textbox.text() for textbox in textboxes if textbox.objectName()=='tbx_hostIP']
+        if len(hostIPs)>0:
+            self.thread = QThread()
+            self.worker = WorkerTryPing()
+            self.worker.setHostIP(hostIPs[0])
+            self.worker.moveToThread(self.thread)
+            self.thread.started.connect(self.worker.run)
+            self.worker.finished.connect(self.updatePingResults)
+            self.thread.start()
+        
+
 
     def exitTestPage(self):
         self.stacked_widget.setCurrentIndex(0)
