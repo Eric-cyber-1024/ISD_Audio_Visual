@@ -1,9 +1,10 @@
 from pywinauto import Desktop  # add this to handle UI scaling issue
-from PyQt5 import QtGui
+from PyQt5 import QtGui, uic
 from PyQt5.QtWidgets import *
 from PyQt5.QtCore import *
 from PyQt5.QtGui import *
 from PyQt5.QtMultimedia import *
+
 
 import sys
 import cv2
@@ -66,6 +67,72 @@ def get_camera_list():
         available_cameras.append(camera.description())
     return available_cameras
 
+
+class EchoText(QWidget): 
+  
+    def __init__(self, *args, **kwargs): 
+        super().__init__(*args, **kwargs) 
+        self.layout = QGridLayout() 
+        self.setLayout(self.layout) 
+  
+        self.textbox = QLineEdit() 
+        self.echo_label = QLabel('') 
+  
+        self.textbox.textChanged.connect(self.textbox_text_changed) 
+  
+        self.layout.addWidget(self.textbox, 0, 0) 
+        self.layout.addWidget(self.echo_label, 1, 0) 
+  
+    def textbox_text_changed(self): 
+        self.echo_label.setText(self.textbox.text()) 
+
+
+class PointSelectionGUI(QWidget):
+    def __init__(self, points, callback):
+        super().__init__()
+
+        self.canvas = CanvasWidget(points, callback)
+
+        layout = QVBoxLayout()
+        layout.addWidget(self.canvas)
+
+        self.setLayout(layout)
+        self.setWindowTitle("Point Selection GUI")
+
+class CanvasWidget(QWidget):
+    def __init__(self, points, callback):
+        super().__init__()
+
+        self.points = points
+        self.callback = callback
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        painter.setPen(Qt.black)
+
+        for i, (x, y) in enumerate(self.points):
+            painter.setBrush(Qt.red)
+            painter.drawEllipse(x - 5, y - 5, 10, 10)
+
+            if i < 10:
+                painter.setPen(Qt.black)
+                painter.drawText(x, y - 10, f"M0{i}")
+            else:
+                painter.setPen(Qt.black)
+                painter.drawText(x, y - 10, f"M{i}")
+
+        painter.end()
+
+    def mousePressEvent(self, event):
+        x, y = event.x(), event.y()
+
+        for i, (px, py) in enumerate(self.points):
+            if abs(px - x) <= 5 and abs(py - y) <= 5:
+                self.callback(str(i))
+                break
+
+
 # Add[for getting moving averages],Brian,1 April 2024
 class MovingAverageCalculator:
 
@@ -92,9 +159,9 @@ class d435():
     DEPTH_CAM_HEIGHT = 720
     DEPTH_FPS        = 30
 
-    COLOR_CAM_WIDTH  = 1280#1920
-    COLOR_CAM_HEIGHT = 720#1080
-    COLOR_FPS        = 30#15   # have to reduced to 15 on Surface Pro 9
+    COLOR_CAM_WIDTH  = 1920
+    COLOR_CAM_HEIGHT = 1080
+    COLOR_FPS        = 6#30#15   # have to reduced to 15 on Surface Pro 9
 
     def __init__(self):
         # initialize the moving average calculator, window size =16 samples
@@ -791,14 +858,22 @@ class App(QWidget):
         self.setting_page.addWidget(self.back_button, 4, 4, 1, 1,
                                     Qt.AlignHCenter)
 
+
         self.setting_page_widget = QWidget()
         self.setting_page_widget.setLayout(self.setting_page)
         self.setting_page_widget.setFixedSize(WINDOW_WIDTH, WINDOW_HEIGHT)
+        # add[change background to gray],Brian,05 April 2024
+        self.setting_page_widget.setStyleSheet("background-color:gray")
         
 
         self.main_page_widget = QWidget()
         self.main_page_widget.setLayout(self.main_page)
         self.main_page_widget.setFixedSize(WINDOW_WIDTH, WINDOW_HEIGHT)
+
+
+        self.test_page_widget = self.setupTestPageUI()
+        self.test_page_widget.setFixedSize(WINDOW_WIDTH,WINDOW_HEIGHT)
+        
         
 
         self.stacked_widget = QStackedWidget()
@@ -806,6 +881,8 @@ class App(QWidget):
         self.stacked_widget.setContentsMargins(0, 0, 0, 0)
         self.stacked_widget.addWidget(self.main_page_widget)
         self.stacked_widget.addWidget(self.setting_page_widget)
+        self.stacked_widget.addWidget(self.test_page_widget)
+        self.stacked_widget.setCurrentIndex(2)
 
         self.layout = QVBoxLayout()
         self.layout.addWidget(self.stacked_widget)
@@ -923,7 +1000,188 @@ class App(QWidget):
         # start video thread
         self.video_thread.start()
 
+    def load_ui_file(self, file_path):
+        # Create a QFile object for the UI file
+        self.wTestPage = uic.loadUi(file_path, self)
+        print(self.wTestPage)
+        exit()
+        return self.wTestPage
         
+        
+    def send_message(self, message):
+        pass
+        
+    def setupTestPageUI(self):
+        '''
+        to create ui for the test page
+
+        retuns a QWidget
+        '''
+
+        modes = [
+            '0: normal', 
+            '1: cal',
+            '2: cal verify',
+            '3: switch mic/output selection',
+            '4: turn on BM',
+            '5: turn off BM',
+            '6: turn on MC',
+            '7: turn off MC',
+            '8: BLjudge H_CAFFs readback',
+            '9: WMcal Wm[] readback',
+            
+        ]
+        
+        micNames=["M{:02d}".format(i) for i in range(1, 33)]
+
+        setTests=[
+            '0: PS_enMC-0,PS_enBM-0,FFTgain: 2, MIC8-data_bm_n, MIC9-ifftout',
+            '4: PS_enMC-0,PS_enBM-0,FFTgain: 5, MIC8-data_bm_n, MIC9-ifftout',
+            '8: PS_enMC-0,PS_enBM-0,FFTgain: 5, MIC8-data_bm_n, MIC9-ifftout, delta_t=0',
+            '9: PS_enMC-0,PS_enBM-0,FFTgain: 5, MIC8-data_bm_n, MIC9-data_fbf_d_MC',
+            '10: PS_enMC-0,PS_enBM-0,FFTgain: 5, MIC8-data_ym_n, MIC9-data_fbf_d_MC, delta_t=0',
+            '11: PS_enMC-0,PS_enBM-0,FFTgain: 5, MIC8-data_bm_n_dly, MIC9-data_bm_0',
+            '12: PS_enMC-0,PS_enBM-0,FFTgain: 5, MIC8-data_bm_n_dly, MIC9-data_bm_0, delta_t=0',
+            '13: PS_enMC-0,PS_enBM-0,FFTgain: 5, MIC8-data_bm_0, MIC9-data_ym_0',
+            '14: PS_enMC-0,PS_enBM-0,FFTgain: 5, MIC8-data_ym_judge, MIC9-data_bm_0'
+        ]
+
+        name_dict = {
+            'lbl_hostIP': {'text':'Host IP:','row':1,'column':0,'row_span':1,'col_span':1},
+            'tbx_hostIP': {'text':'192.168.1.40','row':1,'column':1,'row_span':1,'col_span':1},
+            'lbl_hostPort':{'text':'Host Port','row':2,'column':0,'row_span':1,'col_span':1},
+            'tbx_hostPort':{'text':'5004','row':2,'column':1,'row_span':1,'col_span':1},
+            'lbl_mode': {'text':'mode','row':3,'column':0,'row_span':1,'col_span':1},
+            'cbx_mode': {'items':modes,'row':3,'column':1,'row_span':1,'col_span':1},
+            'lbl_micNum': {'text':'mic#','row':4,'column':0,'row_span':1,'col_span':1},
+            'cbx_micNum': {'items':micNames,'row':4,'column':1,'row_span':1,'col_span':1},
+            'lbl_micGain': {'text':'mic gain','row':5,'column':0,'row_span':1,'col_span':1},
+            'tbx_micGain': {'text':'30','row':5,'column':1,'row_span':1,'col_span':1},
+            'lbl_micDisable':{'text':'mic disable','row':6,'column':0,'row_span':1,'col_span':1},
+            'tbx_micDisable':{'text':'30','row':6,'column':1,'row_span':1,'col_span':1},
+            'lbl_setTest': {'text':'set Text','row':7,'column':0,'row_span':1,'col_span':1},
+            'cbx_setText': {'items':setTests,'row':7,'column':1,'row_span':1,'col_span':1},
+            'lbl_denOutSel':{'text':'den_out_sel','row':8,'column':0,'row_span':1,'col_span':1},
+            'tbx_denOutSel':{'text':'8','row':8,'column':1,'row_span':1,'col_span':1},
+            'lbl_mcBetaSel':{'text':'mc_beta_sel','row':9,'column':0,'row_span':1,'col_span':1},
+            'tbx_mcBetaSel':{'text':'4','row':9,'column':1,'row_span':1,'col_span':1},
+            'lbl_mcKSel':{'text':'mc_K_sel','row':10,'column':0,'row_span':1,'col_span':1},
+            'tbx_mcKSel':{'text':'0','row':10,'column':1,'row_span':1,'col_span':1},
+            'lbl_en_BM_MC_ctrl':{'text':'en_BM_MC_ctrl','row':11,'column':0,'row_span':1,'col_span':1},
+            'tbx_en_BM_MC_ctrl':{'text':'0','row':11,'column':1,'row_span':1,'col_span':1},
+            'lbl_targetPos':{'text':'target pos','row':12,'column':0,'row_span':1,'col_span':1},
+            'tbx_targetPos':{'text':'0,0,0','row':12,'column':1,'row_span':1,'col_span':1},
+            'lbl_xyzOffsets':{'text':'x,y,z Offsets','row':13,'column':0,'row_span':1,'col_span':1},
+            'tbx_xyzOffsets':{'text':'0,0,0','row':13,'column':1,'row_span':1,'col_span':1},
+        }
+
+        widget = QWidget()
+        outer_layout = QVBoxLayout()
+
+        layout = QGridLayout()
+        layout.addWidget(QLabel('Test Page'),0,0,1,1)
+
+        #points = [(50, 50), (100, 100), (150, 150), (200, 200)]
+        #point_selection = PointSelectionGUI(points,self.send_message)
+        # echoText = EchoText() 
+        # layout.addWidget(echoText,16,5,1,1)
+        
+        # Create and add QLabel and QLineEdit widgets dynamically
+        for name, properties in name_dict.items():
+            if name.startswith("lbl_"):
+                label = QLabel()
+                label.setText(properties["text"])
+                label.setObjectName(name)
+                layout.addWidget(
+                    label,
+                    properties["row"],
+                    properties["column"],
+                    properties["row_span"],
+                    properties["col_span"],
+                )
+            elif name.startswith("tbx_"):
+                line_edit = QLineEdit()
+                line_edit.setText(properties['text'])
+                line_edit.setObjectName(name)
+                layout.addWidget(
+                    line_edit,
+                    properties["row"],
+                    properties["column"],
+                    properties["row_span"],
+                    properties["col_span"],
+                )
+            elif name.startswith("cbx_"):
+                combo_box = QComboBox()
+                combo_box.setObjectName(name)
+                combo_box.addItems(properties["items"])  # Add items to the combobox
+                layout.addWidget(
+                    combo_box,
+                    properties["row"],
+                    properties["column"],
+                    properties["row_span"],
+                    properties["col_span"],
+                )
+
+        btnSendPacket = QPushButton('Send Packet')
+        btnSendPacket.clicked.connect(self.trySendPacket)
+
+        btnTestPing = QPushButton('Test Ping Host')
+        btnTestPing.clicked.connect(self.testPingHost)
+
+        btnExitTestPage = QPushButton('Exit Test Page')
+        btnExitTestPage.clicked.connect(self.exitTestPage)
+
+        layout.addWidget(btnSendPacket,14,4,1,1)
+        layout.addWidget(btnTestPing,14,5,1,1)
+        layout.addWidget(btnExitTestPage,14,6,1,1)
+        
+        # Set border color and width for the inner layout
+        frame = QFrame()
+        frame.setObjectName("innerFrame")
+        frame.setFrameStyle(QFrame.Panel | QFrame.Plain)
+        #frame.setStyleSheet("#innerFrame { border: 1px solid blue; }")
+        frame.setLineWidth(1)
+        frame.setMidLineWidth(1)
+        frame.setLayout(layout)
+        frame.setMinimumSize(400,300)
+        frame.setMaximumSize(1000,600)
+
+
+
+        outer_layout.addWidget(frame,alignment=Qt.AlignTop)
+        widget.setLayout(outer_layout)
+
+        
+
+
+        return widget
+
+
+
+    def trySendPacket(self):
+        '''
+        try to send Packet to host according to parameters on UI
+
+        '''
+        textboxes = self.test_page_widget.findChildren(QLineEdit)
+        values = {textbox.objectName(): textbox.text() for textbox in textboxes}
+        print(values)
+        return values
+    
+    def testPingHost(self):
+        '''
+        try to ping host to see if it's alive
+
+        '''
+        print('hihi')
+        pass
+
+    def exitTestPage(self):
+        self.stacked_widget.setCurrentIndex(0)
+
+
+
+
         
         
     @pyqtSlot(np.ndarray)
