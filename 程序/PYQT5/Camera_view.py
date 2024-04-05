@@ -67,7 +67,37 @@ def get_camera_list():
         available_cameras.append(camera.description())
     return available_cameras
 
+class ClickableLabel(QLabel):
+    '''
+    a clickable QLabel, if clicked 7 times within self.timeoutVal, a signal will be emitted
+    '''
+    clicked = pyqtSignal()
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.counter = 0
+        self.timeoutVal=2000 # timeout in 2 seconds
+        self.timer = QTimer()
+        self.timer.setSingleShot(True)
+        self.timer.timeout.connect(self.handleTimeout)
 
+    def mousePressEvent(self, event):
+        # print(self.counter)
+        if self.counter==0:
+            # start a timer
+            self.timer.start(self.timeoutVal) 
+
+        self.counter += 1
+        #print(self.counter)
+        if self.counter == 7:
+            self.counter=0
+            self.timer.stop()
+            self.clicked.emit()
+                
+
+    def handleTimeout(self):
+        #print('timeout')
+        self.counter=0
+    
 
 class WorkerTryPing(QObject):
     finished = pyqtSignal(tuple)
@@ -590,6 +620,7 @@ class App(QWidget):
         self.selected_camera_index = -1
         self.selected_camera = ''
         self.d435 = None 
+        self.adminRole=False # Add[if adminRole is True, will can show more features],Brian,05 April 2024
 
         # create the label that holds the image
         self.image_label = Create_ImageWindow()
@@ -829,11 +860,14 @@ class App(QWidget):
             self.main_page.addWidget(self.main_page_button_widget, 1, 0, 1, 2,
                                      Qt.AlignCenter)
 
-        #Setting up Setting page for LPF and Gain and Voulme
-        self.gain_label = QLabel("Mic Array Channel Gain  :")
+        # revised[using Clickable Label instead],Brian, 05 April 2024
+        # Setting up Setting page for LPF and Gain and Voulme
+        # self.gain_label = QLabel("Mic Array Channel Gain  :")
+        self.gain_label = ClickableLabel("Mic Array Channel Gain  :")
         # button_font = QFont("Arial",40)
         # button_font.setPixelSize(40)
         self.gain_label.setFont(BUTTON_FONT)
+        self.gain_label.clicked.connect(self.showPasswordDialog)
 
         self.volume_label = QLabel("Mic Array Digital Volume :")
         self.volume_label.setFont(BUTTON_FONT)
@@ -884,6 +918,10 @@ class App(QWidget):
                                     Qt.AlignHCenter)
         self.setting_page.addWidget(self.back_button, 4, 4, 1, 1,
                                     Qt.AlignHCenter)
+        
+        self.adminFrame = self.setupAdminFrame()
+        self.setting_page.addWidget(self.adminFrame,5,0,1,1)
+        
 
 
         self.setting_page_widget = QWidget()
@@ -1027,16 +1065,59 @@ class App(QWidget):
         # start video thread
         self.video_thread.start()
 
-    def load_ui_file(self, file_path):
-        # Create a QFile object for the UI file
-        self.wTestPage = uic.loadUi(file_path, self)
-        print(self.wTestPage)
-        exit()
-        return self.wTestPage
+    def showAdminWidgets(self):
+        self.adminFrame.show()
+
+    def showPasswordDialog(self):
+        '''
+        pop up password dialog to try to enter admin mode
+        '''
+
+        password, ok = QInputDialog.getText(self,"Enter Password", "Password:", QLineEdit.Password)
+        
+        if ok and password == "1729":
+            self.adminRole=True
+            self.showAdminWidgets()
+            QMessageBox.information(self, "Admin Mode", "Admin Mode Entered")
+            
+            # Perform actions for test mode
+        else:
+            self.adminRole=False
+            QMessageBox.warning(self, "Incorrect Password", "The password is incorrect.")
+
+
         
         
     def send_message(self, message):
         pass
+
+
+    def goTestMode(self):
+        '''
+        go to stacked widget index 2
+        '''
+        self.stacked_widget.setCurrentIndex(2)
+
+    def setupAdminFrame(self):
+        '''
+        create Frame for Admin Mode Features
+
+        '''
+        adminLayout= QGridLayout()
+        adminLayout.addWidget(QLabel('Admin Mode:'),1,0,1,1)
+        
+        btnTestMode= QPushButton('Go to Test mode Page')
+        btnTestMode.clicked.connect(self.goTestMode)
+        adminLayout.addWidget(btnTestMode)
+
+        adminFrame = QFrame()
+        adminFrame.setFrameStyle(QFrame.Panel | QFrame.Plain)
+        adminFrame.setStyleSheet("#innerFrame { border: 1px solid blue; }")
+        adminFrame.setMaximumSize(300,300)
+        adminFrame.setLayout(adminLayout)
+        adminFrame.hide()
+        return adminFrame
+        
         
     def setupTestPageUI(self):
         '''
@@ -1230,6 +1311,10 @@ class App(QWidget):
 
     def exitTestPage(self):
         self.stacked_widget.setCurrentIndex(0)
+        # hide adminFrame
+        self.adminFrame.hide()
+        # reset adminRole 
+        self.adminRole=False
 
 
 
