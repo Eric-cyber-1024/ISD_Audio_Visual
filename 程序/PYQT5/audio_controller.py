@@ -247,15 +247,36 @@ class AudioController:
             interface = session.SimpleAudioVolume
             print("session: ", session, "\tinterface: ", interface)
 
+    def is_muted(self):
+        if self.selectedDevice:
+            return self.selectedDevice.GetMute()
+        else:
+            return False
+
     def mute(self):
         self.prev_volume = self.volume
-        self.set_volume(0)
+        # self.set_volume(0)
+        self.selectedDevice.SetMute(1, None)
+        # sessions = AudioUtilities.GetAllSessions()
+        # for session in sessions:
+        #     interface = session.SimpleAudioVolume
+        #     if session.Process and session.Process.name() == self.process_name:
+        #         interface.SetMute(1, None)
+        #         print(self.process_name, "has been muted.")  # debug
         
 
     def unmute(self):
+        
         # recover prev_volume
         self.volume = self.prev_volume
-        self.set_volume(self.volume*100)
+        # self.set_volume(self.volume*100)
+        self.selectedDevice.SetMute(0, None)
+        # sessions = AudioUtilities.GetAllSessions()
+        # for session in sessions:
+        #     interface = session.SimpleAudioVolume
+        #     if session.Process and session.Process.name() == self.process_name:
+        #         interface.SetMute(0, None)
+        #         print(self.process_name, "has been unmuted.")  # debug
 
     def process_volume(self):
         sessions = AudioUtilities.GetAllSessions()
@@ -350,7 +371,7 @@ class AudioController:
             print(status)
         if self.recording:
             self.audio_record_queue.put(indata.copy())
-        outdata[:] = indata[:] * self.volume
+        # outdata[:] = indata[:] * self.volume
 
     # def start_stop_recording(self, recording):
     #     self.recording = recording

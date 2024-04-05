@@ -8,6 +8,7 @@ from moviepy.video.io.VideoFileClip import VideoFileClip
 from moviepy.audio.io.AudioFileClip import AudioFileClip
 import os 
 from Enum_library import  *
+
 # Create neccessary Directory
 def check_folder_existence(folder_path):
     if os.path.exists(folder_path) and os.path.isdir(folder_path):
@@ -27,26 +28,28 @@ def start_recording(self):
     self.text_label.appendPlainText('Status: Recording')
     self.audio_thread.start()
 
-def combine_video_audio(video_path, audio_path, output_path):
+
+def combine_video_audio(self):
     global OUTPUT_NAME,AUDIO_NAME,VIDEO_NAME
     ffmpeg_options = "-analyzeduration 100M -probesize 100M"
     # Load the video clip
-    video_clip = VideoFileClip(video_path, audio=False)
+    video_clip = VideoFileClip(self.video_path, audio=False)
     # Cut off the first 3 second to align with the audio ( might need adjustment)
     video_clip = video_clip.subclip(3)
     # Load the audio clip
-    audio_clip = AudioFileClip(audio_path)
+    audio_clip = AudioFileClip(self.audio_path)
 
     # Set the audio of the video to the loaded audio clip
     video_clip = video_clip.set_audio(audio_clip)
+    # audio_clip.close()
+
     # Write the combined clip to a new file
-    video_clip.write_videofile(output_path, codec="libx264", audio_codec="aac", temp_audiofile='temp.m4a', remove_temp=False)
+    video_clip.write_videofile(self.output_path, codec="libx264", audio_codec="aac", temp_audiofile='temp.m4a', remove_temp=False, logger=self.logger)
+    # video_clip.write_videofile(output_path, codec="libx264", audio_codec="aac", remove_temp=False)
+    # video_clip.close()
 
 def switchPage(self,PAGE):         
         self.stacked_widget.setCurrentIndex(PAGE)
-#       self.stackedWidget.setCurrentIndex(PAGE)
-
-
 
 def ToggleSelection(self,choice):
         self.LPF_Select = choice

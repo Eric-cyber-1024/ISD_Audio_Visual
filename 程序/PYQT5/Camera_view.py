@@ -1,10 +1,9 @@
 from pywinauto import Desktop  # add this to handle UI scaling issue
-from PyQt5 import QtGui, uic
+from PyQt5 import QtGui
 from PyQt5.QtWidgets import *
 from PyQt5.QtCore import *
 from PyQt5.QtGui import *
 from PyQt5.QtMultimedia import *
-
 
 import sys
 import cv2
@@ -29,6 +28,7 @@ from utility import audio_dev_to_str, networkController
 # added[for d435]
 import pyrealsense2 as rs
 
+from progress_bar import CustomProgressBarLogger
 
 # from pywinauto import Desktop
 current_datetime = datetime.now()
@@ -213,9 +213,9 @@ class d435():
     DEPTH_CAM_HEIGHT = 720
     DEPTH_FPS        = 30
 
-    COLOR_CAM_WIDTH  = 1920
-    COLOR_CAM_HEIGHT = 1080
-    COLOR_FPS        = 6#30#15   # have to reduced to 15 on Surface Pro 9
+    COLOR_CAM_WIDTH  = 1280#1920
+    COLOR_CAM_HEIGHT = 720#1080
+    COLOR_FPS        = 30#15   # have to reduced to 15 on Surface Pro 9
 
     def __init__(self):
         # initialize the moving average calculator, window size =16 samples
@@ -382,18 +382,21 @@ class CameraSelectionDialog(QDialog):
 
 # Combine As output thread
 class VideoAudioThread(QThread):
+    start_writing = pyqtSignal()
     finished = pyqtSignal()
 
-    def __init__(self, video_path, audio_path, output_path):
+    def __init__(self, video_path, audio_path, output_path, logger):
         super().__init__()
         self.video_path = video_path
         self.audio_path = audio_path
         self.output_path = output_path
+        self.logger = logger
 
     def run(self):
         print("Combine Video")
         time.sleep(1)
-        combine_video_audio(self.video_path, self.audio_path, self.output_path)
+        self.start_writing.emit()
+        combine_video_audio(self)
 
 
 # Video Thread
@@ -628,7 +631,7 @@ class App(QWidget):
         # self.image_label.setMaximumSize(QSize(1600, 900))
         # self.image_label.setFixedSize(QSize(FRAME_WIDTH, FRAME_HEIGHT))
 
-        self.exit_button = Create_Button("Exit", lambda: exit(), BUTTON_STYLE)
+        self.exit_button = Create_Button("Exit", lambda: exit(), BUTTON_STYLE_TEXT)
         # self.setting_button = Create_Button("Setting",lambda:switchPage(self,APP_PAGE.SETTING.value),BUTTON_STYLE)
         # self.record_button = Create_Button("Record",self.record_button_clicked,BUTTON_STYLE_RED)
 
@@ -892,8 +895,8 @@ class App(QWidget):
             lambda: ToggleSelection(self, Frequency_Selection.LPF_FULL.value))
         self.back_button = Create_Button(
             "Back", lambda: switchPage(self, APP_PAGE.MAIN.value),
-            BUTTON_STYLE)
-        self.ApplyButton = Create_Button("Apply", lambda: exit(), BUTTON_STYLE)
+            BUTTON_STYLE_TEXT)
+        self.ApplyButton = Create_Button("Apply", lambda: exit(), BUTTON_STYLE_TEXT)
 
         self.setting_page = QGridLayout()
         self.setting_page.addWidget(self.gain_label, 1, 0, 1, 1)
@@ -1065,6 +1068,8 @@ class App(QWidget):
         # start video thread
         self.video_thread.start()
 
+        self.logger = CustomProgressBarLogger()
+        
     def showAdminWidgets(self):
         self.adminFrame.show()
 
@@ -1386,7 +1391,9 @@ class App(QWidget):
             #self.audio_outCtrl.start_stop_recording(self.RECORDING)
             self.audio_thread.requestInterruption()
             print("OUTPUT_NAME: ", OUTPUT_NAME)
-            self.combine_thread = VideoAudioThread(VIDEO_NAME,AUDIO_NAME,OUTPUT_NAME)
+            self.combine_thread = VideoAudioThread(VIDEO_NAME,AUDIO_NAME,OUTPUT_NAME, self.logger)
+            self.combine_thread.start_writing.connect(self.show_progress_dialog)
+            self.logger.signal_emitter.percentage_changed_signal.connect(self.update_progress_dialog)
             self.combine_thread.start()
 
     def mic_on_off_button_clicked(self):
@@ -1425,7 +1432,19 @@ class App(QWidget):
         message_box.addButton(QMessageBox.Ok)
         message_box.exec_()
 
+    def show_progress_dialog(self):
+        self.video_progress_dialog = QProgressDialog(self)
+        self.video_progress_dialog.setWindowTitle("Video")  
+        self.video_progress_dialog.setLabelText("Generating video " + OUTPUT_NAME)
+        self.video_progress_dialog.setCancelButton(None)
+        self.video_progress_dialog.setMinimumDuration(5)
+        self.video_progress_dialog.setWindowModality(Qt.WindowModal)
+        self.video_progress_dialog.setRange(0,100)
+        # self.video_progress_dialog.setGeometry(0, 0, 600, 100)
 
+    @pyqtSlot(float)
+    def update_progress_dialog(self, percentage):
+        self.video_progress_dialog.setValue(round(percentage))
 
 
 if __name__ == "__main__":
