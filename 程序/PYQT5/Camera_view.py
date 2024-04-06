@@ -48,8 +48,8 @@ CURRENT_PATH = os.getcwd()
 START_RECORDING = False
 MIC_ON = True
 SOUND_ON = True
-DEBUG = True
-
+DEBUG = False
+sVersion='0.1.3'
 
 def resource_path(relative_path):
     try:
@@ -604,7 +604,7 @@ class App(QWidget):
             self.screen_number = 1
         else:
             self.screen_number = 0
-        self.setWindowTitle("ISD UI Mockup — v0.1.2")
+        self.setWindowTitle("ISD UI Mockup — v%s" %(sVersion))
         #self.setStyleSheet("background-color:gray")
         
         icon = QtGui.QIcon()
@@ -1096,6 +1096,21 @@ class App(QWidget):
     def send_message(self, message):
         pass
 
+    def toggleDebugMode(self):
+        global DEBUG
+        if DEBUG:
+            DEBUG=False
+        else:
+            DEBUG=True
+
+    def exitAdminMode(self):
+        '''
+        reset adminRole DEUGB and hide adminFrame
+        '''
+        global DEBUG
+        self.adminRole=False
+        DEBUG=False
+        self.adminFrame.hide()
 
     def goTestMode(self):
         '''
@@ -1113,7 +1128,16 @@ class App(QWidget):
         
         btnTestMode= QPushButton('Go to Test mode Page')
         btnTestMode.clicked.connect(self.goTestMode)
+
+        btnToggleDebug= QPushButton('Toggle Debug Mode')
+        btnToggleDebug.clicked.connect(self.toggleDebugMode)
+
+        btnExitAdminMode= QPushButton('Exit Admin Mode')
+        btnExitAdminMode.clicked.connect(self.exitAdminMode)
+
         adminLayout.addWidget(btnTestMode)
+        adminLayout.addWidget(btnToggleDebug)
+        adminLayout.addWidget(btnExitAdminMode)
 
         adminFrame = QFrame()
         adminFrame.setFrameStyle(QFrame.Panel | QFrame.Plain)
@@ -1315,11 +1339,12 @@ class App(QWidget):
 
 
     def exitTestPage(self):
-        self.stacked_widget.setCurrentIndex(0)
-        # hide adminFrame
-        self.adminFrame.hide()
-        # reset adminRole 
-        self.adminRole=False
+        '''
+        exit test page, back to settings page
+        '''
+        self.stacked_widget.setCurrentIndex(1)
+        
+        
 
 
 
