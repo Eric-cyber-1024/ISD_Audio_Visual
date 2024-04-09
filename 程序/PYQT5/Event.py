@@ -35,7 +35,7 @@ def combine_video_audio(self):
     # Load the video clip
     video_clip = VideoFileClip(self.video_path, audio=False)
     # Cut off the first 3 second to align with the audio ( might need adjustment)
-    video_clip = video_clip.subclip(3)
+    video_clip = video_clip.subclip(3)  # need to find a way to align the video with audio, 
     # Load the audio clip
     audio_clip = AudioFileClip(self.audio_path)
 
@@ -54,7 +54,7 @@ def switchPage(self,PAGE):
 def ToggleSelection(self,choice):
         self.LPF_Select = choice
         i = 0
-        list_of_range = [self.CheckBox_6kHz,self.CheckBox_12kHz,self.CheckBox_18kHz,self.CheckBox_Full]
+        list_of_range = [self.checkbox_6kHz,self.checkbox_12kHz,self.checkbox_18kHz,self.checkbox_full]
         list_frequency = [Frequency_Selection.LPF_6K,Frequency_Selection.LPF_12K,Frequency_Selection.LPF_18K,Frequency_Selection.LPF_FULL]
         for item in list_frequency:
             if item.value != choice:
