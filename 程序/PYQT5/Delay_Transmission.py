@@ -3,8 +3,133 @@ import selectors
 import types
 from Mic_function import *
 
-HOST = "192.168.1.10"
-PORT = 5001
+HOST = "192.168.1.40"
+PORT = 5004
+
+
+def delay_calculation_v1(thisposition):
+    c_detail = thisposition     #this_location=[6, 0.2, 0.3]
+    c_detail = np.array(c_detail)
+    Targetposition=c_detail
+
+    SPEED_OF_SOUND   =340.29 
+    mic_position = get_position() # getting mic position 
+    mic_ref_ori = mic_position[2] # center mic  the top one from inner circle
+    soure_ref = Targetposition - mic_ref_ori
+    magnitude_s2p = [0] * MIC_NUMBER 
+    magnitude_s2r = np.linalg.norm(soure_ref, axis=0, keepdims=True)
+    for x in INDEX:
+        magnitude_s2p[x] = Targetposition - mic_position[x]
+        magnitude_s2p[x] = np.linalg.norm(magnitude_s2p[x], axis=0, keepdims=True)
+    delay = [0]*MIC_NUMBER 
+    for x in INDEX:
+        delay[x] = - (magnitude_s2r-magnitude_s2p[x])/SPEED_OF_SOUND
+    delay = abs(min(delay))+delay 
+    delay = -1*( delay - max(delay))    #big to small reverse
+    delay_phase = delay * 48000   ##   48KHz
+    delay =(np.round(delay / 1e-6, 6)) 
+   # mic_delay_extra = find_calibration_value(Vision.distance,Vision.x,Vision.y)
+    for x in INDEX:
+        delay[x] =(delay[x] ) * 1e-6
+        delay_phase[x] = delay[x]*48000
+        delay_phase[x] = int(delay_phase[x]*360/512*256)   # 512 FFT window
+    minimum= abs(min(delay_phase))
+    delay_phase = delay_phase + minimum
+    delay_phase    = np.reshape(delay_phase,MIC_NUMBER ) 
+    return delay_phase
+
+#return delay integer to binary 
+def delay_to_binary(delay):
+    delay_binary_output = [0] * len(delay) 
+    for x in INDEX:
+        delay_binary_output[x] = np.asarray( list(map(int, bin (int(delay[x]))[2:].zfill(13))) )
+    return delay_binary_output  
+
+# create mic ID in Binary form 
+def decToBin(this_value,bin_num):
+    num = bin(this_value)[2:].zfill(bin_num)
+    num = list(map(int,num)) # convert list str to int 
+    return num 
+
+def struct_packet(RW_field,mode,mic_gain,mic_num,en_bm,en_bc,delay_binary_output_x,mic_en,type,reserved):
+     #convert into binary form 
+     this_mic_no  = decToBin(mic_num,5)
+     this_type=decToBin(type,2)
+     this_reserved=decToBin(reserved,4)
+     #putting them into array order 
+     return np.hstack((RW_field,mode,mic_gain,this_mic_no,en_bm,en_bc,delay_binary_output_x,mic_en,this_type,this_reserved))
+
+def BintoINT(Binary):
+    integer = 0 
+    result_hex = 0 
+    for x in range(len(Binary)):
+        integer = integer + Binary[x]*2**(len(Binary)-x-1)
+    result_hex = hex(integer)
+    return result_hex
+
+
+
+def send_and_receive_packet(host, port, packet, timeout=1):
+    # Create a socket object
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+    # Set the timeout
+    sock.settimeout(timeout)
+
+    try:
+        sock.connect((host, port))  # connect to the server
+        # Send the packet
+        sock.send(packet)
+
+        # Wait for the return packet
+        data = sock.recv(1024)
+
+        # Check if the received data matches the expected return packet
+        if data == b'copy':
+            return True
+        else:
+            return False
+
+    except socket.timeout:
+        print('socket timeout!!')
+        return False
+
+    finally:
+        # Close the socket
+        sock.close()
+
+
+# add,Brian,05 Mar 2024
+def prepareMicDelaysPacket(payload):
+    '''
+    prepare packet for mic delays
+
+    payload -- list of bytes to be sent 
+
+    return packet = payload + checksum (xor all bytes in payload)
+
+    '''
+    checksum = 0
+    for byte in payload:
+        checksum ^= byte
+    packet = bytes(payload) + bytes([checksum])
+
+    return packet
+
+# add,Brian,05 Mar 2024
+def validateMicDelaysPacket(packet):
+    payload = packet[:-1]
+    checksum = packet[-1]
+
+    calculated_checksum = 0
+    for byte in payload:
+        calculated_checksum ^= byte
+
+    if checksum == calculated_checksum:
+        return True
+    else:
+        return False
+
 
 
 def start_connections(host, port):
