@@ -24,6 +24,8 @@ from Enum_library import *
 from Delay_Transmission import *
 from audio_controller import AudioDeviceDialog, AudioController, MyAudioUtilities
 from utility import audio_dev_to_str, networkController
+from data_logger import DataLogger
+from test_delay_cal import *
 
 # added[for d435]
 import pyrealsense2 as rs
@@ -1215,6 +1217,9 @@ class App(QWidget):
         '''
         adminLayout= QGridLayout()
         adminLayout.addWidget(QLabel('Admin Mode:'),1,0,1,1)
+
+        self.lbl_info = QLabel('Info:')
+        adminLayout.addWidget(self.lbl_info)
         
         btnTestMode= QPushButton('Go to Test mode Page')
         btnTestMode.clicked.connect(self.goTestMode)
@@ -1263,7 +1268,7 @@ class App(QWidget):
             
         ]
         
-        micNames=["M{:02d}".format(i) for i in range(1, 33)]
+        self.micNames=["M{:02d}".format(i) for i in range(1, 33)]
 
         setTests=[
             '0: PS_enMC-0,PS_enBM-0,FFTgain: 2, MIC8-data_bm_n, MIC9-ifftout',
@@ -1285,13 +1290,13 @@ class App(QWidget):
             'lbl_mode': {'text':'mode','row':3,'column':0,'row_span':1,'col_span':1},
             'cbx_mode': {'items':modes,'row':3,'column':1,'row_span':1,'col_span':1},
             'lbl_micNum': {'text':'mic#','row':4,'column':0,'row_span':1,'col_span':1},
-            'cbx_micNum': {'items':micNames,'row':4,'column':1,'row_span':1,'col_span':1},
+            'cbx_micNum': {'items':self.micNames,'row':4,'column':1,'row_span':1,'col_span':1},
             'lbl_micGain': {'text':'mic gain','row':5,'column':0,'row_span':1,'col_span':1},
             'tbx_micGain': {'text':'30','row':5,'column':1,'row_span':1,'col_span':1},
             'lbl_micDisable':{'text':'mic disable','row':6,'column':0,'row_span':1,'col_span':1},
             'tbx_micDisable':{'text':'30','row':6,'column':1,'row_span':1,'col_span':1},
             'lbl_setTest': {'text':'set Text','row':7,'column':0,'row_span':1,'col_span':1},
-            'cbx_setText': {'items':setTests,'row':7,'column':1,'row_span':1,'col_span':1},
+            'cbx_setTest': {'items':setTests,'row':7,'column':1,'row_span':1,'col_span':1},
             'lbl_denOutSel':{'text':'den_out_sel','row':8,'column':0,'row_span':1,'col_span':1},
             'tbx_denOutSel':{'text':'8','row':8,'column':1,'row_span':1,'col_span':1},
             'lbl_mcBetaSel':{'text':'mc_beta_sel','row':9,'column':0,'row_span':1,'col_span':1},
@@ -1314,8 +1319,8 @@ class App(QWidget):
 
         points = [(50, 50), (100, 100), (150, 150), (200, 200)]
         #point_selection = PointSelectionGUI(points,self.send_message)
-        echoText = EchoText() 
-        layout.addWidget(echoText,16,5,1,1)
+        # echoText = EchoText() 
+        # layout.addWidget(echoText,16,5,1,1)
         
         # Create and add QLabel and QLineEdit widgets dynamically
         for name, properties in name_dict.items():
@@ -1354,7 +1359,7 @@ class App(QWidget):
                 )
 
         btnSendPacket = QPushButton('Send Packet')
-        btnSendPacket.clicked.connect(self.trySendPacket)
+        btnSendPacket.clicked.connect(self.sendPacket)
 
         btnTestPing = QPushButton('Test Ping Host')
         btnTestPing.clicked.connect(self.testPingHost)
@@ -1392,16 +1397,148 @@ class App(QWidget):
         return widget
 
 
+    def printParams(self):
+        print(self.hostIP,self.hostPort,self.mode,self.micIndx,self.micGain,self.setTest,self.den_out_sel,self.mc_beta_sel,self.mc_K_sel,self.targetPos,self.offsets)
+        # add[save to log as well],Brian,27 Mar 2024
+        logger.add_data(self.__str__())
 
-    def trySendPacket(self):
-        '''
-        try to send Packet to host according to parameters on UI
+    def fetchParamsFromUI(self):
 
-        '''
+        # name_dict = {
+        #     'cbx_mode': {'items':modes,'row':3,'column':1,'row_span':1,'col_span':1},
+        #     'cbx_micNum': {'items':micNames,'row':4,'column':1,'row_span':1,'col_span':1},
+        #     'cbx_setText': {'items':setTests,'row':7,'column':1,'row_span':1,'col_span':1},
+
+
+        
+        
+        # get values from textboxes
         textboxes = self.test_page_widget.findChildren(QLineEdit)
-        values = {textbox.objectName(): textbox.text() for textbox in textboxes}
-        print(values)
-        return values
+        params = {textbox.objectName(): textbox.text() for textbox in textboxes}
+        
+        
+        self.hostIP     = params['tbx_hostIP']
+        self.hostPort   = int(params['tbx_hostPort'])
+        self.micGain    = int(params['tbx_micGain'])
+        self.micDisable = int(params['tbx_micDisable'])
+        self.den_out_sel   = int(params['tbx_denOutSel'])
+        self.mc_beta_sel   = int(params['tbx_mcBetaSel'])
+        self.mc_K_sel      = int(params['tbx_mcKSel'])
+        self.en_BM_MC_ctrl = int(params['tbx_en_BM_MC_ctrl'])
+        self.targetPos     = np.array(params['tbx_targetPos'].split(','), dtype=float)
+        self.offsets       = np.array(params['tbx_xyzOffsets'].split(','), dtype=float)
+
+        # get values from combo boxes
+        comboboxes = self.test_page_widget.findChildren(QComboBox)
+        params = {cbx.objectName(): cbx.currentText() for cbx in comboboxes}
+        
+        self.micIndx    = self.micNames.index(params['cbx_micNum'])
+        self.mode       = int(params['cbx_mode'].split(':')[0])
+        self.setTest    = int(params['cbx_setTest'].split(':')[0])
+
+
+    def showInfo(self,sMsg):
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        self.lbl_msg.setText('%s, %s' %(timestamp,sMsg))
+    
+    def sendPacket(self):
+        global logger
+
+        # clear lbl_info first
+        self.showInfo('')
+        sendBuf=b'SET0'
+        
+        self.fetchParamsFromUI()
+        self.printParams()
+    
+        #Z=distance between camera and object, x is left+/right-, y is down+/up-
+        
+        # just a dummy target location
+        this_location=[6, 0.2, 0.3]
+
+        # revised[add offsets],Brian,18 Mar 2024
+        delay=delay_calculation_v1(this_location)
+        print(delay)
+        
+        #converting the delay into binary format 
+        delay_binary_output = delay_to_binary(delay)
+        #print(delay_binary_output)
+        #need to do later
+        RW_field=[1,1]
+        mode=0
+        mic_gain=[1,0]
+        mic_num=0
+        en_bm=1
+        en_bc=1
+        mic_en=1
+        type=0
+        reserved=0
+        message=struct_packet(RW_field,mode,mic_gain,mic_num,en_bm,en_bc,delay_binary_output[0],mic_en,type,reserved)
+        print(message)
+        messagehex = BintoINT(message)
+        print(messagehex)
+        message1 = int(messagehex[2:4],16) # hex at  1 and 2  
+        message2 = int(messagehex[4:6],16) # hex at  3 and 4 
+        message3 = int(messagehex[6:8],16)  # hex at  5 and 6 
+        message4 = int(messagehex[8:],16)
+        print("m1:{},m2:{},m3:{},m4:{}\n".format(message1,message2,message3,message4))
+    
+
+        message5  = int(self.mode)        # mode
+        message6  = int(self.micIndx)     # mic
+        message7  = int(self.micGain)     # mic_gain
+        message8  = int(self.micDisable)  # mic_disable
+        message9  = int(self.setTest)     # set_test
+        message10 = int(self.den_out_sel) # den_out_sel, previously micDelay
+
+        # revise[added message11, message12],Brian, 27 Mar 2024
+        message11 = int(self.mc_beta_sel) # mc_beta_sel
+        message12 = int(self.mc_K_sel)    # mc_K_sel
+
+        # revise[added message13],Brian, 28 Mar 2024
+        message13 = int(self.en_BM_MC_ctrl) # en_BM_MC_ctrl
+ 
+        
+        _,refDelay,_ = delay_calculation(self.targetPos,self.offsets[0],self.offsets[1],self.offsets[2])   
+        refDelay = refDelay*48e3
+        refDelay = np.max(refDelay)-refDelay
+        refDelay = np.round(refDelay)
+
+        #convert refDelay to byte
+        #but make sure that they are within 0 to 255 first!!
+        assert (refDelay>=0).all() and (refDelay<=255).all()
+
+            
+        refDelay = refDelay.astype(np.uint8)
+        payload = refDelay.tobytes()
+        print('refDelay',refDelay)
+        print('payload',payload)
+        print('sendBuf',sendBuf)
+
+        
+
+        
+        packet = prepareMicDelaysPacket(payload)
+        if validateMicDelaysPacket(packet):
+            print('packet ok')
+        else:
+            print('packet not ok')
+            
+        sendBuf=bytes([message1,message2,message3,message4,message5,message6,message7,message8,message9,message10,message11,message12,message13])
+            
+        # append packet to sendBuf
+        sendBuf += packet
+        
+        logger.add_data('data,%s,%s,%s' %(bytes(sendBuf),np.array2string(refDelay),np.array2string(self.targetPos)))
+
+
+        if send_and_receive_packet(self.hostIP,self.hostPort,sendBuf,timeout=3):
+            print('data transmission ok')
+            self.showInfo('tx ok')
+            logger.add_data('tx ok')
+        else:
+            print('data transmission failed')
+            logger.add_data('tx failed')
     
 
     def updatePingResults(self,results):
@@ -1567,6 +1704,20 @@ class App(QWidget):
 
 
 if __name__ == "__main__":
+
+    # Check if the folder exists
+    if not os.path.exists('log'):
+        # Create the folder
+        os.makedirs('log')
+        print("log folder created successfully.")
+    else:
+        print("log folder already exists.")
+
+    # initialize logger
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    logger = DataLogger(log_interval=1, file_path="log/%s_sys.log" %(timestamp))  # Specify the data file path
+    logger.start_logging()
+
     # Create necessary DIR
     check_folder_existence(CURRENT_PATH+VIDEO_SAVE_DIRECTORY)
     check_folder_existence(CURRENT_PATH+VIDEO_SAVE_DIRECTORY+VIDEO_DATE)
