@@ -345,7 +345,7 @@ class d435():
                 y = self.point[1]
                 z = self.point[2]
 
-                z = self.ma.calculate_moving_average(z)
+                #z = self.ma.calculate_moving_average(z)
 
                 self.point[2]=z
 
@@ -403,7 +403,7 @@ class d435():
             y = self.point[1]
             z = self.point[2]
 
-            z = self.ma.calculate_moving_average(z)
+            #z = self.ma.calculate_moving_average(z)
 
             self.point[2]=z
 
@@ -471,6 +471,7 @@ class VideoAudioThread(QThread):
 # Video Thread
 class VideoThread(QThread):
 
+    update_3d_coordinate = pyqtSignal(list)
     change_pixmap_signal = pyqtSignal(np.ndarray)
 
     def __init__(self, camera_index, camera_name):
@@ -543,11 +544,12 @@ class VideoThread(QThread):
                     x0 = int(x0*1./1.5)
                     y0 = int(y0*1./1.5)
 
-                # Jason - 8 April 2024 - Aligned Frames
-                if ALIGNED_FRAMES:
-                    self.cv_img, self.depth_frame, point = self.d435.getFrameWithAlignedFrames(mousex=x0,mousey=y0)
-                else:
-                    self.cv_img, self.depthImg, point = self.d435.getFrame(mousex=x0,mousey=y0)
+                self.cv_img, self.depth_frame, point = self.d435.getFrameWithAlignedFrames(mousex=x0,mousey=y0)
+
+                if point is not None:
+                    # emit signal 
+                    self.update_3d_coordinate.emit(point)
+
                 if self.cv_img is None:
                     ret = False
                 else:   
@@ -1125,6 +1127,8 @@ class App(QWidget):
                 
                 # connect its signal to the update_image slot
                 self.video_thread.change_pixmap_signal.connect(self.update_image)
+                # connnect signal to update 3d coordinate
+                self.video_thread.update_3d_coordinate.connect(self.update_3d_coordinate)
                 # start video thread
                 self.video_thread.start()
 
@@ -1194,6 +1198,16 @@ class App(QWidget):
         go to stacked widget index 2
         '''
         self.stacked_widget.setCurrentIndex(2)
+
+    
+    def setTargetPos(self,point):
+        
+        # get handle of tbx_targetPos
+        theWidget = [textbox for textbox in self.test_page_widget.findChildren(QLineEdit) if textbox.objectName()=='tbx_targetPos']
+        if len(theWidget)>0:
+            # remember that x, y need to *-1 !!
+            theWidget[0].setText('%.2f,%.2f,%.2f' %(-point[0],-point[1],point[2]))    
+        
 
     def setupAdminFrame(self):
         '''
@@ -1573,6 +1587,15 @@ class App(QWidget):
         qt_img = self.convert_cv_qt(cv_img)
         self.image_label.setPixmap(qt_img)
 
+    @pyqtSlot(list)
+    def update_3d_coordinate(self,point):
+        '''
+        update 3d coodrinate
+        '''
+
+        self.targetPos = point
+        
+
     # revised,Brian, 1 April 2024
     def convert_cv_qt(self, cv_img):
         """Convert from an opencv image to QPixmap"""
@@ -1598,6 +1621,9 @@ class App(QWidget):
                 currentY = mouse_position.y()
 
                 self.video_thread.setMouseXY(currentX,currentY)
+
+                if self.adminRole:
+                    self.setTargetPos(self.targetPos)
 
 
 
