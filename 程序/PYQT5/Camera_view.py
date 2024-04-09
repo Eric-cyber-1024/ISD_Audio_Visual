@@ -1053,105 +1053,93 @@ class App(QWidget):
         # Display the camera_dialog and get the selected camera name
         if camera_dialog.exec_() == QDialog.Accepted:
             self.selected_camera_index, self.selected_camera = camera_dialog.get_selected_camera_name()
+
+
+            audio_inputDevices = MyAudioUtilities.GetAudioDevices(direction='in')
+            audio_outputDevices= MyAudioUtilities.GetAudioDevices(direction='out')
+
+            input_devices = [
+                '%d,%s' % (i, MyAudioUtilities.dev_to_str(device))
+                for i, device in enumerate(audio_inputDevices)
+            ]
+
+            output_devices = [
+                '%d,%s' % (i, MyAudioUtilities.dev_to_str(device))
+                for i, device in enumerate(audio_outputDevices)
+            ]
+            
+            audio_dialog = AudioDeviceDialog(input_devices, output_devices,self.windowIcon())
+
+            
+            # Display the audio_dialog and get the selected camera name
+            if audio_dialog.exec_() == QDialog.Accepted:
+                self.input_device, self.output_device = audio_dialog.get_selected_devices()
+
+                # retrieve device uuids
+                index = int(self.input_device.split(',')[0])
+                self.input_devid = audio_inputDevices[index].id
+                self.input_device= audio_inputDevices[index].FriendlyName
+
+                index = int(self.output_device.split(',')[0])
+                self.output_devid= audio_outputDevices[index].id
+
+                devices = sd.query_devices()
+                input_devices = [
+                    '%d,%s' % (i, audio_dev_to_str(device))
+                    for i, device in enumerate(devices)
+                    if device['name'] == self.input_device
+                ]
+
+                if len(input_devices)>0:
+                    # select the first one if we have more than one input devices with the same name
+                    self.input_device = int(input_devices[0].split(',')[0])
+                else:
+                    # failed to locate input audio device using sd and have to quit now
+                    self.showAlert('Error','Failed to select the right audio input device! Have to exit now!',self.windowIcon())
+                    exit()
+
+                print("input device: ", self.input_device,self.input_devid)
+                print("output device: ", self.output_device,self.output_devid)
+
+                # create audio controller for the output device
+                self.audio_outCtrl = AudioController(self.output_devid,'output','log')
+                self.audio_outCtrl.listAllSections()
+                print(self.audio_outCtrl.volume)
+
+                # turn to zero volume at start
+                self.audio_outCtrl.set_volume(0)
+                self.slider_sound_vol.setValue(0)
+                self.slider_sound_vol.valueChanged.connect(self.audio_outCtrl.set_volume)
+
+                # create audio controller for the input device
+                self.audio_inCtrl = AudioController(self.input_devid,'input','linear')
+
+                # turn to zero volume at start
+                self.audio_inCtrl.set_volume(0)
+                self.slider_mic_vol.setValue(0)
+                self.slider_mic_vol.valueChanged.connect(self.audio_inCtrl.set_volume)
+
+                # create the video capture thread
+                self.video_thread = VideoThread(self.selected_camera_index,self.selected_camera)
+                self.audio_thread = AudioThread(self.input_device)
+                
+                # connect its signal to the update_image slot
+                self.video_thread.change_pixmap_signal.connect(self.update_image)
+                # start video thread
+                self.video_thread.start()
+
+                self.logger = CustomProgressBarLogger()
+            else:
+                raise Exception('exit from init')
+
+            
             
         else:
-            print("Exit now...")
-            exit()
-
-        # pop up audio_dialog to select audio device
-            
-        # revised[not using sd to get list of audio devices],Brian, 1 April 2024
-        # devices = sd.query_devices()
-        # input_devices = [
-        #     '%d,%s' % (i, audio_dev_to_str(device))
-        #     for i, device in enumerate(devices)
-        #     if device['max_input_channels'] > 0
-        # ]
-        
-        # output_devices = [
-        #     '%d,%s' % (i, audio_dev_to_str(device))
-        #     for i, device in enumerate(devices)
-        #     if device['max_output_channels'] > 0
-        # ]
-        # audio_dialog = AudioDeviceDialog(input_devices, output_devices,self.windowIcon())
-
-        audio_inputDevices = MyAudioUtilities.GetAudioDevices(direction='in')
-        audio_outputDevices= MyAudioUtilities.GetAudioDevices(direction='out')
-
-        input_devices = [
-            '%d,%s' % (i, MyAudioUtilities.dev_to_str(device))
-            for i, device in enumerate(audio_inputDevices)
-        ]
-
-        output_devices = [
-            '%d,%s' % (i, MyAudioUtilities.dev_to_str(device))
-            for i, device in enumerate(audio_outputDevices)
-        ]
-          
-        audio_dialog = AudioDeviceDialog(input_devices, output_devices,self.windowIcon())
+            # print("Exit now...")
+            raise Exception('exit from init')
 
         
-        # Display the audio_dialog and get the selected camera name
-        if audio_dialog.exec_() == QDialog.Accepted:
-            self.input_device, self.output_device = audio_dialog.get_selected_devices()
-        else:
-            print("Exit now...")
-            exit()
-
-        # retrieve device uuids
-        index = int(self.input_device.split(',')[0])
-        self.input_devid = audio_inputDevices[index].id
-        self.input_device= audio_inputDevices[index].FriendlyName
-
-        index = int(self.output_device.split(',')[0])
-        self.output_devid= audio_outputDevices[index].id
-
-        devices = sd.query_devices()
-        input_devices = [
-            '%d,%s' % (i, audio_dev_to_str(device))
-            for i, device in enumerate(devices)
-            if device['name'] == self.input_device
-        ]
-
-        if len(input_devices)>0:
-            # select the first one if we have more than one input devices with the same name
-            self.input_device = int(input_devices[0].split(',')[0])
-        else:
-            # failed to locate input audio device using sd and have to quit now
-            self.showAlert('Error','Failed to select the right audio input device! Have to exit now!',self.windowIcon())
-            exit()
-
-        print("input device: ", self.input_device,self.input_devid)
-        print("output device: ", self.output_device,self.output_devid)
-
-        # create audio controller for the output device
-        self.audio_outCtrl = AudioController(self.output_devid,'output','log')
-        self.audio_outCtrl.listAllSections()
-        print(self.audio_outCtrl.volume)
-
-        # turn to zero volume at start
-        self.audio_outCtrl.set_volume(0)
-        self.slider_sound_vol.setValue(0)
-        self.slider_sound_vol.valueChanged.connect(self.audio_outCtrl.set_volume)
-
-        # create audio controller for the input device
-        self.audio_inCtrl = AudioController(self.input_devid,'input','linear')
-
-        # turn to zero volume at start
-        self.audio_inCtrl.set_volume(0)
-        self.slider_mic_vol.setValue(0)
-        self.slider_mic_vol.valueChanged.connect(self.audio_inCtrl.set_volume)
-
-        # create the video capture thread
-        self.video_thread = VideoThread(self.selected_camera_index,self.selected_camera)
-        self.audio_thread = AudioThread(self.input_device)
         
-        # connect its signal to the update_image slot
-        self.video_thread.change_pixmap_signal.connect(self.update_image)
-        # start video thread
-        self.video_thread.start()
-
-        self.logger = CustomProgressBarLogger()
         
     def showAdminWidgets(self):
         self.adminFrame.show()
@@ -1729,8 +1717,14 @@ if __name__ == "__main__":
     # app.setAttribute(Qt.AA_DisableHighDpiScaling)
     # print(f"Using AA_DisableHighDpiScaling > {QApplication.testAttribute(Qt.AA_DisableHighDpiScaling)}")
     # print(f"Using AA_UseHighDpiPixmaps    > {QApplication.testAttribute(Qt.AA_UseHighDpiPixmaps)}")
-    a = App()
-    a.show()
-    print("w, h: ", a.image_label.width(), a.image_label.height())
-    print("x, y: ", a.image_label.x(), a.image_label.y())
-    sys.exit(app.exec_())
+    try:
+        a = App()
+        a.show()
+        print("w, h: ", a.image_label.width(), a.image_label.height())
+        print("x, y: ", a.image_label.x(), a.image_label.y())
+        logger.stop_logging()
+        exit(app.exec_())
+    except Exception:
+        logger.stop_logging()
+        exit()
+        
