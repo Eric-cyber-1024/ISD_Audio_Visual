@@ -49,6 +49,7 @@ START_RECORDING = False
 MIC_ON = True
 SOUND_ON = True
 DEBUG = False
+ALIGNED_FRAMES = False
 sVersion='0.1.3'
 
 def resource_path(relative_path):
@@ -228,7 +229,7 @@ class d435():
         self.config = rs.config()
 
         # point cloud
-        pc = rs.pointcloud()
+        # pc = rs.pointcloud()
 
         # Enable the depth and color streams.
         self.config.enable_stream(rs.stream.depth, d435.DEPTH_CAM_WIDTH, d435.DEPTH_CAM_HEIGHT,
@@ -240,7 +241,7 @@ class d435():
         profile = self.pipeline.start(self.config)
 
         # Create an align object to align the depth and color frames
-        # align = rs.align(rs.stream.color)
+        self.align = rs.align(rs.stream.color)
 
         # Get the intrinsics of the color camera
         self.colorProfile = rs.video_stream_profile(profile.get_stream(rs.stream.color))
@@ -263,7 +264,7 @@ class d435():
 
         # for visualization
         self.depthMin = 0.1  #meter
-        self.depthMax = 15.0  #meter
+        self.depthMax = 10.0  #meter
 
         # 2D image coordinate
         self.i=0  # from mouse x
@@ -275,10 +276,20 @@ class d435():
 
         self.point = [-1.,-1.,-1]
 
-        colorizer = rs.colorizer()
-        colorizer.set_option(rs.option.visual_preset,1)  # 0=Dynamic, 1=Fixed, 2=Near, 3=Far
-        colorizer.set_option(rs.option.min_distance, self.depthMin)
-        colorizer.set_option(rs.option.max_distance, self.depthMax)
+
+        # # Print Visual Preset Information
+        # depth_sensor = profile.get_device().first_depth_sensor()
+        # preset_range = depth_sensor.get_option_range(rs.option.visual_preset)
+        # print('preset range: ', preset_range)
+        # for i in range(int(preset_range.max)):
+        #     visulpreset = depth_sensor.get_option_value_description(rs.option.visual_preset,i)
+        #     print('%02d: %s'%(i,visulpreset))
+
+        self.colorizer = rs.colorizer()
+        self.colorizer.set_option(rs.option.visual_preset,1)  # 0=Dynamic, 1=Fixed, 2=Near, 3=Far
+                                                              # 0=Custom, 1=Default, 2=Hand, 3=High Accuracy, 4=High Density
+        self.colorizer.set_option(rs.option.min_distance, self.depthMin)
+        self.colorizer.set_option(rs.option.max_distance, self.depthMax)
 
     def getFrame(self,mousex,mousey):
         global DEBUG
@@ -346,6 +357,65 @@ class d435():
         except:
             return None,None,None
 
+    # Jason - 8 April 2024 - Aligned Frames
+    def getFrameWithAlignedFrames(self,mousex,mousey):
+        global DEBUG
+
+        self.i = mousex
+        self.j = mousey
+        # print(self.i,self.j) # for debugging
+    
+        # Get a frameset from the pipeline
+        try:
+            frameset = self.pipeline.wait_for_frames()
+
+            # Align the depth frame to the color frame
+            aligned_frameset = self.align.process(frameset)
+       
+            depth_frame = aligned_frameset.get_depth_frame()
+            color_frame = aligned_frameset.get_color_frame()
+
+            # Validate that both frames are valid
+            if not depth_frame or not color_frame:
+                return None,None,None
+
+            # Convert the images to numpy arrays
+            depth_image = np.asanyarray(depth_frame.get_data())
+            color_image = np.asanyarray(color_frame.get_data())
+            
+            # project color pixel to depth pixel
+            depthPixel = rs.rs2_project_color_pixel_to_depth_pixel(
+                depth_frame.get_data(), self.depthScale, self.depthMin,
+                self.depthMax, self.depthIntrinsics, self.colorIntrinsics,
+                self.depthToColorExtrinsics, self.colorToDepthExtrinsics, [self.i, self.j])
+            
+
+            if depthPixel[0]>=0 and depthPixel[1]>=0:
+                #print("depthPixel: ", depthPixel)
+                depth = depth_frame.get_distance(int(depthPixel[0]),int(depthPixel[1]))
+
+                # project depth pixel to 3D point
+                # x is right+, y is down+, z is forward+
+                self.point = rs.rs2_deproject_pixel_to_point(self.depthIntrinsics,[int(depthPixel[0]), int(depthPixel[1])], depth)
+                
+                x = self.point[0]
+                y = self.point[1]
+                z = self.point[2]
+
+                z = self.ma.calculate_moving_average(z)
+
+                self.point[2]=z
+
+                # print(self.i,self.j,depthPixel,self.point)
+
+            # update self.iPrev,jPrev
+            self.iPrev = self.i
+            self.jPrev = self.j
+
+            return color_image,depth_frame,self.point
+        except:
+            print("getFrameWithAlignedFrames Failed")
+            return None,None,None
 
 
 class CameraSelectionDialog(QDialog):
@@ -445,7 +515,7 @@ class VideoThread(QThread):
         return cv2.resize(frame, dim, interpolation =cv2.INTER_AREA)
 
     def run(self):
-        global START_RECORDING, VIDEO_NAME, OUTPUT_NAME, AUDIO_NAME
+        global START_RECORDING, VIDEO_NAME, OUTPUT_NAME, AUDIO_NAME, ALIGNED_FRAMES
 
         # capture from web cam
         i = 0
@@ -473,14 +543,28 @@ class VideoThread(QThread):
                     # scale down mouse x, y by 1.5 times!!
                     x0 = int(x0*1./1.5)
                     y0 = int(y0*1./1.5)
-                self.cv_img, self.depthImg,point = self.d435.getFrame(mousex=x0,mousey=y0)
+
+                # Jason - 8 April 2024 - Aligned Frames
+                if ALIGNED_FRAMES:
+                    self.cv_img, self.depth_frame, point = self.d435.getFrameWithAlignedFrames(mousex=x0,mousey=y0)
+                else:
+                    self.cv_img, self.depthImg, point = self.d435.getFrame(mousex=x0,mousey=y0)
                 if self.cv_img is None:
                     ret = False
-                else:
+                else:   
+                    if ALIGNED_FRAMES:
+                        if hasattr(self, 'depth_frame'):
+                            depth_colormap = np.asanyarray(self.d435.colorizer.colorize(self.depth_frame).get_data())
+                            alpha = 0.5
+                            self.cv_img = cv2.addWeighted(depth_colormap, alpha, self.cv_img, 1 - alpha, 0 )
+                        else:
+                            print("do not have depth_frame")
+
                     # add scale self.cv_img if it's not 1080p
                     if self.cv_img.shape[0]<1080:
                         self.cv_img = self.rescale_frame(self.cv_img,150)
                         # print(self.cv_img.shape)
+
                     ret = True
 
             else:
@@ -1103,6 +1187,12 @@ class App(QWidget):
         else:
             DEBUG=True
 
+    # Jason - 8 April 2024 - Aligned Frames
+    def toggleAlignedFramesMode(self):
+        global ALIGNED_FRAMES
+        ALIGNED_FRAMES = not ALIGNED_FRAMES
+        print("ALIGNED_FRAMES: ", ALIGNED_FRAMES)
+
     def exitAdminMode(self):
         '''
         reset adminRole DEUGB and hide adminFrame
@@ -1132,11 +1222,15 @@ class App(QWidget):
         btnToggleDebug= QPushButton('Toggle Debug Mode')
         btnToggleDebug.clicked.connect(self.toggleDebugMode)
 
+        btnToggleAlignedFrames = QPushButton('Toggle Aligned Frames Mode')
+        btnToggleAlignedFrames.clicked.connect(self.toggleAlignedFramesMode)
+
         btnExitAdminMode= QPushButton('Exit Admin Mode')
         btnExitAdminMode.clicked.connect(self.exitAdminMode)
 
         adminLayout.addWidget(btnTestMode)
         adminLayout.addWidget(btnToggleDebug)
+        adminLayout.addWidget(btnToggleAlignedFrames)
         adminLayout.addWidget(btnExitAdminMode)
 
         adminFrame = QFrame()
