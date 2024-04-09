@@ -385,15 +385,18 @@ class d435():
             depth_image = np.asanyarray(depth_frame.get_data())
             color_image = np.asanyarray(color_frame.get_data())
             
-            # project color pixel to depth pixel
-            depthPixel = rs.rs2_project_color_pixel_to_depth_pixel(
-                depth_frame.get_data(), self.depthScale, self.depthMin,
-                self.depthMax, self.depthIntrinsics, self.colorIntrinsics,
-                self.depthToColorExtrinsics, self.colorToDepthExtrinsics, [self.i, self.j])
+            # # project color pixel to depth pixel, need to check as it is not accurate for same resolution
+            # depthPixel = rs.rs2_project_color_pixel_to_depth_pixel(
+            #     depth_frame.get_data(), self.depthScale, self.depthMin,
+            #     self.depthMax, self.depthIntrinsics, self.colorIntrinsics,
+            #     self.depthToColorExtrinsics, self.colorToDepthExtrinsics, [self.i, self.j])
             
+            depthPixel = [self.i, self.j]
+            # print('depthPixel: ', depthPixel)
 
             if depthPixel[0]>=0 and depthPixel[1]>=0:
                 #print("depthPixel: ", depthPixel)
+                
                 depth = depth_frame.get_distance(int(depthPixel[0]),int(depthPixel[1]))
 
                 # project depth pixel to 3D point
