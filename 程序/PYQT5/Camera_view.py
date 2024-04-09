@@ -392,26 +392,20 @@ class d435():
             #     self.depthToColorExtrinsics, self.colorToDepthExtrinsics, [self.i, self.j])
             
             depthPixel = [self.i, self.j]
-            # print('depthPixel: ', depthPixel)
+            
+            depth = depth_frame.get_distance(int(depthPixel[0]),int(depthPixel[1]))
 
-            if depthPixel[0]>=0 and depthPixel[1]>=0:
-                #print("depthPixel: ", depthPixel)
-                
-                depth = depth_frame.get_distance(int(depthPixel[0]),int(depthPixel[1]))
+            # project depth pixel to 3D point
+            # x is right+, y is down+, z is forward+
+            self.point = rs.rs2_deproject_pixel_to_point(self.depthIntrinsics,[int(depthPixel[0]), int(depthPixel[1])], depth)
+            
+            x = self.point[0]
+            y = self.point[1]
+            z = self.point[2]
 
-                # project depth pixel to 3D point
-                # x is right+, y is down+, z is forward+
-                self.point = rs.rs2_deproject_pixel_to_point(self.depthIntrinsics,[int(depthPixel[0]), int(depthPixel[1])], depth)
-                
-                x = self.point[0]
-                y = self.point[1]
-                z = self.point[2]
+            z = self.ma.calculate_moving_average(z)
 
-                z = self.ma.calculate_moving_average(z)
-
-                self.point[2]=z
-
-                # print(self.i,self.j,depthPixel,self.point)
+            self.point[2]=z
 
             # update self.iPrev,jPrev
             self.iPrev = self.i
