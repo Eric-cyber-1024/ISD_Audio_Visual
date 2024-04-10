@@ -559,7 +559,7 @@ class VideoThread(QThread):
                             alpha = 0.5
                             self.cv_img = cv2.addWeighted(depth_colormap, alpha, self.cv_img, 1 - alpha, 0 )
                         else:
-                            print("do not have depth_frame")
+                            print("no depth_frame")
 
                     # add scale self.cv_img if it's not 1080p
                     if self.cv_img.shape[0]<1080:
@@ -659,7 +659,8 @@ class AudioThread(QThread):
             if status:
                 print(status)
             #print("Recording audio...")
-            self.audio_buffer.append(indata.copy())
+            if START_RECORDING:
+                self.audio_buffer.append(indata.copy())
 
         
         if START_RECORDING:
@@ -679,6 +680,7 @@ class AudioThread(QThread):
             AUDIO_NAME = audio_name
             # Save the audio data to a WAV file
             wavio.write(audio_name, audio_data, self.sample_rate, sampwidth=3)
+            self.audio_buffer = []
 
 
 class App(QWidget):
