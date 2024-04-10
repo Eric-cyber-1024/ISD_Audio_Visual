@@ -75,6 +75,7 @@ class networkController:
                 start_time = time.time()
 
                 # Send the ICMP echo request
+                print('host: ', host)
                 icmp_socket.sendto(packet, (host, 0))
 
                 # Receive the ICMP reply
@@ -99,6 +100,9 @@ class networkController:
                     print("Ping request timed out")
                 
                 # increment failedCount
+                failedCount+=1
+            except OSError as err:
+                print("Ping OSError: ", err)
                 failedCount+=1
 
         # Close the ICMP socket
