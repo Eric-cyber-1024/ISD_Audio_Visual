@@ -4,6 +4,7 @@ from PyQt5.QtWidgets import *
 from PyQt5.QtCore import *
 from PyQt5.QtGui import *
 from PyQt5.QtMultimedia import *
+import queue
 
 import sys
 import cv2
@@ -11,6 +12,7 @@ import cv2
 from Style import *
 import numpy as np
 import sounddevice as sd
+import soundfile as sf
 import os
 import wavio  #pip3 install wavio
 from datetime import datetime
@@ -690,6 +692,7 @@ class AudioThread(QThread):
         self.moving_window= []      # a moving window to get average audio level
         self.input_device = input_device # the input device index
         self.avgLevel = 0.
+        self.q = queue.Queue()      # queue to save input stream data
             
 
     def setRecordTime(self):
@@ -710,27 +713,44 @@ class AudioThread(QThread):
                 print(status)
             #print("Recording audio...")
             if START_RECORDING:
-                self.audio_buffer.append(indata.copy())
+                # self.audio_buffer.append(indata.copy())
+                # save indata copy to q
+                self.q.put(indata.copy())
 
         
         if START_RECORDING:
             current_datetime = datetime.now()
             formatted_datetime = current_datetime.strftime("[%m-%d-%y]%H_%M_%S")
+            subtype = 'PCM_16'
+            dtype = 'int16' 
+            audio_name = CURRENT_PATH + AUDIO_PATH + VIDEO_DATE + "\\" + str(formatted_datetime) + '.wav'
+            print('audio file::',audio_name)
+            with sf.SoundFile(audio_name, mode='w', subtype=subtype,samplerate=self.sample_rate, channels=1) as file:
+                print('starting soundfile',file)
+                with sd.InputStream(samplerate=self.sample_rate, dtype=dtype, channels=1, callback=callback):
+                    while START_RECORDING:
+                        try:
+                            file.write(self.q.get(timeout=0.1))
+                        except:
+                            break
+                    print('closing file')
+                    file.close()
+                        
 
-            with sd.InputStream(device=self.input_device,callback=callback,
-                                channels=1,
-                                samplerate=self.sample_rate):
-                while not self.isInterruptionRequested():
-                    self.msleep(100)  # Adjust the sleep interval based on your preference
+            # with sd.InputStream(device=self.input_device,callback=callback,
+            #                     channels=1,
+            #                     samplerate=self.sample_rate):
+            #     while not self.isInterruptionRequested():
+            #         self.msleep(100)  # Adjust the sleep interval based on your preference
 
-            # Convert the buffer to a numpy array
-            audio_data = np.concatenate(self.audio_buffer, axis=0)
-            audio_name = CURRENT_PATH + AUDIO_PATH + VIDEO_DATE + "\\" + str(
-                formatted_datetime) + '.wav'
-            AUDIO_NAME = audio_name
-            # Save the audio data to a WAV file
-            wavio.write(audio_name, audio_data, self.sample_rate, sampwidth=3)
-            self.audio_buffer = []
+            # # Convert the buffer to a numpy array
+            # audio_data = np.concatenate(self.audio_buffer, axis=0)
+            # audio_name = CURRENT_PATH + AUDIO_PATH + VIDEO_DATE + "\\" + str(
+            #     formatted_datetime) + '.wav'
+            # AUDIO_NAME = audio_name
+            # # Save the audio data to a WAV file
+            # wavio.write(audio_name, audio_data, self.sample_rate, sampwidth=3)
+            # self.audio_buffer = []
 
 
 class App(QWidget):
