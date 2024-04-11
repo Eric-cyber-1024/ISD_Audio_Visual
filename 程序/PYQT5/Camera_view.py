@@ -52,6 +52,7 @@ MIC_ON = True
 SOUND_ON = True
 DEBUG = False
 ALIGNED_FRAMES = False
+SENDING_PACKET = False
 sVersion='0.1.3'
 
 def resource_path(relative_path):
@@ -192,10 +193,19 @@ class CanvasWidget(QWidget):
 
 # Add[for getting moving averages],Brian,1 April 2024
 class MovingAverageCalculator:
+    
+    cal_timeout = pyqtSignal()
 
     def __init__(self, nSamples):
         self.nSamples = nSamples
         self.window = []
+        self.locked = 0
+        self.lock_var_range = 0.05
+        self.locked_value = 0.0
+        self.average = 0.0
+        self.timer = QTimer()
+        self.timer_interval = 1000
+        self.timer.timeout.connect(self.handle_timeout)
 
     def calculate_moving_average(self, x):
         self.window.append(x)
@@ -203,8 +213,43 @@ class MovingAverageCalculator:
         if len(self.window) > self.nSamples:
             self.window.pop(0)
 
-        average = sum(self.window) / len(self.window)
-        return average
+        self.average = sum(self.window) / len(self.window)
+        return self.average
+
+    # Add lock value, Jason, 10 April 2024
+    def calculate_moving_average_lock(self, x):
+        '''
+        Save the averaged depth value as locked_value if 
+        the variance of the data in the window is smaller than
+        lock_var_range
+        '''
+        self.window.append(x)
+
+        if len(self.window) > self.nSamples:
+            self.window.pop(0)
+        
+        self.average = sum(self.window) / len(self.window)
+
+        # print('var: ', np.var(self.window))
+        if np.var(self.window) < self.lock_var_range:
+            self.locked = 1
+        else:
+            self.locked = 0
+
+        if self.locked:
+            self.locked_value = self.average
+            # print("locked_value: ", self.locked_value)
+            # self.timer.start(self.timer_interval)
+            return self.locked_value
+        
+        return 0.0
+
+    def handle_timeout(self):
+        # TODO: emit signal to send packet
+        # self.cal_timeout.emit()
+        pass
+
+    
 
 class d435():
     '''
@@ -336,6 +381,7 @@ class d435():
             if depthPixel[0]>=0 and depthPixel[1]>=0:
                 #print("depthPixel: ", depthPixel)
                 depth = depthFrame.get_distance(int(depthPixel[0]),int(depthPixel[1]))
+                depth = self.ma.calculate_moving_average_lock(depth)
 
                 # project depth pixel to 3D point
                 # x is right+, y is down+, z is forward+
@@ -394,7 +440,10 @@ class d435():
             depthPixel = [self.i, self.j]
             
             depth = depth_frame.get_distance(int(depthPixel[0]),int(depthPixel[1]))
-
+            
+            # Add lock value, Jason, 10 April 2024
+            depth = self.ma.calculate_moving_average_lock(depth)
+            
             # project depth pixel to 3D point
             # x is right+, y is down+, z is forward+
             self.point = rs.rs2_deproject_pixel_to_point(self.depthIntrinsics,[int(depthPixel[0]), int(depthPixel[1])], depth)
@@ -403,7 +452,8 @@ class d435():
             y = self.point[1]
             z = self.point[2]
 
-            #z = self.ma.calculate_moving_average(z)
+            # z = self.ma.calculate_moving_average(z)
+            # a = self.ma.calculate_moving_average_lock(z)
 
             self.point[2]=z
 
@@ -1135,6 +1185,7 @@ class App(QWidget):
                 self.video_thread.start()
 
                 self.logger = CustomProgressBarLogger()
+
             else:
                 raise Exception('exit from init')
 
@@ -1443,7 +1494,9 @@ class App(QWidget):
         self.lbl_msg.setText('%s, %s' %(timestamp,sMsg))
     
     def sendPacket(self):
-        global logger
+        global logger, SENDING_PACKET
+
+        SENDING_PACKET = True
 
         # clear lbl_info first
         self.showInfo('')
@@ -1540,7 +1593,8 @@ class App(QWidget):
         else:
             print('data transmission failed')
             logger.add_data('tx failed')
-    
+        
+        return
 
     def updatePingResults(self,results):
         if results[0]:
@@ -1627,8 +1681,6 @@ class App(QWidget):
                 if self.adminRole:
                     self.setTargetPos(self.targetPos)
 
-
-
             self.text_label.appendPlainText(
                 f"Clicked on [{mouse_position.x()},{mouse_position.y()}]")
             row = int(mouse_position.y()) // (WINDOW_HEIGHT // 4)
@@ -1636,8 +1688,27 @@ class App(QWidget):
             print(row, col)
             area = row * 4 + col + 1
             self.text_label.appendPlainText(f"Area: {area}")
+
+            # Added for 3d coordinates, Jason, 10 April 2024
+            # The packet will be sent in 2 seconds after mouse click
+            # The 3d coordinates may not be stable, and can be zeros if the variance is too large
+            if not hasattr(self, 'mouse_press_timer'):
+                self.mouse_press_timer = QTimer()
+                self.mouse_press_timer.setSingleShot(True)
+                self.mouse_press_timer.timeout.connect(self.send_3d_point)
+            if not self.mouse_press_timer.isActive():
+                print('start mouse press timer')
+                self.mouse_press_timer.start(2000)  
             # message = create_and_send_packet(HOST,PORT, area.to_bytes( 2, byteorder='big'))
             Test_delay_function()
+
+
+    def send_3d_point(self):
+        if not SENDING_PACKET:
+            self.sendPacket()
+        else:
+            self.mouse_press_timer.start(2000)
+        # self.sendPacket()
 
     def record_button_clicked(self):
         global START_RECORDING, VIDEO_NAME, AUDIO_NAME, OUTPUT_NAME
