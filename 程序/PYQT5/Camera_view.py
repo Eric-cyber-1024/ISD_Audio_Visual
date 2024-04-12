@@ -1751,10 +1751,11 @@ class App(QWidget):
             #self.audio_outCtrl.start_stop_recording(self.RECORDING)
             self.audio_thread.requestInterruption()
             print("OUTPUT_NAME: ", OUTPUT_NAME)
-            self.combine_thread = VideoAudioThread(VIDEO_NAME,AUDIO_NAME,OUTPUT_NAME, self.logger)
-            self.combine_thread.start_writing.connect(self.show_progress_dialog)
-            self.logger.signal_emitter.percentage_changed_signal.connect(self.update_progress_dialog)
-            self.combine_thread.start()
+            # revised[not to combine video, audio],Brian,11 April 2024
+            # self.combine_thread = VideoAudioThread(VIDEO_NAME,AUDIO_NAME,OUTPUT_NAME, self.logger)
+            # self.combine_thread.start_writing.connect(self.show_progress_dialog)
+            # self.logger.signal_emitter.percentage_changed_signal.connect(self.update_progress_dialog)
+            # self.combine_thread.start()
 
     def mic_on_off_button_clicked(self):
         self.MIC_ON = not self.MIC_ON
