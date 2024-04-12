@@ -54,6 +54,7 @@ MIC_ON = True
 SOUND_ON = True
 DEBUG = False
 ALIGNED_FRAMES = False
+FILTERED_FRAMES = False
 SENDING_PACKET = False
 sVersion='0.1.3'
 
@@ -409,7 +410,7 @@ class d435():
 
     # Jason - 8 April 2024 - Aligned Frames
     def getFrameWithAlignedFrames(self,mousex,mousey):
-        global DEBUG
+        global DEBUG, FILTERED_FRAMES
 
         self.i = mousex
         self.j = mousey
@@ -425,6 +426,26 @@ class d435():
             depth_frame = aligned_frameset.get_depth_frame()
             color_frame = aligned_frameset.get_color_frame()
 
+            # # test filters for depth frame, Jason, 12 April 2024
+            # Depth Frame >> Decimation Filter >> Depth2Disparity Transform** 
+            # -> Spatial Filter >> Temporal Filter >> Disparity2Depth Transform** 
+            # >> Hole Filling Filter >> Filtered Depth.
+            if FILTERED_FRAMES:
+                filtered_depth_frame = depth_frame
+                dec_filter = rs.decimation_filter()
+                depth_to_disparity = rs.disparity_transform(True)
+                spat_filter = rs.spatial_filter()
+                temp_filter = rs.temporal_filter()
+                disparity_to_depth = rs.disparity_transform(False)
+                hole_filling = rs.hole_filling_filter()
+
+                # filtered_depth_frame = dec_filter.process(filtered_depth_frame)
+                filtered_depth_frame = depth_to_disparity.process(filtered_depth_frame)
+                filtered_depth_frame = spat_filter.process(filtered_depth_frame)
+                filtered_depth_frame = temp_filter.process(filtered_depth_frame) #need more frames
+                filtered_depth_frame = disparity_to_depth.process(filtered_depth_frame)
+                filtered_depth_frame = hole_filling.process(filtered_depth_frame)
+
             # Validate that both frames are valid
             if not depth_frame or not color_frame:
                 return None,None,None
@@ -432,7 +453,7 @@ class d435():
             # Convert the images to numpy arrays
             depth_image = np.asanyarray(depth_frame.get_data())
             color_image = np.asanyarray(color_frame.get_data())
-            
+
             # # project color pixel to depth pixel, need to check as it is not accurate for same resolution
             # depthPixel = rs.rs2_project_color_pixel_to_depth_pixel(
             #     depth_frame.get_data(), self.depthScale, self.depthMin,
@@ -440,16 +461,16 @@ class d435():
             #     self.depthToColorExtrinsics, self.colorToDepthExtrinsics, [self.i, self.j])
             
             depthPixel = [self.i, self.j]
-            
+
             depth = depth_frame.get_distance(int(depthPixel[0]),int(depthPixel[1]))
-            
+
             # Add lock value, Jason, 10 April 2024
             depth = self.ma.calculate_moving_average_lock(depth)
-            
+
             # project depth pixel to 3D point
             # x is right+, y is down+, z is forward+
             self.point = rs.rs2_deproject_pixel_to_point(self.depthIntrinsics,[int(depthPixel[0]), int(depthPixel[1])], depth)
-            
+
             x = self.point[0]
             y = self.point[1]
             z = self.point[2]
@@ -463,7 +484,10 @@ class d435():
             self.iPrev = self.i
             self.jPrev = self.j
 
-            return color_image,depth_frame,self.point
+            if FILTERED_FRAMES:
+                return color_image,filtered_depth_frame,self.point
+            else:
+                return color_image,depth_frame,self.point
         except:
             print("getFrameWithAlignedFrames Failed")
             return None,None,None
@@ -609,6 +633,12 @@ class VideoThread(QThread):
                         if hasattr(self, 'depth_frame'):
                             depth_colormap = np.asanyarray(self.d435.colorizer.colorize(self.depth_frame).get_data())
                             alpha = 0.5
+                            # print("depth_colormap size: ", depth_colormap.shape)
+                            # print("cv_img size: ", self.cv_img.shape)
+                            if FILTERED_FRAMES:
+                                if depth_colormap.shape[0]<720:
+                                    depth_colormap = self.rescale_frame(depth_colormap,200)
+
                             self.cv_img = cv2.addWeighted(depth_colormap, alpha, self.cv_img, 1 - alpha, 0 )
                         else:
                             print("no depth_frame")
@@ -1253,9 +1283,18 @@ class App(QWidget):
 
     # Jason - 8 April 2024 - Aligned Frames
     def toggleAlignedFramesMode(self):
-        global ALIGNED_FRAMES
+        global ALIGNED_FRAMES, FILTERED_FRAMES
         ALIGNED_FRAMES = not ALIGNED_FRAMES
+        if not ALIGNED_FRAMES:
+            FILTERED_FRAMES = False
         print("ALIGNED_FRAMES: ", ALIGNED_FRAMES)
+
+    # Added, Jason - 12 April 2024
+    def toggleFilteredFramesMode(self):
+        global ALIGNED_FRAMES, FILTERED_FRAMES
+        if ALIGNED_FRAMES:
+            FILTERED_FRAMES = not FILTERED_FRAMES
+        print("FILTERED_FRAMES: ", FILTERED_FRAMES)
 
     def exitAdminMode(self):
         '''
@@ -1302,12 +1341,16 @@ class App(QWidget):
         btnToggleAlignedFrames = QPushButton('Toggle Aligned Frames Mode')
         btnToggleAlignedFrames.clicked.connect(self.toggleAlignedFramesMode)
 
+        btnToggleFilteredFrames = QPushButton('Toggle Filtered Mode')
+        btnToggleFilteredFrames.clicked.connect(self.toggleFilteredFramesMode)
+
         btnExitAdminMode= QPushButton('Exit Admin Mode')
         btnExitAdminMode.clicked.connect(self.exitAdminMode)
 
         adminLayout.addWidget(btnTestMode)
         adminLayout.addWidget(btnToggleDebug)
         adminLayout.addWidget(btnToggleAlignedFrames)
+        adminLayout.addWidget(btnToggleFilteredFrames)
         adminLayout.addWidget(btnExitAdminMode)
 
         adminFrame = QFrame()
@@ -1516,8 +1559,6 @@ class App(QWidget):
     def sendPacket(self):
         global logger, SENDING_PACKET
 
-        SENDING_PACKET = True
-
         # clear lbl_info first
         self.showInfo('')
         sendBuf=b'SET0'
@@ -1602,8 +1643,7 @@ class App(QWidget):
             
         # append packet to sendBuf
         sendBuf += packet
-        
-        logger.add_data('data,%s,%s,%s' %(bytes(sendBuf),np.array2string(refDelay),np.array2string(self.targetPos)))
+        logger.add_data('data,%s,%s,%s' %(bytes(sendBuf),np.array2string(refDelay),np.array2string(np.array(self.targetPos))))
 
 
         if send_and_receive_packet(self.hostIP,self.hostPort,sendBuf,timeout=3):
@@ -1613,8 +1653,6 @@ class App(QWidget):
         else:
             print('data transmission failed')
             logger.add_data('tx failed')
-        
-        return
 
     def updatePingResults(self,results):
         if results[0]:
@@ -1712,22 +1750,42 @@ class App(QWidget):
             # Added for 3d coordinates, Jason, 10 April 2024
             # The packet will be sent in 2 seconds after mouse click
             # The 3d coordinates may not be stable, and can be zeros if the variance is too large
-            if not hasattr(self, 'mouse_press_timer'):
-                self.mouse_press_timer = QTimer()
-                self.mouse_press_timer.setSingleShot(True)
-                self.mouse_press_timer.timeout.connect(self.send_3d_point)
-            if not self.mouse_press_timer.isActive():
-                print('start mouse press timer')
-                self.mouse_press_timer.start(2000)  
+            if self.adminRole:
+                if not hasattr(self, 'mouse_press_timer'):
+                    self.mouse_press_timer = QTimer()
+                    self.mouse_press_timer.setSingleShot(True)
+                    self.mouse_press_timer.timeout.connect(self.send_3d_point)
+                if not self.mouse_press_timer.isActive():
+                    print('start mouse press timer')
+                    self.mouse_press_timer.start(2000)  
             # message = create_and_send_packet(HOST,PORT, area.to_bytes( 2, byteorder='big'))
             Test_delay_function()
 
+    # Added for 3d coordinates, Jason, 11 April 2024
+    def on_send_packed_finished(self):
+        global SENDING_PACKET
+        print('on_send_packed_finished')
+        SENDING_PACKET = False
 
+    # Added for 3d coordinates, Jason, 11 April 2024
     def send_3d_point(self):
+        global SENDING_PACKET
+
         if not SENDING_PACKET:
-            self.sendPacket()
+            self.thread_send_packet = QThread()
+            print("self.targetPos: ", self.targetPos)
+            self.thread_send_packet.run = self.sendPacket
+            self.thread_send_packet.finished.connect(self.on_send_packed_finished)
+            # self.sendPacket()
+            SENDING_PACKET = True
+            print(self.targetPos)
+            print('Start sending packet')
+            self.thread_send_packet.start()
+            
         else:
+            print('Waiting for sending the last packet...')
             self.mouse_press_timer.start(2000)
+
         # self.sendPacket()
 
     def record_button_clicked(self):
