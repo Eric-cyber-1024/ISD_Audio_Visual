@@ -114,6 +114,7 @@ class paramsDialog:
         self.en_BM_MC_ctrl = 0
         self.offsets= np.array([0,0,0])
         self.srcPos = np.array([0,0,0])
+        self.manualDelayConfig = tk.IntVar() # 1-- configure delays manually
         
         self.create_dialog_box()
 
@@ -208,6 +209,7 @@ class paramsDialog:
         self.sMicDelay  = '-1'
         self.sSetTest   = '-1'
         self.sSrcPos    = '-1,-1,-1'
+        self.manualDelayConfig.set(0)
         
         # Destroy the dialog box
         #self.dialog_box.destroy()
@@ -278,6 +280,12 @@ class paramsDialog:
         # revise[added message13],Brian, 28 Mar 2024
         message13 = int(self.en_BM_MC_ctrl) # en_BM_MC_ctrl
  
+        # check to configure delays manually or not
+        if self.manualDelayConfig.get()==1:
+            # pop up UI to fill in delay values manually
+            pass
+        else:
+            pass
         
         _,refDelay,_ = delay_calculation(self.srcPos,self.offsets[0],self.offsets[1],self.offsets[2])   
         refDelay = refDelay*48e3
@@ -319,6 +327,9 @@ class paramsDialog:
         else:
             print('data transmission failed')
             logger.add_data('tx failed')
+
+    
+    
     
     def create_dialog_box(self):
 
@@ -444,7 +455,14 @@ class paramsDialog:
         self.point_selection = PointSelectionGUI(self.dialog_box, points,self.send_message)
         self.point_selection.pack(side=tk.LEFT, padx=10, pady=10)
 
-
+        # Add checkbox to have manual delay configuration or not
+        ckbx_ManualDelayConfig = ttk.Checkbutton(self.dialog_box,text='Manual Delay Config',
+                                                 onvalue=1,offvalue=0,
+                                                 variable=self.manualDelayConfig)
+        
+        ckbx_ManualDelayConfig.pack()
+        self.manualDelayConfig.set(0) # not checked by default
+        
         btnSendPacket = ttk.Button(self.dialog_box, text="Send Packet", command=self.sendPacket)
         btnSendPacket.pack(side=tk.LEFT)
 
