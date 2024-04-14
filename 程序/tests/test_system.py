@@ -25,7 +25,69 @@ MIC_NUMBER=32
 HOST_NAME ='192.168.1.40'
 PORT      =5004
 INDEX =[x for x in range (MIC_NUMBER )]
-sVersion = '0.5'
+sVersion = '0.6'
+
+
+class labeledTextbox:
+    '''
+    a new class for new ttk widget -- label + Entry
+
+    '''
+    def __init__(self, master, label_text, enabled=True):
+        self.label = ttk.Label(master, text=label_text)
+        self.textbox = ttk.Entry(master, state='normal' if enabled else 'disabled')
+
+class manualDelayConfigGUI():
+    def __init__(self,micEnableList):
+        '''
+
+        micEnableList is a list to ocntrol which mic to be enabled, 0--disable, 1--enable
+
+        '''
+        self.dialog_box = tk.Tk()
+        self.micNames=["M{:02d}".format(i) for i in range(1, 33)]
+        self.micEnableList = micEnableList
+
+        self.labels_and_textboxes = []
+
+        # create GUI
+        self.create_dialog_box()
+
+    def create_dialog_box(self):
+        '''
+        generate GUI according to self.micEnableList
+
+        GUI layout will be 4 columns by 8 rows
+
+        1 -- 9 -- 17 -- 25
+        .................
+        8 -- 16-- 24 -- 32
+
+        **M00 will not be displayed as it's a virtual microphone
+
+        '''
+        self.dialog_box.title("Manual Delay Configuration")
+
+        
+        for i in range(32):
+            label_text = self.micNames[i]
+            enabled = self.micEnableList[i]  # Replace with your actual list
+            pair = labeledTextbox(self.dialog_box, label_text, enabled)
+            self.labels_and_textboxes.append(pair)
+
+        # Arrange the labeled textboxes in a 4x8 grid
+        for i, pair in enumerate(self.labels_and_textboxes):
+            row, col = divmod(i, 8)
+            pair.label.grid(row=col, column=2*row, sticky='e')
+            pair.textbox.grid(row=col, column=2*row+1, sticky='w')
+
+        self.dialog_box.mainloop()
+
+def fetchParamsFromUI(self):
+    '''
+    fetch delays from GUI
+
+    '''
 
 
 class PointSelectionGUI(tk.Frame):
@@ -283,7 +345,8 @@ class paramsDialog:
         # check to configure delays manually or not
         if self.manualDelayConfig.get()==1:
             # pop up UI to fill in delay values manually
-            pass
+            micEnableList = [1 if i in (0, 8, 16, 24) else 0 for i in range(32)]
+            manualDelayConfigGUI(micEnableList)
         else:
             pass
         
