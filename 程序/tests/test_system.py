@@ -35,20 +35,38 @@ class labeledTextbox:
     '''
     def __init__(self, master, label_text, enabled=True):
         self.label = ttk.Label(master, text=label_text)
-        self.textbox = ttk.Entry(master, state='normal' if enabled else 'disabled')
+        self.textbox = ttk.Entry(master,state='normal' if enabled else 'disabled')
+        self.textbox.insert(tk.END,'0')
+
+
+class MyDialog:
+    def __init__(self, parent):
+        self.top = tk.Toplevel(parent)
+        self.top.title("Pop-up Dialog")
+
+        # Add widgets to the new dialog
+        self.label = ttk.Label(self.top, text="This is a pop-up dialog.")
+        self.label.pack()
+
+        self.close_button = ttk.Button(self.top, text="Close", command=self.close_popup)
+        self.close_button.pack()
+
+    def close_popup(self):
+        self.top.destroy()
 
 class manualDelayConfigGUI():
-    def __init__(self,micEnableList):
+    def __init__(self,parent,micEnableList):
         '''
 
         micEnableList is a list to ocntrol which mic to be enabled, 0--disable, 1--enable
 
         '''
-        self.dialog_box = tk.Tk()
+        self.top = tk.Toplevel(parent)
         self.micNames=["M{:02d}".format(i) for i in range(1, 33)]
         self.micEnableList = micEnableList
 
         self.labels_and_textboxes = []
+        self.delayValues = []
 
         # create GUI
         self.create_dialog_box()
@@ -66,13 +84,13 @@ class manualDelayConfigGUI():
         **M00 will not be displayed as it's a virtual microphone
 
         '''
-        self.dialog_box.title("Manual Delay Configuration")
+        self.top.title("Manual Delay Configuration")
 
         
         for i in range(32):
             label_text = self.micNames[i]
             enabled = self.micEnableList[i]  # Replace with your actual list
-            pair = labeledTextbox(self.dialog_box, label_text, enabled)
+            pair = labeledTextbox(self.top, label_text, enabled)
             self.labels_and_textboxes.append(pair)
 
         # Arrange the labeled textboxes in a 4x8 grid
@@ -81,13 +99,31 @@ class manualDelayConfigGUI():
             pair.label.grid(row=col, column=2*row, sticky='e')
             pair.textbox.grid(row=col, column=2*row+1, sticky='w')
 
-        self.dialog_box.mainloop()
+        btnOKPacket = ttk.Button(self.top, text="OK", command=self.fetchParamsFromUI)
+        btnOKPacket.grid(row=9)
 
-def fetchParamsFromUI(self):
-    '''
-    fetch delays from GUI
 
-    '''
+    def fetchParamsFromUI(self):
+        '''
+        fetch delays from GUI
+
+        if textboxes are disabled, will return 0
+
+        '''
+        
+        for pair in self.labels_and_textboxes:
+            value = pair.textbox.get()
+            try:
+                delayVal = float(value)
+            except:
+                delayVal = 0.0
+
+            self.delayValues.append(delayVal)
+        
+        
+        self.top.destroy()
+        print('destroyed',self.delayValues)
+
 
 
 class PointSelectionGUI(tk.Frame):
@@ -346,50 +382,52 @@ class paramsDialog:
         if self.manualDelayConfig.get()==1:
             # pop up UI to fill in delay values manually
             micEnableList = [1 if i in (0, 8, 16, 24) else 0 for i in range(32)]
-            manualDelayConfigGUI(micEnableList)
+            delayConfigGUI = manualDelayConfigGUI(self.dialog_box,micEnableList)
+            # for pop up GUI to end
+            self.dialog_box.wait_window(delayConfigGUI.top)
+            print(delayConfigGUI.delayValues)
         else:
-            pass
-        
-        _,refDelay,_ = delay_calculation(self.srcPos,self.offsets[0],self.offsets[1],self.offsets[2])   
-        refDelay = refDelay*48e3
-        refDelay = np.max(refDelay)-refDelay
-        refDelay = np.round(refDelay)
+            # get delays based on formula and send packet to FPGA
+            _,refDelay,_ = delay_calculation(self.srcPos,self.offsets[0],self.offsets[1],self.offsets[2])   
+            refDelay = refDelay*48e3
+            refDelay = np.max(refDelay)-refDelay
+            refDelay = np.round(refDelay)
 
-        #convert refDelay to byte
-        #but make sure that they are within 0 to 255 first!!
-        assert (refDelay>=0).all() and (refDelay<=255).all()
+            #convert refDelay to byte
+            #but make sure that they are within 0 to 255 first!!
+            assert (refDelay>=0).all() and (refDelay<=255).all()
+
+                
+            refDelay = refDelay.astype(np.uint8)
+            payload = refDelay.tobytes()
+            print('refDelay',refDelay)
+            print('payload',payload)
+            print('sendBuf',sendBuf)
 
             
-        refDelay = refDelay.astype(np.uint8)
-        payload = refDelay.tobytes()
-        print('refDelay',refDelay)
-        print('payload',payload)
-        print('sendBuf',sendBuf)
 
-        
-
-        
-        packet = prepareMicDelaysPacket(payload)
-        if validateMicDelaysPacket(packet):
-            print('packet ok')
-        else:
-            print('packet not ok')
             
-        sendBuf=bytes([message1,message2,message3,message4,message5,message6,message7,message8,message9,message10,message11,message12,message13])
+            packet = prepareMicDelaysPacket(payload)
+            if validateMicDelaysPacket(packet):
+                print('packet ok')
+            else:
+                print('packet not ok')
+                
+            sendBuf=bytes([message1,message2,message3,message4,message5,message6,message7,message8,message9,message10,message11,message12,message13])
+                
+            # append packet to sendBuf
+            sendBuf += packet
             
-        # append packet to sendBuf
-        sendBuf += packet
-        
-        logger.add_data('data,%s,%s,%s' %(bytes(sendBuf),np.array2string(refDelay),np.array2string(self.srcPos)))
+            logger.add_data('data,%s,%s,%s' %(bytes(sendBuf),np.array2string(refDelay),np.array2string(self.srcPos)))
 
 
-        if send_and_receive_packet(self.hostIP,self.hostPort,sendBuf,timeout=3):
-            print('data transmission ok')
-            self.showInfo('tx ok')
-            logger.add_data('tx ok')
-        else:
-            print('data transmission failed')
-            logger.add_data('tx failed')
+            if send_and_receive_packet(self.hostIP,self.hostPort,sendBuf,timeout=3):
+                print('data transmission ok')
+                self.showInfo('tx ok')
+                logger.add_data('tx ok')
+            else:
+                print('data transmission failed')
+                logger.add_data('tx failed')
 
     
     
