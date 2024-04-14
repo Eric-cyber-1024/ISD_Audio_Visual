@@ -66,7 +66,7 @@ class manualDelayConfigGUI():
         self.micEnableList = micEnableList
 
         self.labels_and_textboxes = []
-        self.delayValues = []
+        self.delayValues = np.zeros((33))
 
         # create GUI
         self.create_dialog_box()
@@ -105,24 +105,25 @@ class manualDelayConfigGUI():
 
     def fetchParamsFromUI(self):
         '''
-        fetch delays from GUI
+        fetch delays(in us!!) from GUI
 
         if textboxes are disabled, will return 0
 
         '''
         
-        for pair in self.labels_and_textboxes:
+        for i,pair in enumerate(self.labels_and_textboxes):
             value = pair.textbox.get()
             try:
                 delayVal = float(value)
             except:
                 delayVal = 0.0
 
-            self.delayValues.append(delayVal)
+            # remember delayVal is in us!!
+            self.delayValues[i+1]=delayVal*1e-6
         
         
         self.top.destroy()
-        print('destroyed',self.delayValues)
+        # print('destroyed',self.delayValues)
 
 
 
@@ -385,49 +386,54 @@ class paramsDialog:
             delayConfigGUI = manualDelayConfigGUI(self.dialog_box,micEnableList)
             # for pop up GUI to end
             self.dialog_box.wait_window(delayConfigGUI.top)
-            print(delayConfigGUI.delayValues)
+
+            # prepare and send pack to FPGA based on delayConfigGUI.delayValues
+            # print(delayConfigGUI.delayValues)
+            refDelay = delayConfigGUI.delayValues
         else:
             # get delays based on formula and send packet to FPGA
             _,refDelay,_ = delay_calculation(self.srcPos,self.offsets[0],self.offsets[1],self.offsets[2])   
-            refDelay = refDelay*48e3
-            refDelay = np.max(refDelay)-refDelay
-            refDelay = np.round(refDelay)
+        
+        
+        refDelay = refDelay*48e3
+        refDelay = np.max(refDelay)-refDelay
+        refDelay = np.round(refDelay)
 
-            #convert refDelay to byte
-            #but make sure that they are within 0 to 255 first!!
-            assert (refDelay>=0).all() and (refDelay<=255).all()
-
-                
-            refDelay = refDelay.astype(np.uint8)
-            payload = refDelay.tobytes()
-            print('refDelay',refDelay)
-            print('payload',payload)
-            print('sendBuf',sendBuf)
+        #convert refDelay to byte
+        #but make sure that they are within 0 to 255 first!!
+        assert (refDelay>=0).all() and (refDelay<=255).all()
 
             
+        refDelay = refDelay.astype(np.uint8)
+        payload = refDelay.tobytes()
+        print('refDelay',refDelay)
+        print('payload',payload)
+        print('sendBuf',sendBuf)
 
+        
+
+        
+        packet = prepareMicDelaysPacket(payload)
+        if validateMicDelaysPacket(packet):
+            print('packet ok')
+        else:
+            print('packet not ok')
             
-            packet = prepareMicDelaysPacket(payload)
-            if validateMicDelaysPacket(packet):
-                print('packet ok')
-            else:
-                print('packet not ok')
-                
-            sendBuf=bytes([message1,message2,message3,message4,message5,message6,message7,message8,message9,message10,message11,message12,message13])
-                
-            # append packet to sendBuf
-            sendBuf += packet
+        sendBuf=bytes([message1,message2,message3,message4,message5,message6,message7,message8,message9,message10,message11,message12,message13])
             
-            logger.add_data('data,%s,%s,%s' %(bytes(sendBuf),np.array2string(refDelay),np.array2string(self.srcPos)))
+        # append packet to sendBuf
+        sendBuf += packet
+        
+        logger.add_data('data,%s,%s,%s' %(bytes(sendBuf),np.array2string(refDelay),np.array2string(self.srcPos)))
 
 
-            if send_and_receive_packet(self.hostIP,self.hostPort,sendBuf,timeout=3):
-                print('data transmission ok')
-                self.showInfo('tx ok')
-                logger.add_data('tx ok')
-            else:
-                print('data transmission failed')
-                logger.add_data('tx failed')
+        if send_and_receive_packet(self.hostIP,self.hostPort,sendBuf,timeout=3):
+            print('data transmission ok')
+            self.showInfo('tx ok')
+            logger.add_data('tx ok')
+        else:
+            print('data transmission failed')
+            logger.add_data('tx failed')
 
     
     
