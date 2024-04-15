@@ -394,7 +394,8 @@ class paramsDialog:
             # get delays based on formula and send packet to FPGA
             _,refDelay,_ = delay_calculation(self.srcPos,self.offsets[0],self.offsets[1],self.offsets[2])   
         
-        
+        # revise[should not include m00],Brian,15 April 2024
+        refDelay = refDelay[1:]
         refDelay = refDelay*48e3
         refDelay = np.max(refDelay)-refDelay
         refDelay = np.round(refDelay)
