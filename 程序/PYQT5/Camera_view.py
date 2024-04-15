@@ -1615,6 +1615,8 @@ class App(QWidget):
  
         
         _,refDelay,_ = delay_calculation(self.targetPos,self.offsets[0],self.offsets[1],self.offsets[2])   
+        # revise[should not include m00],Brian,15 April 204
+        refDelay = refDelay[1:]
         refDelay = refDelay*48e3
         refDelay = np.max(refDelay)-refDelay
         refDelay = np.round(refDelay)
