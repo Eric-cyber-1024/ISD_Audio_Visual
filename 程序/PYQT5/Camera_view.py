@@ -1,4 +1,4 @@
-from pywinauto import Desktop  # add this to handle UI scaling issue
+#from pywinauto import Desktop  # add this to handle UI scaling issue
 from PyQt5 import QtGui
 from PyQt5.QtWidgets import *
 from PyQt5.QtCore import *
@@ -314,7 +314,7 @@ class d435():
 
         # for visualization
         self.depthMin = 0.1  #meter
-        self.depthMax = 10.0  #meter
+        self.depthMax = 15.0  #meter
 
         # 2D image coordinate
         self.i=0  # from mouse x
@@ -1761,7 +1761,7 @@ class App(QWidget):
                     print('start mouse press timer')
                     self.mouse_press_timer.start(2000)  
             # message = create_and_send_packet(HOST,PORT, area.to_bytes( 2, byteorder='big'))
-            Test_delay_function()
+            #Test_delay_function()
 
     # Added for 3d coordinates, Jason, 11 April 2024
     def on_send_packed_finished(self):
@@ -1776,9 +1776,9 @@ class App(QWidget):
         if not SENDING_PACKET:
             self.thread_send_packet = QThread()
             print("self.targetPos: ", self.targetPos)
-            self.thread_send_packet.run = self.sendPacket
-            self.thread_send_packet.finished.connect(self.on_send_packed_finished)
-            # self.sendPacket()
+            # self.thread_send_packet.run = self.sendPacket
+            # self.thread_send_packet.finished.connect(self.on_send_packed_finished)
+            # # self.sendPacket()
             SENDING_PACKET = True
             print(self.targetPos)
             print('Start sending packet')
