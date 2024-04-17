@@ -46,32 +46,73 @@ MIC_NAMES      = np.array([
 ],dtype='U3')
 
 
-def getMicPositions(xOffset,yOffset,zOffset):
+def getMicPositions(xOffset,yOffset,zOffset,toUseYAML=False):
     '''
     
     get 3d coordinates of the microphones of the microphone array
 
+    toUseYAML: True to read mic names and mic locations
+
     '''
-    angles= np.arange(0,2*np.pi,np.pi/8)
-    angles2=np.arange(0,2*np.pi,np.pi/4)
+    if not toUseYAML:
+        angles= np.arange(0,2*np.pi,np.pi/8)
+        angles2=np.arange(0,2*np.pi,np.pi/4)
 
-    outer = OUTER_RADIUS*np.array([np.sin(angles),np.cos(angles)])
-    mid   = MID_RADIUS*np.array([np.sin(angles2+np.pi/8),np.cos(angles2+np.pi/8)])
-    inner = INNER_RADIUS*np.array([np.sin(angles2),np.cos(angles2)])
-    ref   = np.array([[0],[0]]) # at the center of the microphone array, a virtual one
+        outer = OUTER_RADIUS*np.array([np.sin(angles),np.cos(angles)])
+        mid   = MID_RADIUS*np.array([np.sin(angles2+np.pi/8),np.cos(angles2+np.pi/8)])
+        inner = INNER_RADIUS*np.array([np.sin(angles2),np.cos(angles2)])
+        ref   = np.array([[0],[0]]) # at the center of the microphone array, a virtual one
 
-    overall = np.concatenate((outer,inner,mid,ref),axis=1)
-    overall = np.concatenate([overall,np.zeros((1,NUM_OF_MICS+1))],axis=0)
+        overall = np.concatenate((outer,inner,mid,ref),axis=1)
+        overall = np.concatenate([overall,np.zeros((1,NUM_OF_MICS+1))],axis=0)
 
-    overall[0,:]+=xOffset
-    overall[1,:]+=yOffset
-    overall[2,:]+=zOffset
-    
-    sorted_indices = np.argsort(MIC_NAMES)
-    overall = overall[:,sorted_indices]
-    return overall.T
+        overall[0,:]+=xOffset
+        overall[1,:]+=yOffset
+        overall[2,:]+=zOffset
+        
+        sorted_indices = np.argsort(MIC_NAMES)
+        overall = overall[:,sorted_indices]
+        return overall.T
+    else:
+        # load miclocs.yaml
+        with open('miclocs.yaml', 'r') as file:
+            miclocs= yaml.safe_load(file)
 
-def delay_calculation(src_position,xOffset,yOffset,zOffset):
+
+        # create overall as a numpy array of shape (3,33)
+        overall = np.zeros((3,NUM_OF_MICS+1),dtype=float)
+
+        # get the selected mic indices
+        selectedIndices = [int(v['mic name'][1:]) for v in miclocs]
+
+        # fill in overall from miclocs
+        # if within the selectedIndices, fill in values from miclocs
+        # otherwise, fill in values from selectedIndices[0]
+        for i in range(NUM_OF_MICS+1):
+            if i in selectedIndices:
+                # fill in overall[i] with selectedIndices.index(i)
+                overall[:,i] = miclocs[selectedIndices.index(i)]['location']
+            else:
+                # fill in values from selectedIndices[0]
+                overall[:,i] = miclocs[selectedIndices.index(1)]['location']
+
+
+        
+
+        
+
+        # remember that overall should be aligned with sorted_micNames!!, so the it should be like M00, M01, ...etc.
+        return overall.T
+
+
+
+        # add offsets
+
+
+        
+        return None
+
+def delay_calculation(src_position,xOffset,yOffset,zOffset,toUseYAML=False):
     '''
     Calculates the delay phase for a given source position based on the microphone positions.
 
@@ -89,7 +130,7 @@ def delay_calculation(src_position,xOffset,yOffset,zOffset):
     src_position = np.array(src_position)  # this_location=[6, actual.x, acutal.y]
     
     
-    mic_position = getMicPositions(xOffset,yOffset,zOffset)  # getting mic position
+    mic_position = getMicPositions(xOffset,yOffset,zOffset,toUseYAML)  # getting mic position
 
     sorted_micNames = np.sort(MIC_NAMES)
     
