@@ -56,7 +56,7 @@ DEBUG = False
 ALIGNED_FRAMES = False
 FILTERED_FRAMES = False
 SENDING_PACKET = False
-sVersion='0.1.3'
+sVersion='0.1.4'
 
 def resource_path(relative_path):
     try:
