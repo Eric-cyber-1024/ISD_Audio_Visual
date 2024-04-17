@@ -25,7 +25,7 @@ MIC_NUMBER=32
 HOST_NAME ='192.168.1.40'
 PORT      =5004
 INDEX =[x for x in range (MIC_NUMBER )]
-sVersion = '0.6'
+sVersion = '0.7'
 
 
 class labeledTextbox:
@@ -214,6 +214,8 @@ class paramsDialog:
         self.offsets= np.array([0,0,0])
         self.srcPos = np.array([0,0,0])
         self.manualDelayConfig = tk.IntVar() # 1-- configure delays manually
+        self.fourMics          = tk.IntVar() # 1-- 4 mics case (will set toUseYAML True)
+        self.toUseYAML = False               # true for four mic case
         
         self.create_dialog_box()
 
@@ -242,6 +244,7 @@ class paramsDialog:
 
     def printParams(self):
         print(self.hostIP,self.hostPort,self.mode,self.micIndx,self.micGain,self.setTest,self.den_out_sel,self.mc_beta_sel,self.mc_K_sel,self.srcPos,self.offsets)
+        print(self.toUseYAML)
         # add[save to log as well],Brian,27 Mar 2024
         logger.add_data(self.__str__())
 
@@ -268,6 +271,15 @@ class paramsDialog:
 
         self.srcPos     = np.array(self.tbx_srcPos.get().split(','), dtype=float)
         self.offsets    = np.array(self.tbx_offsets.get().split(','), dtype=float)
+
+
+        if self.fourMics.get()==1:
+            self.toUseYAML  = True
+        else:
+            self.toUseYAML  = False
+    
+
+        
 
         # removed,Brian,27 Mar 2024
         # self.sMode      = self.cbx_mode.get()
@@ -309,6 +321,7 @@ class paramsDialog:
         self.sSetTest   = '-1'
         self.sSrcPos    = '-1,-1,-1'
         self.manualDelayConfig.set(0)
+        self.toUseYAML  = False
         
         # Destroy the dialog box
         #self.dialog_box.destroy()
@@ -333,6 +346,8 @@ class paramsDialog:
         
         self.fetchParamsFromUI()
         self.printParams()
+
+
     
         #Z=distance between camera and object, x is left+/right-, y is down+/up-
         this_location=[6, 0.2, 0.3]
@@ -392,7 +407,7 @@ class paramsDialog:
             refDelay = delayConfigGUI.delayValues
         else:
             # get delays based on formula and send packet to FPGA
-            _,refDelay,_ = delay_calculation(self.srcPos,self.offsets[0],self.offsets[1],self.offsets[2])   
+            _,refDelay,_ = delay_calculation(self.srcPos,self.offsets[0],self.offsets[1],self.offsets[2],self.toUseYAML)   
         
         # revise[should not include m00],Brian,15 April 2024
         refDelay = refDelay[1:]
@@ -411,7 +426,7 @@ class paramsDialog:
         print('payload',payload)
         print('sendBuf',sendBuf)
 
-        
+        return
 
         
         packet = prepareMicDelaysPacket(payload)
@@ -570,6 +585,13 @@ class paramsDialog:
         
         ckbx_ManualDelayConfig.pack()
         self.manualDelayConfig.set(0) # not checked by default
+
+        ckbx_fourMics = ttk.Checkbutton(self.dialog_box,text='4 Mics',
+                                                 onvalue=1,offvalue=0,
+                                                 variable=self.fourMics)
+        
+        ckbx_fourMics.pack()
+        self.fourMics.set(0) # not checked by default
         
         btnSendPacket = ttk.Button(self.dialog_box, text="Send Packet", command=self.sendPacket)
         btnSendPacket.pack(side=tk.LEFT)
