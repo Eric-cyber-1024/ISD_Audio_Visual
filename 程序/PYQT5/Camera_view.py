@@ -56,7 +56,7 @@ DEBUG = False
 ALIGNED_FRAMES = False
 FILTERED_FRAMES = False
 SENDING_PACKET = False
-sVersion='0.1.4'
+sVersion='0.1.5'
 
 def resource_path(relative_path):
     try:
@@ -620,7 +620,9 @@ class VideoThread(QThread):
                     x0 = int(x0*1./1.5)
                     y0 = int(y0*1./1.5)
 
-                self.cv_img, self.depth_frame, point = self.d435.getFrameWithAlignedFrames(mousex=x0,mousey=y0)
+                # found some problems, temperarily using getFrame, Brian, 19 April 2024
+                # self.cv_img, self.depth_frame, point = self.d435.getFrameWithAlignedFrames(mousex=x0,mousey=y0)
+                self.cv_img, self.depth_frame, point = self.d435.getFrame(mousex=x0,mousey=y0)
 
                 if point is not None:
                     # emit signal 
