@@ -239,7 +239,7 @@ class paramsDialog:
     #     self.tbx_srcPos   = sSrcPos
         
     def __str__(self):
-        return f"params,{self.hostIP}, {self.hostPort}, {self.mode},{self.micIndx},{self.micGain},{self.setTest},{self.den_out_sel},{self.mc_beta_sel},{self.mc_K_sel},[{self.srcPos[0]},{self.srcPos[1]},{self.srcPos[2]}],[{self.offsets[0]},{self.offsets[1]},{self.offsets[2]}]"
+        return f"params,{self.hostIP}, {self.hostPort}, {self.mode},{self.micIndx},{self.micGain},{self.setTest},{self.den_out_sel},{self.mc_beta_sel},{self.mc_K_sel},[{self.srcPos[0]},{self.srcPos[1]},{self.srcPos[2]}],[{self.offsets[0]},{self.offsets[1]},{self.offsets[2]}],{self.toUseYAML},{self.manualDelayConfig.get()}"
 
 
     def printParams(self):
@@ -423,7 +423,7 @@ class paramsDialog:
         refDelay = refDelay.astype(np.uint8)
         payload = refDelay.tobytes()
         print('refDelay',refDelay)
-        print('payload',payload)
+        print('payload',payload,len(payload))
         print('sendBuf',sendBuf)
 
         packet = prepareMicDelaysPacket(payload)
@@ -847,4 +847,4 @@ if __name__ == '__main__':
     params.printParams()
 
     logger.stop_logging()
-    exit()
+    # exit()
