@@ -409,6 +409,8 @@ class paramsDialog:
             # get delays based on formula and send packet to FPGA
             _,refDelay,_ = delay_calculation(self.srcPos,self.offsets[0],self.offsets[1],self.offsets[2],self.toUseYAML)   
         
+        # save a copy of the raw delay in us
+        rawDelay = refDelay[1:]*1e6
         # revise[should not include m00],Brian,15 April 2024
         refDelay = refDelay[1:]
         refDelay = refDelay*48e3
@@ -437,7 +439,7 @@ class paramsDialog:
         # append packet to sendBuf
         sendBuf += packet
         
-        logger.add_data('data,%s,%s,%s' %(bytes(sendBuf),np.array2string(refDelay),np.array2string(self.srcPos)))
+        logger.add_data('data,%s,%s,%s,%s' %(bytes(sendBuf),np.array2string(refDelay),np.array2string(self.srcPos),np.array2string(rawDelay)))
 
 
         if send_and_receive_packet(self.hostIP,self.hostPort,sendBuf,timeout=3):

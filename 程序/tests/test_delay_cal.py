@@ -96,7 +96,10 @@ def getMicPositions(xOffset,yOffset,zOffset,toUseYAML=False):
                 # fill in values from selectedIndices[0]
                 overall[:,i] = miclocs[selectedIndices.index(1)]['location']
 
-
+        # add back offsets 
+        overall[0,:]+=xOffset
+        overall[1,:]+=yOffset
+        overall[2,:]+=zOffset
         
 
         

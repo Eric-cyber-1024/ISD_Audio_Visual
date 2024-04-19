@@ -1,11 +1,11 @@
 - mic name: "M01"
-  location: [0.25, 0.16735, 0.0]
+  location: [0.3, 0.16735, 0.0]
 
 - mic name: "M09"
-  location: [0.25,-0.16735, 0.0]
+  location: [0.3,-0.16735, 0.0]
 
 - mic name: "M17"
-  location: [-0.25, 0.16735, 0.0]
+  location: [-0.28, 0.16735, 0.0]
 
 - mic name: "M25"
-  location: [-0.25,-0.16735, 0.0]
+  location: [-0.28,-0.16735, 0.0]
