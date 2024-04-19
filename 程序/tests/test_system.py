@@ -426,9 +426,6 @@ class paramsDialog:
         print('payload',payload)
         print('sendBuf',sendBuf)
 
-        return
-
-        
         packet = prepareMicDelaysPacket(payload)
         if validateMicDelaysPacket(packet):
             print('packet ok')
