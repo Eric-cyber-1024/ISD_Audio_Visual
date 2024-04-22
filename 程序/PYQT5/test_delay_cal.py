@@ -96,21 +96,16 @@ def getMicPositions(xOffset,yOffset,zOffset,toUseYAML=False):
                 # fill in values from selectedIndices[0]
                 overall[:,i] = miclocs[selectedIndices.index(1)]['location']
 
-
+        # add back offsets 
+        overall[0,:]+=xOffset
+        overall[1,:]+=yOffset
+        overall[2,:]+=zOffset
         
 
         
 
         # remember that overall should be aligned with sorted_micNames!!, so the it should be like M00, M01, ...etc.
         return overall.T
-
-
-
-        # add offsets
-
-
-        
-        return None
 
 def delay_calculation(src_position,xOffset,yOffset,zOffset,toUseYAML=False):
     '''
