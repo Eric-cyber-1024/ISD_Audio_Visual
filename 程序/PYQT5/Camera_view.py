@@ -56,7 +56,7 @@ DEBUG = False
 ALIGNED_FRAMES = False
 FILTERED_FRAMES = False
 SENDING_PACKET = False
-sVersion='0.1.4'
+sVersion='0.1.5'
 
 def resource_path(relative_path):
     try:
@@ -620,7 +620,8 @@ class VideoThread(QThread):
                     x0 = int(x0*1./1.5)
                     y0 = int(y0*1./1.5)
 
-                self.cv_img, self.depth_frame, point = self.d435.getFrameWithAlignedFrames(mousex=x0,mousey=y0)
+                # self.cv_img, self.depth_frame, point = self.d435.getFrameWithAlignedFrames(mousex=x0,mousey=y0)
+                self.cv_img, self.depth_frame, point = self.d435.getFrame(mousex=x0,mousey=y0)
 
                 if point is not None:
                     # emit signal 
@@ -818,7 +819,7 @@ class App(QWidget):
         # self.image_label.setMaximumSize(QSize(1600, 900))
         # self.image_label.setFixedSize(QSize(FRAME_WIDTH, FRAME_HEIGHT))
 
-        self.exit_button = Create_Button("Exit", lambda: exit(), BUTTON_STYLE_TEXT)
+        self.exit_button = Create_Button("Exit", lambda: self.exit_app(), BUTTON_STYLE_TEXT)
         # self.setting_button = Create_Button("Setting",lambda:switchPage(self,APP_PAGE.SETTING.value),BUTTON_STYLE)
         # self.record_button = Create_Button("Record",self.record_button_clicked,BUTTON_STYLE_RED)
 
@@ -1510,12 +1511,17 @@ class App(QWidget):
 
 
         return widget
+    
+
+    def __str__(self):
+        return f"params,{self.hostIP}, {self.hostPort}, {self.mode},{self.micIndx},{self.micGain},{self.setTest},{self.den_out_sel},{self.mc_beta_sel},{self.mc_K_sel},[{self.srcPos[0]},{self.srcPos[1]},{self.srcPos[2]}],[{self.offsets[0]},{self.offsets[1]},{self.offsets[2]}],{self.toUseYAML},{self.manualDelayConfig.get()}"
 
 
     def printParams(self):
+        global dataLogger
         print(self.hostIP,self.hostPort,self.mode,self.micIndx,self.micGain,self.setTest,self.den_out_sel,self.mc_beta_sel,self.mc_K_sel,self.targetPos,self.offsets)
         # add[save to log as well],Brian,27 Mar 2024
-        logger.add_data(self.__str__())
+        dataLogger.add_data(self.__str__())
 
     def fetchParamsFromUI(self):
 
@@ -1557,7 +1563,7 @@ class App(QWidget):
         self.lbl_msg.setText('%s, %s' %(timestamp,sMsg))
     
     def sendPacket(self):
-        global logger, SENDING_PACKET
+        global dataLogger, SENDING_PACKET
 
         # clear lbl_info first
         self.showInfo('')
@@ -1645,16 +1651,16 @@ class App(QWidget):
             
         # append packet to sendBuf
         sendBuf += packet
-        logger.add_data('data,%s,%s,%s' %(bytes(sendBuf),np.array2string(refDelay),np.array2string(np.array(self.targetPos))))
+        dataLogger.add_data('data,%s,%s,%s' %(bytes(sendBuf),np.array2string(refDelay),np.array2string(np.array(self.targetPos))))
 
 
         if send_and_receive_packet(self.hostIP,self.hostPort,sendBuf,timeout=3):
             print('data transmission ok')
             self.showInfo('tx ok')
-            logger.add_data('tx ok')
+            dataLogger.add_data('tx ok')
         else:
             print('data transmission failed')
-            logger.add_data('tx failed')
+            dataLogger.add_data('tx failed')
 
     def updatePingResults(self,results):
         if results[0]:
@@ -1762,6 +1768,7 @@ class App(QWidget):
                     self.mouse_press_timer.start(2000)  
             # message = create_and_send_packet(HOST,PORT, area.to_bytes( 2, byteorder='big'))
             #Test_delay_function()
+            #self.sendPacket()
 
     # Added for 3d coordinates, Jason, 11 April 2024
     def on_send_packed_finished(self):
@@ -1868,6 +1875,11 @@ class App(QWidget):
         self.video_progress_dialog.setValue(round(percentage))
 
 
+    def exit_app(self):
+        global dataLogger
+        dataLogger.stop_logging()
+        exit()
+
 if __name__ == "__main__":
 
     # Check if the folder exists
@@ -1880,8 +1892,9 @@ if __name__ == "__main__":
 
     # initialize logger
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    logger = DataLogger(log_interval=1, file_path="log/%s_sys.log" %(timestamp))  # Specify the data file path
-    logger.start_logging()
+    dataLogger = DataLogger(log_interval=1, file_path="log/%s_sys.log" %(timestamp))  # Specify the data file path
+    dataLogger.start_logging()
+    dataLogger.add_data('logger started...')
 
     # Create necessary DIR
     check_folder_existence(CURRENT_PATH+VIDEO_SAVE_DIRECTORY)
@@ -1902,9 +1915,8 @@ if __name__ == "__main__":
         a.show()
         print("w, h: ", a.image_label.width(), a.image_label.height())
         print("x, y: ", a.image_label.x(), a.image_label.y())
-        logger.stop_logging()
         exit(app.exec_())
     except Exception:
-        logger.stop_logging()
-        exit()
+        dataLogger.stop_logging()
+
         
