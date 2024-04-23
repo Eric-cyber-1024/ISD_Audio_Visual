@@ -499,23 +499,28 @@ class CameraSelectionDialog(QDialog):
         super().__init__()
 
         self.setWindowTitle("Camera Selection")
-        self.setFixedWidth(800)
-        self.setFixedHeight(200)
+        self.setFixedWidth(1000)
+        self.setFixedHeight(500)
         icon = QtGui.QIcon()
         icon.addPixmap(
             QtGui.QPixmap(
                 resource_path("mic_double_FILL0_wght400_GRAD0_opsz24.svg")),
             QtGui.QIcon.Normal, QtGui.QIcon.Off)
         self.setWindowIcon(icon)
+        self.lbl_dialogTitle = QLabel('Camera Selection')
+        self.lbl_dialogTitle.setStyleSheet(LABEL_STYLE_CAM_DIAG)
         self.camera_combo = QComboBox()
+        self.camera_combo.setStyleSheet(COMBO_STYLE_CAM_DIAG)
         self.camera_combo.addItems(camera_names)
 
         button_box = QDialogButtonBox(QDialogButtonBox.Ok
                                       | QDialogButtonBox.Cancel)
         button_box.accepted.connect(self.accept)
         button_box.rejected.connect(self.reject)
+        button_box.setStyleSheet(BUTTON_STYLE_CAM_DIAG)
 
         layout = QVBoxLayout()
+        layout.addWidget(self.lbl_dialogTitle)
         layout.addWidget(self.camera_combo)
         layout.addWidget(button_box)
 

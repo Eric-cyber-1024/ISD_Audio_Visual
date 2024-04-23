@@ -3,7 +3,7 @@ from comtypes import CLSCTX_ALL
 
 from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume, IMMDeviceEnumerator, EDataFlow, ERole, DEVICE_STATE
 from pycaw.constants import CLSID_MMDeviceEnumerator
-from PyQt5.QtWidgets import QApplication, QInputDialog, QMessageBox, QComboBox, QDialog, QDialogButtonBox, QVBoxLayout, QPushButton
+from PyQt5.QtWidgets import QApplication, QInputDialog, QMessageBox, QComboBox, QDialog, QDialogButtonBox, QVBoxLayout, QPushButton, QLabel
 from PyQt5.QtMultimedia import QAudioDeviceInfo, QAudio, QAudioInput, QAudioFormat
 
 import time
@@ -18,7 +18,7 @@ import multiprocessing
 from ctypes import POINTER, cast
 import comtypes
 from comtypes import CLSCTX_ALL
-
+from Style import *
 
 
 
@@ -28,17 +28,26 @@ class AudioDeviceDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Select Audio Devices")
         self.setWindowIcon(icon)
-        self.setFixedWidth(800)
+        self.setFixedWidth(1500)
+        self.setFixedHeight(300)
 
         layout = QVBoxLayout(self)
 
+        self.lbl_dialogTitle = QLabel('Audio Device Selection')
+        self.lbl_dialogTitle.setStyleSheet(LABEL_STYLE_AUDIO_DIAG)
+
+        layout.addWidget(self.lbl_dialogTitle)
+
         # Create input device combo box
         self.input_combo = QComboBox()
+        self.input_combo.setStyleSheet(COMBO_STYLE_AUDIO_DIAG)
         self.input_combo.addItems(input_devices)
+
         layout.addWidget(self.input_combo)
 
         # Create output device combo box
         self.output_combo = QComboBox()
+        self.output_combo.setStyleSheet(COMBO_STYLE_AUDIO_DIAG)
         self.output_combo.addItems(output_devices)
         layout.addWidget(self.output_combo)
 
@@ -49,6 +58,7 @@ class AudioDeviceDialog(QDialog):
 
         # Create dialog buttons
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.setStyleSheet(BUTTON_STYLE_AUDIO_DIAG)
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)

@@ -9,6 +9,86 @@ FRAME_HEIGHT = 800
 BUTTON_BAR_HEIGHT = 200
 
 
+LABEL_STYLE_AUDIO_DIAG='''
+        QLabel {
+            font-size: 36px;
+            height: 48px;
+            width: 120px;
+        }
+'''
+
+COMBO_STYLE_AUDIO_DIAG= '''
+        QComboBox {
+            font-size: 32px;
+            height: 40px;
+            width: 120px;
+            border: 4px solid #000000;
+            padding: 10px;
+            border-radius: 20px;
+        }
+
+'''
+
+BUTTON_STYLE_AUDIO_DIAG = '''
+        QPushButton {
+            background: qradialgradient(
+            cx: 0.3, cy: -0.4, fx: 0.3, fy: -0.4,
+            radius: 1.35, stop: 0 #fff, stop: 1 #888
+            );    
+            font-size: 36px;
+            height: 58px;
+            width: 120px;
+            border: 4px solid #000000;
+            padding: 10px;
+            border-radius: 20px;
+        }
+        QPushButton:hover {
+            color: white;
+            background-color: darkgreen
+        }
+
+'''
+
+LABEL_STYLE_CAM_DIAG='''
+        QLabel {
+            font-size: 36px;
+            height: 48px;
+            width: 120px;
+        }
+'''
+
+COMBO_STYLE_CAM_DIAG= '''
+        QComboBox {
+            font-size: 36px;
+            height: 108px;
+            width: 120px;
+            border: 4px solid #000000;
+            padding: 10px;
+            border-radius: 20px;
+        }
+
+'''
+
+BUTTON_STYLE_CAM_DIAG = '''
+        QPushButton {
+            background: qradialgradient(
+            cx: 0.3, cy: -0.4, fx: 0.3, fy: -0.4,
+            radius: 1.35, stop: 0 #fff, stop: 1 #888
+            );    
+            font-size: 36px;
+            height: 58px;
+            width: 120px;
+            border: 4px solid #000000;
+            padding: 10px;
+            border-radius: 20px;
+        }
+        QPushButton:hover {
+            color: white;
+            background-color: darkgreen
+        }
+
+'''
+
 BUTTON_STYLE_TEXT = """
         QPushButton {
             background: qradialgradient(
