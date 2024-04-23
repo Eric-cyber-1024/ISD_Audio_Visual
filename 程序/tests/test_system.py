@@ -25,7 +25,7 @@ MIC_NUMBER=32
 HOST_NAME ='192.168.1.40'
 PORT      =5004
 INDEX =[x for x in range (MIC_NUMBER )]
-sVersion = '0.8'
+sVersion = '0.9'
 
 
 class labeledTextbox:
@@ -455,108 +455,118 @@ class paramsDialog:
     
     def create_dialog_box(self):
 
+        # styles:
+        style = ttk.Style(self.dialog_box)
+        style.configure("TLabel", font=("TkDefaultFont", 24))  
+        style.configure("TEntry", font=("TkDefaultFont", 24))  
+        style.configure("W.TCombobox", arrowsize=60)  
+        style.configure("TCheckbutton", font=("TkDefaultFont", 28))  
+        style.configure("TButton", font=("TkDefaultFont", 28))  
+        bigfont = "Helvetica 20"
+        self.dialog_box.option_add("*TCombobox*Listbox*Font", bigfont)
+
         # Set the title of the dialog box
         self.dialog_box.title("Set Parameters--v"+sVersion)
 
 
         lbl_hostIP = ttk.Label(self.dialog_box, text="Host IP")
-        lbl_hostIP.pack()
-        self.tbx_hostIP = ttk.Entry(self.dialog_box)
+        lbl_hostIP.grid(row=0,column=0)
+        self.tbx_hostIP = ttk.Entry(self.dialog_box,font="Helvetica 24")
         self.tbx_hostIP.insert(0,'192.168.1.40')
-        self.tbx_hostIP.pack()
+        self.tbx_hostIP.grid(row=0,column=1)
 
         lbl_hostPort = ttk.Label(self.dialog_box, text="Host Port")
-        lbl_hostPort.pack()
-        self.tbx_hostPort = ttk.Entry(self.dialog_box)
+        lbl_hostPort.grid(row=1,column=0)
+        self.tbx_hostPort = ttk.Entry(self.dialog_box,font="Helvetica 24")
         self.tbx_hostPort.insert(0,'5004')
-        self.tbx_hostPort.pack()
+        self.tbx_hostPort.grid(row=1,column=1)
 
 
         # Create labels for the dropdown lists
         lbl_mode = ttk.Label(self.dialog_box, text="Mode:")
-        lbl_mode.pack()
+        lbl_mode.grid(row=2,column=0)
 
         # Create the first dropdown list
-        self.cbx_mode = ttk.Combobox(self.dialog_box, values=self.modes)
+        self.cbx_mode = ttk.Combobox(self.dialog_box, values=self.modes,font="Helvetica 24")
         self.cbx_mode.current(0)
-        self.cbx_mode.pack()
+        self.cbx_mode.grid(row=2,column=1)
 
         lbl_micIndx = ttk.Label(self.dialog_box, text="Mic#:")
-        lbl_micIndx.pack()
+        lbl_micIndx.grid(row=3,column=0)
 
         # Create the second dropdown list
-        self.cbx_micIndx = ttk.Combobox(self.dialog_box, values=self.micNames)
+        self.cbx_micIndx = ttk.Combobox(self.dialog_box, values=self.micNames,font="Helvetica 24")
         self.cbx_micIndx.current(0)
-        self.cbx_micIndx.pack()
+        self.cbx_micIndx.grid(row=3,column=1)
 
         # Create the textboxes with labels
         
 
         label_3 = ttk.Label(self.dialog_box, text="mic gain")
-        label_3.pack()
-        self.tbx_micGain = ttk.Entry(self.dialog_box)
+        label_3.grid(row=4,column=0)
+        self.tbx_micGain = ttk.Entry(self.dialog_box,font="Helvetica 24")
         self.tbx_micGain.insert(0,'10')
-        self.tbx_micGain.pack()
+        self.tbx_micGain.grid(row=4,column=1)
 
 
         label_4 = ttk.Label(self.dialog_box, text="mic disable")
-        label_4.pack()
-        self.textbox_2 = ttk.Entry(self.dialog_box)
+        label_4.grid(row=5,column=0)
+        self.textbox_2 = ttk.Entry(self.dialog_box,font="Helvetica 24")
         self.textbox_2.insert(0,'30')
-        self.textbox_2.pack()
+        self.textbox_2.grid(row=5,column=1)
 
         label_5 = ttk.Label(self.dialog_box, text="set test")
-        label_5.pack()
+        label_5.grid(row=6,column=0)
         
         longest_text_2 = max([str(value) for value in self.testModes], key=len)
-        self.cbx_testMode = ttk.Combobox(self.dialog_box, values=self.testModes, width=len(longest_text_2))
+        self.cbx_testMode = ttk.Combobox(self.dialog_box, values=self.testModes, width=len(longest_text_2)//3,font="Helvetica 24")
         self.cbx_testMode.current(3)
-        self.cbx_testMode.pack()
+        self.cbx_testMode.grid(row=6,column=1)
 
         # revised micDelay to den_out_sel
         # added widgets for mc_beta_sel, mc_K_sel
 
         lbl_den_out_sel = ttk.Label(self.dialog_box, text="den_out_sel")
-        lbl_den_out_sel.pack()
-        self.tbx_den_out_sel = ttk.Entry(self.dialog_box)
+        lbl_den_out_sel.grid(row=7,column=0)
+        self.tbx_den_out_sel = ttk.Entry(self.dialog_box,font="Helvetica 24")
         self.tbx_den_out_sel.insert(0,'8')
-        self.tbx_den_out_sel.pack()
+        self.tbx_den_out_sel.grid(row=7,column=1)
 
         lbl_mc_beta_sel = ttk.Label(self.dialog_box, text="mc_beta_sel")
-        lbl_mc_beta_sel.pack()
-        self.tbx_mc_beta_sel = ttk.Entry(self.dialog_box)
+        lbl_mc_beta_sel.grid(row=8,column=0)
+        self.tbx_mc_beta_sel = ttk.Entry(self.dialog_box,font="Helvetica 24")
         self.tbx_mc_beta_sel.insert(0,'4')
-        self.tbx_mc_beta_sel.pack()
+        self.tbx_mc_beta_sel.grid(row=8,column=1)
 
         lbl_mc_K_sel = ttk.Label(self.dialog_box, text="mc_K_sel")
-        lbl_mc_K_sel.pack()
-        self.tbx_mc_K_sel = ttk.Entry(self.dialog_box)
+        lbl_mc_K_sel.grid(row=9,column=0)
+        self.tbx_mc_K_sel = ttk.Entry(self.dialog_box,font="Helvetica 24")
         self.tbx_mc_K_sel.insert(0,'0')
-        self.tbx_mc_K_sel.pack()
+        self.tbx_mc_K_sel.grid(row=9,column=1)
 
 
         lbl_en_BM_MC_ctrl = ttk.Label(self.dialog_box, text = 'en_BM_MC_ctrl')
-        lbl_en_BM_MC_ctrl.pack()
-        self.tbx_en_BM_MC_ctrl = ttk.Entry(self.dialog_box)
+        lbl_en_BM_MC_ctrl.grid(row=10,column=0)
+        self.tbx_en_BM_MC_ctrl = ttk.Entry(self.dialog_box,font="Helvetica 24")
         self.tbx_en_BM_MC_ctrl.insert(0,'0')
-        self.tbx_en_BM_MC_ctrl.pack()
+        self.tbx_en_BM_MC_ctrl.grid(row=10,column=1)
 
         lbl_srcPos = ttk.Label(self.dialog_box, text="source pos")
-        lbl_srcPos.pack()
-        self.tbx_srcPos = ttk.Entry(self.dialog_box)
+        lbl_srcPos.grid(row=11,column=0)
+        self.tbx_srcPos = ttk.Entry(self.dialog_box,font="Helvetica 24")
         self.tbx_srcPos.insert(0,'0,0,0')
-        self.tbx_srcPos.pack()
+        self.tbx_srcPos.grid(row=11,column=1)
 
         lbl_offsets = ttk.Label(self.dialog_box, text="x,y,z Offsets")
-        lbl_offsets.pack()
-        self.tbx_offsets = ttk.Entry(self.dialog_box)
+        lbl_offsets.grid(row=12,column=0)
+        self.tbx_offsets = ttk.Entry(self.dialog_box,font="Helvetica 24")
         self.tbx_offsets.insert(0,'0,0,0')
-        self.tbx_offsets.pack()
+        self.tbx_offsets.grid(row=12,column=1)
         
 
 
         self.lbl_info   = ttk.Label(self.dialog_box,text='')
-        self.lbl_info.pack()
+        self.lbl_info.grid(row=13,column=0)
 
         # revise[removed ok, cancel buttons],Brian,15 Mar 2024
         # # Create the buttons
@@ -575,25 +585,26 @@ class paramsDialog:
 
         # # Create the PointSelectionGUI and embed it in the main window
         self.point_selection = PointSelectionGUI(self.dialog_box, points,self.send_message)
-        self.point_selection.pack(side=tk.LEFT, padx=10, pady=10)
+        #self.point_selection.pack(side=tk.LEFT, padx=10, pady=10)
+        self.point_selection.grid(row=14,column=0)
 
         # Add checkbox to have manual delay configuration or not
         ckbx_ManualDelayConfig = ttk.Checkbutton(self.dialog_box,text='Manual Delay Config',
                                                  onvalue=1,offvalue=0,
-                                                 variable=self.manualDelayConfig)
+                                                 variable=self.manualDelayConfig,width=20)
         
-        ckbx_ManualDelayConfig.pack()
+        ckbx_ManualDelayConfig.grid(row=14,column=1)
         self.manualDelayConfig.set(0) # not checked by default
 
         ckbx_fourMics = ttk.Checkbutton(self.dialog_box,text='4 Mics',
                                                  onvalue=1,offvalue=0,
-                                                 variable=self.fourMics)
+                                                 variable=self.fourMics,width=10)
         
-        ckbx_fourMics.pack()
+        ckbx_fourMics.grid(row=14,column=2)
         self.fourMics.set(0) # not checked by default
         
         btnSendPacket = ttk.Button(self.dialog_box, text="Send Packet", command=self.sendPacket)
-        btnSendPacket.pack(side=tk.LEFT)
+        btnSendPacket.grid(row=14,column=3)
 
         # Start the main event loop
         self.dialog_box.mainloop()
