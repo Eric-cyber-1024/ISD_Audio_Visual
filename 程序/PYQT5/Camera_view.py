@@ -56,7 +56,7 @@ DEBUG = False
 ALIGNED_FRAMES = False
 FILTERED_FRAMES = False
 SENDING_PACKET = False
-sVersion='0.1.5'
+sVersion='0.1.6'
 
 def resource_path(relative_path):
     try:
@@ -500,7 +500,7 @@ class CameraSelectionDialog(QDialog):
 
         self.setWindowTitle("Camera Selection")
         self.setFixedWidth(1000)
-        self.setFixedHeight(500)
+        self.setFixedHeight(200)
         icon = QtGui.QIcon()
         icon.addPixmap(
             QtGui.QPixmap(
@@ -1144,7 +1144,7 @@ class App(QWidget):
         self.stacked_widget.addWidget(self.main_page_widget)
         self.stacked_widget.addWidget(self.setting_page_widget)
         self.stacked_widget.addWidget(self.test_page_widget)
-        self.stacked_widget.setCurrentIndex(0)
+        self.stacked_widget.setCurrentIndex(0) 
 
         self.layout = QVBoxLayout()
         self.layout.addWidget(self.stacked_widget)
@@ -1348,36 +1348,46 @@ class App(QWidget):
 
         '''
         adminLayout= QGridLayout()
-        adminLayout.addWidget(QLabel('Admin Mode:'),1,0,1,1)
+
+        lbl_AdminMode = QLabel('Admin Mode:')
+        lbl_AdminMode.setStyleSheet(LABEL_STYLE_ADMIN_FRAME)
+        adminLayout.addWidget(lbl_AdminMode,0,0,1,1)
 
         self.lbl_info = QLabel('Info:')
         adminLayout.addWidget(self.lbl_info)
         
         btnTestMode= QPushButton('Go to Test mode Page')
+        btnTestMode.setStyleSheet(BUTTON_STYLE_ADMIN_FRAME)
         btnTestMode.clicked.connect(self.goTestMode)
 
+
         self.btnToggleDebug= QPushButton('Turn On Debug')
+        self.btnToggleDebug.setStyleSheet(BUTTON_STYLE_ADMIN_FRAME)
         self.btnToggleDebug.clicked.connect(self.toggleDebugMode)
 
         self.btnToggleAlignedFrames = QPushButton('Turn On Aligned Frames')
+        self.btnToggleAlignedFrames.setStyleSheet(BUTTON_STYLE_ADMIN_FRAME)
         self.btnToggleAlignedFrames.clicked.connect(self.toggleAlignedFramesMode)
 
         self.btnToggleFilteredFrames = QPushButton('Turn On Filtered Mode')
+        self.btnToggleFilteredFrames.setStyleSheet(BUTTON_STYLE_ADMIN_FRAME)
         self.btnToggleFilteredFrames.clicked.connect(self.toggleFilteredFramesMode)
 
         btnExitAdminMode= QPushButton('Exit Admin Mode')
+        btnExitAdminMode.setStyleSheet(BUTTON_STYLE_ADMIN_FRAME)
         btnExitAdminMode.clicked.connect(self.exitAdminMode)
 
-        adminLayout.addWidget(btnTestMode)
-        adminLayout.addWidget(self.btnToggleDebug)
-        adminLayout.addWidget(self.btnToggleAlignedFrames)
-        adminLayout.addWidget(self.btnToggleFilteredFrames)
-        adminLayout.addWidget(btnExitAdminMode)
+        adminLayout.addWidget(btnTestMode,1,0,1,1)
+        adminLayout.addWidget(self.btnToggleDebug,1,1,1,1)
+        adminLayout.addWidget(self.btnToggleAlignedFrames,2,0,1,1)
+        adminLayout.addWidget(self.btnToggleFilteredFrames,2,1,1,1)
+        adminLayout.addWidget(btnExitAdminMode,3,0,1,1)
 
         adminFrame = QFrame()
         adminFrame.setFrameStyle(QFrame.Panel | QFrame.Plain)
         adminFrame.setStyleSheet("#innerFrame { border: 1px solid blue; }")
-        adminFrame.setMaximumSize(300,300)
+        adminFrame.setFixedWidth(1500)
+        adminFrame.setFixedHeight(300)
         adminFrame.setLayout(adminLayout)
         adminFrame.hide()
         return adminFrame
@@ -2044,9 +2054,9 @@ if __name__ == "__main__":
     # print(f"Using AA_UseHighDpiPixmaps    > {QApplication.testAttribute(Qt.AA_UseHighDpiPixmaps)}")
     try:
         a = App()
-        a.show()
-        print("w, h: ", a.image_label.width(), a.image_label.height())
-        print("x, y: ", a.image_label.x(), a.image_label.y())
+        a.showMaximized()
+        # print("w, h: ", a.image_label.width(), a.image_label.height())
+        # print("x, y: ", a.image_label.x(), a.image_label.y())
         app.aboutToQuit.connect(dataLogger.stop_logging)
         app.aboutToQuit.connect(a.cleanUp)
         exit(app.exec_())

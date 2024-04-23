@@ -8,11 +8,42 @@ FRAME_WIDTH = 1600
 FRAME_HEIGHT = 800
 BUTTON_BAR_HEIGHT = 200
 
+LABEL_STYLE_ADMIN_FRAME='''
+        QLabel {
+            font-size: 30px;
+            font-weight: bold;
+            color: white;
+            height: 35px;
+            width: 120px;
+        }
+'''
+
+BUTTON_STYLE_ADMIN_FRAME = '''
+        QPushButton {
+            background: qradialgradient(
+            cx: 0.3, cy: -0.4, fx: 0.3, fy: -0.4,
+            radius: 1.35, stop: 0 #fff, stop: 1 #888
+            );    
+            font-size: 32px;
+            height: 40px;
+            width: 120px;
+            border: 4px solid #000000;
+            padding: 10px;
+            border-radius: 20px;
+        }
+        QPushButton:hover {
+            color: white;
+            background-color: darkgreen
+        }
+
+'''
 
 LABEL_STYLE_AUDIO_DIAG='''
         QLabel {
-            font-size: 36px;
-            height: 48px;
+            font-size: 30px;
+            font-weight: bold;
+            color: green;
+            height: 35px;
             width: 120px;
         }
 '''
@@ -23,8 +54,8 @@ COMBO_STYLE_AUDIO_DIAG= '''
             height: 40px;
             width: 120px;
             border: 4px solid #000000;
-            padding: 10px;
-            border-radius: 20px;
+            padding: 0px;
+            border-radius: 2px;
         }
 
 '''
@@ -51,20 +82,22 @@ BUTTON_STYLE_AUDIO_DIAG = '''
 
 LABEL_STYLE_CAM_DIAG='''
         QLabel {
-            font-size: 36px;
-            height: 48px;
+            font-size: 30px;
+            font-weight: bold;
+            color: green;
+            height: 35px;
             width: 120px;
         }
 '''
 
 COMBO_STYLE_CAM_DIAG= '''
         QComboBox {
-            font-size: 36px;
-            height: 108px;
+            font-size: 32px;
+            height: 40px;
             width: 120px;
-            border: 4px solid #000000;
+            border: 2px solid #000000;
             padding: 10px;
-            border-radius: 20px;
+            border-radius: 2px;
         }
 
 '''
