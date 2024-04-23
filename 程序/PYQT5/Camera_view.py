@@ -56,7 +56,7 @@ DEBUG = False
 ALIGNED_FRAMES = False
 FILTERED_FRAMES = False
 SENDING_PACKET = False
-sVersion='0.1.5'
+sVersion='0.1.6'
 
 def resource_path(relative_path):
     try:
@@ -499,7 +499,7 @@ class CameraSelectionDialog(QDialog):
         super().__init__()
 
         self.setWindowTitle("Camera Selection")
-        self.setFixedWidth(800)
+        self.setFixedWidth(1000)
         self.setFixedHeight(200)
         icon = QtGui.QIcon()
         icon.addPixmap(
@@ -507,15 +507,20 @@ class CameraSelectionDialog(QDialog):
                 resource_path("mic_double_FILL0_wght400_GRAD0_opsz24.svg")),
             QtGui.QIcon.Normal, QtGui.QIcon.Off)
         self.setWindowIcon(icon)
+        self.lbl_dialogTitle = QLabel('Camera Selection')
+        self.lbl_dialogTitle.setStyleSheet(LABEL_STYLE_CAM_DIAG)
         self.camera_combo = QComboBox()
+        self.camera_combo.setStyleSheet(COMBO_STYLE_CAM_DIAG)
         self.camera_combo.addItems(camera_names)
 
         button_box = QDialogButtonBox(QDialogButtonBox.Ok
                                       | QDialogButtonBox.Cancel)
         button_box.accepted.connect(self.accept)
         button_box.rejected.connect(self.reject)
+        button_box.setStyleSheet(BUTTON_STYLE_CAM_DIAG)
 
         layout = QVBoxLayout()
+        layout.addWidget(self.lbl_dialogTitle)
         layout.addWidget(self.camera_combo)
         layout.addWidget(button_box)
 
@@ -620,7 +625,6 @@ class VideoThread(QThread):
                     x0 = int(x0*1./1.5)
                     y0 = int(y0*1./1.5)
 
-                # found some problems, temperarily using getFrame, Brian, 19 April 2024
                 # self.cv_img, self.depth_frame, point = self.d435.getFrameWithAlignedFrames(mousex=x0,mousey=y0)
                 self.cv_img, self.depth_frame, point = self.d435.getFrame(mousex=x0,mousey=y0)
 
@@ -813,6 +817,7 @@ class App(QWidget):
         self.selected_camera = ''
         self.d435 = None 
         self.adminRole=False # Add[if adminRole is True, will can show more features],Brian,05 April 2024
+        self.toUseYAML=False # true load mic locs from yaml file (for 4 mics case)
 
         # create the label that holds the image
         self.image_label = Create_ImageWindow()
@@ -820,7 +825,7 @@ class App(QWidget):
         # self.image_label.setMaximumSize(QSize(1600, 900))
         # self.image_label.setFixedSize(QSize(FRAME_WIDTH, FRAME_HEIGHT))
 
-        self.exit_button = Create_Button("Exit", lambda: exit(), BUTTON_STYLE_TEXT)
+        self.exit_button = Create_Button("Exit", lambda: self.exit_app(), BUTTON_STYLE_TEXT)
         # self.setting_button = Create_Button("Setting",lambda:switchPage(self,APP_PAGE.SETTING.value),BUTTON_STYLE)
         # self.record_button = Create_Button("Record",self.record_button_clicked,BUTTON_STYLE_RED)
 
@@ -1139,7 +1144,7 @@ class App(QWidget):
         self.stacked_widget.addWidget(self.main_page_widget)
         self.stacked_widget.addWidget(self.setting_page_widget)
         self.stacked_widget.addWidget(self.test_page_widget)
-        self.stacked_widget.setCurrentIndex(0)
+        self.stacked_widget.setCurrentIndex(0) 
 
         self.layout = QVBoxLayout()
         self.layout.addWidget(self.stacked_widget)
@@ -1271,7 +1276,9 @@ class App(QWidget):
             QMessageBox.warning(self, "Incorrect Password", "The password is incorrect.")
 
 
-        
+    def cleanUp(self):
+        if hasattr(self, 'mouse_press_timer'):
+            self.mouse_press_timer.stop()
         
     def send_message(self, message):
         pass
@@ -1280,23 +1287,35 @@ class App(QWidget):
         global DEBUG
         if DEBUG:
             DEBUG=False
+            self.btnToggleDebug.setText('Turn On Debug')
         else:
             DEBUG=True
+            self.btnToggleDebug.setText('Turn Off Debug')
 
     # Jason - 8 April 2024 - Aligned Frames
     def toggleAlignedFramesMode(self):
-        global ALIGNED_FRAMES, FILTERED_FRAMES
-        ALIGNED_FRAMES = not ALIGNED_FRAMES
-        if not ALIGNED_FRAMES:
-            FILTERED_FRAMES = False
-        print("ALIGNED_FRAMES: ", ALIGNED_FRAMES)
+        # global ALIGNED_FRAMES, FILTERED_FRAMES
+        # ALIGNED_FRAMES = not ALIGNED_FRAMES
+        # if not ALIGNED_FRAMES:
+        #     FILTERED_FRAMES = False
+        #     self.btnToggleAlignedFrames.setText('Turn On Aligned Frame')
+        # else:
+        #     self.btnToggleAlignedFrames.setText('Turn Off Aligned Frame')
+
+        # print("ALIGNED_FRAMES: ", ALIGNED_FRAMES)
+
+        # disabled aligned frames at this moment
+        pass
 
     # Added, Jason - 12 April 2024
     def toggleFilteredFramesMode(self):
-        global ALIGNED_FRAMES, FILTERED_FRAMES
-        if ALIGNED_FRAMES:
-            FILTERED_FRAMES = not FILTERED_FRAMES
-        print("FILTERED_FRAMES: ", FILTERED_FRAMES)
+        # global ALIGNED_FRAMES, FILTERED_FRAMES
+        # if ALIGNED_FRAMES:
+        #     FILTERED_FRAMES = not FILTERED_FRAMES
+        # print("FILTERED_FRAMES: ", FILTERED_FRAMES)
+
+        # disabled filtered frames at this moment
+        pass
 
     def exitAdminMode(self):
         '''
@@ -1329,36 +1348,46 @@ class App(QWidget):
 
         '''
         adminLayout= QGridLayout()
-        adminLayout.addWidget(QLabel('Admin Mode:'),1,0,1,1)
+
+        lbl_AdminMode = QLabel('Admin Mode:')
+        lbl_AdminMode.setStyleSheet(LABEL_STYLE_ADMIN_FRAME)
+        adminLayout.addWidget(lbl_AdminMode,0,0,1,1)
 
         self.lbl_info = QLabel('Info:')
         adminLayout.addWidget(self.lbl_info)
         
         btnTestMode= QPushButton('Go to Test mode Page')
+        btnTestMode.setStyleSheet(BUTTON_STYLE_ADMIN_FRAME)
         btnTestMode.clicked.connect(self.goTestMode)
 
-        btnToggleDebug= QPushButton('Toggle Debug Mode')
-        btnToggleDebug.clicked.connect(self.toggleDebugMode)
 
-        btnToggleAlignedFrames = QPushButton('Toggle Aligned Frames Mode')
-        btnToggleAlignedFrames.clicked.connect(self.toggleAlignedFramesMode)
+        self.btnToggleDebug= QPushButton('Turn On Debug')
+        self.btnToggleDebug.setStyleSheet(BUTTON_STYLE_ADMIN_FRAME)
+        self.btnToggleDebug.clicked.connect(self.toggleDebugMode)
 
-        btnToggleFilteredFrames = QPushButton('Toggle Filtered Mode')
-        btnToggleFilteredFrames.clicked.connect(self.toggleFilteredFramesMode)
+        self.btnToggleAlignedFrames = QPushButton('Turn On Aligned Frames')
+        self.btnToggleAlignedFrames.setStyleSheet(BUTTON_STYLE_ADMIN_FRAME)
+        self.btnToggleAlignedFrames.clicked.connect(self.toggleAlignedFramesMode)
+
+        self.btnToggleFilteredFrames = QPushButton('Turn On Filtered Mode')
+        self.btnToggleFilteredFrames.setStyleSheet(BUTTON_STYLE_ADMIN_FRAME)
+        self.btnToggleFilteredFrames.clicked.connect(self.toggleFilteredFramesMode)
 
         btnExitAdminMode= QPushButton('Exit Admin Mode')
+        btnExitAdminMode.setStyleSheet(BUTTON_STYLE_ADMIN_FRAME)
         btnExitAdminMode.clicked.connect(self.exitAdminMode)
 
-        adminLayout.addWidget(btnTestMode)
-        adminLayout.addWidget(btnToggleDebug)
-        adminLayout.addWidget(btnToggleAlignedFrames)
-        adminLayout.addWidget(btnToggleFilteredFrames)
-        adminLayout.addWidget(btnExitAdminMode)
+        adminLayout.addWidget(btnTestMode,1,0,1,1)
+        adminLayout.addWidget(self.btnToggleDebug,1,1,1,1)
+        adminLayout.addWidget(self.btnToggleAlignedFrames,2,0,1,1)
+        adminLayout.addWidget(self.btnToggleFilteredFrames,2,1,1,1)
+        adminLayout.addWidget(btnExitAdminMode,3,0,1,1)
 
         adminFrame = QFrame()
         adminFrame.setFrameStyle(QFrame.Panel | QFrame.Plain)
         adminFrame.setStyleSheet("#innerFrame { border: 1px solid blue; }")
-        adminFrame.setMaximumSize(300,300)
+        adminFrame.setFixedWidth(1500)
+        adminFrame.setFixedHeight(300)
         adminFrame.setLayout(adminLayout)
         adminFrame.hide()
         return adminFrame
@@ -1426,6 +1455,8 @@ class App(QWidget):
             'tbx_targetPos':{'text':'0,0,0','row':12,'column':1,'row_span':1,'col_span':1},
             'lbl_xyzOffsets':{'text':'x,y,z Offsets','row':13,'column':0,'row_span':1,'col_span':1},
             'tbx_xyzOffsets':{'text':'0,0,0','row':13,'column':1,'row_span':1,'col_span':1},
+            'lbl_fourMics':{'text':'4 Mics','row':13,'column':3,'row_span':1,'col_span':1},
+            'tbx_fourMics':{'text':'0','row':13,'column':4,'row_span':1,'col_span':1},
         }
 
         widget = QWidget()
@@ -1512,12 +1543,17 @@ class App(QWidget):
 
 
         return widget
+    
+
+    def __str__(self):
+        return f"params,{self.hostIP}, {self.hostPort}, {self.mode},{self.micIndx},{self.micGain},{self.setTest},{self.den_out_sel},{self.mc_beta_sel},{self.mc_K_sel},[{self.targetPos[0]},{self.targetPos[1]},{self.targetPos[2]}],[{self.offsets[0]},{self.offsets[1]},{self.offsets[2]}],{self.toUseYAML}"
 
 
     def printParams(self):
-        print(self.hostIP,self.hostPort,self.mode,self.micIndx,self.micGain,self.setTest,self.den_out_sel,self.mc_beta_sel,self.mc_K_sel,self.targetPos,self.offsets)
+        global dataLogger
+        print(self.hostIP,self.hostPort,self.mode,self.micIndx,self.micGain,self.setTest,self.den_out_sel,self.mc_beta_sel,self.mc_K_sel,self.targetPos,self.offsets,self.toUseYAML)
         # add[save to log as well],Brian,27 Mar 2024
-        logger.add_data(self.__str__())
+        dataLogger.add_data(self.__str__())
 
     def fetchParamsFromUI(self):
 
@@ -1544,6 +1580,7 @@ class App(QWidget):
         self.en_BM_MC_ctrl = int(params['tbx_en_BM_MC_ctrl'])
         self.targetPos     = np.array(params['tbx_targetPos'].split(','), dtype=float)
         self.offsets       = np.array(params['tbx_xyzOffsets'].split(','), dtype=float)
+        self.toUseYAML     = True if params['tbx_fourMics'] == '1' else False
 
         # get values from combo boxes
         comboboxes = self.test_page_widget.findChildren(QComboBox)
@@ -1559,7 +1596,7 @@ class App(QWidget):
         self.lbl_msg.setText('%s, %s' %(timestamp,sMsg))
     
     def sendPacket(self):
-        global logger, SENDING_PACKET
+        global dataLogger, SENDING_PACKET
 
         # clear lbl_info first
         self.showInfo('')
@@ -1616,7 +1653,10 @@ class App(QWidget):
         message13 = int(self.en_BM_MC_ctrl) # en_BM_MC_ctrl
  
         
-        _,refDelay,_ = delay_calculation(self.targetPos,self.offsets[0],self.offsets[1],self.offsets[2])   
+        _,refDelay,_ = delay_calculation(self.targetPos,self.offsets[0],self.offsets[1],self.offsets[2],toUseYAML=self.toUseYAML)   
+        
+        # save a copy of the raw delay in us
+        rawDelay = refDelay[1:]*1e6
         # revise[should not include m00],Brian,15 April 204
         refDelay = refDelay[1:]
         refDelay = refDelay*48e3
@@ -1647,16 +1687,118 @@ class App(QWidget):
             
         # append packet to sendBuf
         sendBuf += packet
-        logger.add_data('data,%s,%s,%s' %(bytes(sendBuf),np.array2string(refDelay),np.array2string(np.array(self.targetPos))))
+        dataLogger.add_data('data,%s,%s,%s,%s' %(bytes(sendBuf),np.array2string(refDelay),np.array2string(np.array(self.targetPos)),np.array2string(rawDelay)))
 
 
         if send_and_receive_packet(self.hostIP,self.hostPort,sendBuf,timeout=3):
             print('data transmission ok')
             self.showInfo('tx ok')
-            logger.add_data('tx ok')
+            dataLogger.add_data('tx ok')
         else:
             print('data transmission failed')
-            logger.add_data('tx failed')
+            dataLogger.add_data('tx failed')
+
+
+
+    def sendPacket_v2(self):
+        global dataLogger, SENDING_PACKET
+
+        # clear lbl_info first
+        self.showInfo('')
+        sendBuf=b'SET0'
+        
+        
+        #Z=distance between camera and object, x is left+/right-, y is down+/up-
+        
+        # just a dummy target location
+        this_location=[6, 0.2, 0.3]
+
+        # revised[add offsets],Brian,18 Mar 2024
+        delay=delay_calculation_v1(this_location)
+        print(delay)
+        
+        #converting the delay into binary format 
+        delay_binary_output = delay_to_binary(delay)
+        #print(delay_binary_output)
+        #need to do later
+        RW_field=[1,1]
+        mode=0
+        mic_gain=[1,0]
+        mic_num=0
+        en_bm=1
+        en_bc=1
+        mic_en=1
+        type=0
+        reserved=0
+        message=struct_packet(RW_field,mode,mic_gain,mic_num,en_bm,en_bc,delay_binary_output[0],mic_en,type,reserved)
+        print(message)
+        messagehex = BintoINT(message)
+        print(messagehex)
+        message1 = int(messagehex[2:4],16) # hex at  1 and 2  
+        message2 = int(messagehex[4:6],16) # hex at  3 and 4 
+        message3 = int(messagehex[6:8],16)  # hex at  5 and 6 
+        message4 = int(messagehex[8:],16)
+        print("m1:{},m2:{},m3:{},m4:{}\n".format(message1,message2,message3,message4))
+    
+
+        message5  = int('0')        # mode
+        message6  = int('1')        # mic
+        message7  = int('10')     # mic_gain
+        message8  = int('30')  # mic_disable
+        message9  = int('9')     # set_test
+        message10 = int('4') # den_out_sel, previously micDelay
+
+        # revise[added message11, message12],Brian, 27 Mar 2024
+        message11 = int('1') # mc_beta_sel
+        message12 = int('3')    # mc_K_sel
+
+        # revise[added message13],Brian, 28 Mar 2024
+        message13 = int('3') # en_BM_MC_ctrl
+ 
+        
+        _,refDelay,_ = delay_calculation(self.targetPos,0,-0.1,0)   
+        # revise[should not include m00],Brian,15 April 204
+        refDelay = refDelay[1:]
+        refDelay = refDelay*48e3
+        refDelay = np.max(refDelay)-refDelay
+        refDelay = np.round(refDelay)
+
+        #convert refDelay to byte
+        #but make sure that they are within 0 to 255 first!!
+        assert (refDelay>=0).all() and (refDelay<=255).all()
+
+            
+        refDelay = refDelay.astype(np.uint8)
+        payload = refDelay.tobytes()
+        print('refDelay',refDelay)
+        print('payload',payload)
+        print('sendBuf',sendBuf)
+
+        
+
+        
+        packet = prepareMicDelaysPacket(payload)
+        if validateMicDelaysPacket(packet):
+            print('packet ok')
+        else:
+            print('packet not ok')
+            
+        sendBuf=bytes([message1,message2,message3,message4,message5,message6,message7,message8,message9,message10,message11,message12,message13])
+            
+        # append packet to sendBuf
+        sendBuf += packet
+        dataLogger.add_data('data,%s,%s,%s' %(bytes(sendBuf),np.array2string(refDelay),np.array2string(np.array(self.targetPos))))
+
+
+        if send_and_receive_packet(self.hostIP,self.hostPort,sendBuf,timeout=3):
+            print('data transmission ok')
+            self.showInfo('tx ok')
+            dataLogger.add_data('tx ok')
+        else:
+            print('data transmission failed')
+            dataLogger.add_data('tx failed')
+
+
 
     def updatePingResults(self,results):
         if results[0]:
@@ -1764,6 +1906,7 @@ class App(QWidget):
                     self.mouse_press_timer.start(2000)  
             # message = create_and_send_packet(HOST,PORT, area.to_bytes( 2, byteorder='big'))
             #Test_delay_function()
+            self.sendPacket()
 
     # Added for 3d coordinates, Jason, 11 April 2024
     def on_send_packed_finished(self):
@@ -1870,6 +2013,15 @@ class App(QWidget):
         self.video_progress_dialog.setValue(round(percentage))
 
 
+    def exit_app(self):
+        # global dataLogger
+        # dataLogger.stop_logging()
+
+        # stop all the timers
+        self.mouse_press_timer.stop()
+        exit()
+
+
 if __name__ == "__main__":
 
     # Check if the folder exists
@@ -1882,8 +2034,9 @@ if __name__ == "__main__":
 
     # initialize logger
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    logger = DataLogger(log_interval=1, file_path="log/%s_sys.log" %(timestamp))  # Specify the data file path
-    logger.start_logging()
+    dataLogger = DataLogger(log_interval=1, file_path="log/%s_sys.log" %(timestamp))  # Specify the data file path
+    dataLogger.start_logging()
+    dataLogger.add_data('logger started...')
 
     # Create necessary DIR
     check_folder_existence(CURRENT_PATH+VIDEO_SAVE_DIRECTORY)
@@ -1901,12 +2054,13 @@ if __name__ == "__main__":
     # print(f"Using AA_UseHighDpiPixmaps    > {QApplication.testAttribute(Qt.AA_UseHighDpiPixmaps)}")
     try:
         a = App()
-        a.show()
-        print("w, h: ", a.image_label.width(), a.image_label.height())
-        print("x, y: ", a.image_label.x(), a.image_label.y())
-        logger.stop_logging()
+        a.showMaximized()
+        # print("w, h: ", a.image_label.width(), a.image_label.height())
+        # print("x, y: ", a.image_label.x(), a.image_label.y())
+        app.aboutToQuit.connect(dataLogger.stop_logging)
+        app.aboutToQuit.connect(a.cleanUp)
         exit(app.exec_())
     except Exception:
-        logger.stop_logging()
-        exit()
+        dataLogger.stop_logging()
+
         
