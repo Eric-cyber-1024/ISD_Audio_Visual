@@ -1145,7 +1145,7 @@ class App(QWidget):
         self.stacked_widget.addWidget(self.main_page_widget)
         self.stacked_widget.addWidget(self.setting_page_widget)
         self.stacked_widget.addWidget(self.test_page_widget)
-        self.stacked_widget.setCurrentIndex(2) 
+        self.stacked_widget.setCurrentIndex(0) 
 
         self.layout = QVBoxLayout()
         self.layout.addWidget(self.stacked_widget)
@@ -1449,9 +1449,9 @@ class App(QWidget):
             'lbl_mcBetaSel':{'text':'mc_beta_sel','row':5,'column':2,'row_span':1,'col_span':1},
             'tbx_mcBetaSel':{'text':'4','row':5,'column':3,'row_span':1,'col_span':1},
             'lbl_mcKSel':{'text':'mc_K_sel','row':6,'column':0,'row_span':1,'col_span':1},
-            'tbx_mcKSel':{'text':'0','row':6,'column':1,'row_span':1,'col_span':1},
+            'tbx_mcKSel':{'text':'1','row':6,'column':1,'row_span':1,'col_span':1},
             'lbl_en_BM_MC_ctrl':{'text':'en_BM_MC_ctrl','row':6,'column':2,'row_span':1,'col_span':1},
-            'tbx_en_BM_MC_ctrl':{'text':'0','row':6,'column':3,'row_span':1,'col_span':1},
+            'tbx_en_BM_MC_ctrl':{'text':'3','row':6,'column':3,'row_span':1,'col_span':1},
             'lbl_targetPos':{'text':'target pos','row':9,'column':0,'row_span':1,'col_span':1},
             'tbx_targetPos':{'text':'0,0,0','row':9,'column':1,'row_span':1,'col_span':1},
             'lbl_xyzOffsets':{'text':'x,y,z Offsets','row':10,'column':0,'row_span':1,'col_span':1},
@@ -1558,7 +1558,7 @@ class App(QWidget):
     
 
     def __str__(self):
-        return f"params,{self.hostIP}, {self.hostPort}, {self.mode},{self.micIndx},{self.micGain},{self.setTest},{self.den_out_sel},{self.mc_beta_sel},{self.mc_K_sel},[{self.targetPos[0]},{self.targetPos[1]},{self.targetPos[2]}],[{self.offsets[0]},{self.offsets[1]},{self.offsets[2]}],{self.toUseYAML}"
+        return f"params,{self.hostIP}, {self.hostPort}, {self.mode},{self.micIndx},{self.micGain},{self.setTest},{self.den_out_sel},{self.mc_beta_sel},{self.mc_K_sel},{self.en_BM_MC_ctrl},[{self.targetPos[0]},{self.targetPos[1]},{self.targetPos[2]}],[{self.offsets[0]},{self.offsets[1]},{self.offsets[2]}],{self.toUseYAML}"
 
 
     def printParams(self):
