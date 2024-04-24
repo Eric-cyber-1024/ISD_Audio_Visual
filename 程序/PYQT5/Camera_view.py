@@ -56,7 +56,7 @@ DEBUG = False
 ALIGNED_FRAMES = False
 FILTERED_FRAMES = False
 SENDING_PACKET = False
-sVersion='0.1.6'
+sVersion='0.1.7'
 
 def resource_path(relative_path):
     try:
@@ -314,7 +314,7 @@ class d435():
 
         # for visualization
         self.depthMin = 0.1  #meter
-        self.depthMax = 15.0  #meter
+        self.depthMax = 11.0  #meter
 
         # 2D image coordinate
         self.i=0  # from mouse x
@@ -374,13 +374,14 @@ class d435():
             colorImage = np.asanyarray(colorFrame.get_data())
 
             
+
+            
             # project color pixel to depth pixel
             depthPixel = rs.rs2_project_color_pixel_to_depth_pixel(
                 depthFrame.get_data(), self.depthScale, self.depthMin,
                 self.depthMax, self.depthIntrinsics, self.colorIntrinsics,
                 self.depthToColorExtrinsics, self.colorToDepthExtrinsics, [self.i, self.j])
             
-
             if depthPixel[0]>=0 and depthPixel[1]>=0:
                 #print("depthPixel: ", depthPixel)
                 depth = depthFrame.get_distance(int(depthPixel[0]),int(depthPixel[1]))
@@ -1144,7 +1145,7 @@ class App(QWidget):
         self.stacked_widget.addWidget(self.main_page_widget)
         self.stacked_widget.addWidget(self.setting_page_widget)
         self.stacked_widget.addWidget(self.test_page_widget)
-        self.stacked_widget.setCurrentIndex(0) 
+        self.stacked_widget.setCurrentIndex(2) 
 
         self.layout = QVBoxLayout()
         self.layout.addWidget(self.stacked_widget)
@@ -1294,28 +1295,28 @@ class App(QWidget):
 
     # Jason - 8 April 2024 - Aligned Frames
     def toggleAlignedFramesMode(self):
-        # global ALIGNED_FRAMES, FILTERED_FRAMES
-        # ALIGNED_FRAMES = not ALIGNED_FRAMES
-        # if not ALIGNED_FRAMES:
-        #     FILTERED_FRAMES = False
-        #     self.btnToggleAlignedFrames.setText('Turn On Aligned Frame')
-        # else:
-        #     self.btnToggleAlignedFrames.setText('Turn Off Aligned Frame')
+        global ALIGNED_FRAMES, FILTERED_FRAMES
+        ALIGNED_FRAMES = not ALIGNED_FRAMES
+        if not ALIGNED_FRAMES:
+            FILTERED_FRAMES = False
+            self.btnToggleAlignedFrames.setText('Turn On Aligned Frame')
+        else:
+            self.btnToggleAlignedFrames.setText('Turn Off Aligned Frame')
 
-        # print("ALIGNED_FRAMES: ", ALIGNED_FRAMES)
+        print("ALIGNED_FRAMES: ", ALIGNED_FRAMES)
 
-        # disabled aligned frames at this moment
-        pass
+        # # disabled aligned frames at this moment
+        # pass
 
     # Added, Jason - 12 April 2024
     def toggleFilteredFramesMode(self):
-        # global ALIGNED_FRAMES, FILTERED_FRAMES
-        # if ALIGNED_FRAMES:
-        #     FILTERED_FRAMES = not FILTERED_FRAMES
-        # print("FILTERED_FRAMES: ", FILTERED_FRAMES)
+        global ALIGNED_FRAMES, FILTERED_FRAMES
+        if ALIGNED_FRAMES:
+            FILTERED_FRAMES = not FILTERED_FRAMES
+        print("FILTERED_FRAMES: ", FILTERED_FRAMES)
 
-        # disabled filtered frames at this moment
-        pass
+        # # disabled filtered frames at this moment
+        # pass
 
     def exitAdminMode(self):
         '''
@@ -1431,39 +1432,41 @@ class App(QWidget):
         name_dict = {
             'lbl_hostIP': {'text':'Host IP:','row':1,'column':0,'row_span':1,'col_span':1},
             'tbx_hostIP': {'text':'192.168.1.40','row':1,'column':1,'row_span':1,'col_span':1},
-            'lbl_hostPort':{'text':'Host Port','row':2,'column':0,'row_span':1,'col_span':1},
-            'tbx_hostPort':{'text':'5004','row':2,'column':1,'row_span':1,'col_span':1},
-            'lbl_mode': {'text':'mode','row':3,'column':0,'row_span':1,'col_span':1},
-            'cbx_mode': {'items':modes,'row':3,'column':1,'row_span':1,'col_span':1},
-            'lbl_micNum': {'text':'mic#','row':4,'column':0,'row_span':1,'col_span':1},
-            'cbx_micNum': {'items':self.micNames,'row':4,'column':1,'row_span':1,'col_span':1},
-            'lbl_micGain': {'text':'mic gain','row':5,'column':0,'row_span':1,'col_span':1},
-            'tbx_micGain': {'text':'30','row':5,'column':1,'row_span':1,'col_span':1},
-            'lbl_micDisable':{'text':'mic disable','row':6,'column':0,'row_span':1,'col_span':1},
-            'tbx_micDisable':{'text':'30','row':6,'column':1,'row_span':1,'col_span':1},
-            'lbl_setTest': {'text':'set Text','row':7,'column':0,'row_span':1,'col_span':1},
-            'cbx_setTest': {'items':setTests,'row':7,'column':1,'row_span':1,'col_span':1},
-            'lbl_denOutSel':{'text':'den_out_sel','row':8,'column':0,'row_span':1,'col_span':1},
-            'tbx_denOutSel':{'text':'8','row':8,'column':1,'row_span':1,'col_span':1},
-            'lbl_mcBetaSel':{'text':'mc_beta_sel','row':9,'column':0,'row_span':1,'col_span':1},
-            'tbx_mcBetaSel':{'text':'4','row':9,'column':1,'row_span':1,'col_span':1},
-            'lbl_mcKSel':{'text':'mc_K_sel','row':10,'column':0,'row_span':1,'col_span':1},
-            'tbx_mcKSel':{'text':'0','row':10,'column':1,'row_span':1,'col_span':1},
-            'lbl_en_BM_MC_ctrl':{'text':'en_BM_MC_ctrl','row':11,'column':0,'row_span':1,'col_span':1},
-            'tbx_en_BM_MC_ctrl':{'text':'0','row':11,'column':1,'row_span':1,'col_span':1},
-            'lbl_targetPos':{'text':'target pos','row':12,'column':0,'row_span':1,'col_span':1},
-            'tbx_targetPos':{'text':'0,0,0','row':12,'column':1,'row_span':1,'col_span':1},
-            'lbl_xyzOffsets':{'text':'x,y,z Offsets','row':13,'column':0,'row_span':1,'col_span':1},
-            'tbx_xyzOffsets':{'text':'0,0,0','row':13,'column':1,'row_span':1,'col_span':1},
-            'lbl_fourMics':{'text':'4 Mics','row':13,'column':3,'row_span':1,'col_span':1},
-            'tbx_fourMics':{'text':'0','row':13,'column':4,'row_span':1,'col_span':1},
+            'lbl_hostPort':{'text':'Host Port','row':1,'column':2,'row_span':1,'col_span':1},
+            'tbx_hostPort':{'text':'5004','row':1,'column':3,'row_span':1,'col_span':1},
+            'lbl_mode': {'text':'mode','row':2,'column':0,'row_span':1,'col_span':1},
+            'cbx_mode': {'items':modes,'row':2,'column':1,'row_span':1,'col_span':1},
+            'lbl_micNum': {'text':'mic#','row':2,'column':2,'row_span':1,'col_span':1},
+            'cbx_micNum': {'items':self.micNames,'row':2,'column':3,'row_span':1,'col_span':1},
+            'lbl_micGain': {'text':'mic gain','row':3,'column':0,'row_span':1,'col_span':1},
+            'tbx_micGain': {'text':'30','row':3,'column':1,'row_span':1,'col_span':1},
+            'lbl_micDisable':{'text':'mic disable','row':3,'column':2,'row_span':1,'col_span':1},
+            'tbx_micDisable':{'text':'30','row':3,'column':3,'row_span':1,'col_span':1},
+            'lbl_setTest': {'text':'set Test','row':4,'column':0,'row_span':1,'col_span':1},
+            'cbx_setTest': {'items':setTests,'row':4,'column':1,'row_span':1,'col_span':1},
+            'lbl_denOutSel':{'text':'den_out_sel','row':5,'column':0,'row_span':1,'col_span':1},
+            'tbx_denOutSel':{'text':'8','row':5,'column':1,'row_span':1,'col_span':1},
+            'lbl_mcBetaSel':{'text':'mc_beta_sel','row':5,'column':2,'row_span':1,'col_span':1},
+            'tbx_mcBetaSel':{'text':'4','row':5,'column':3,'row_span':1,'col_span':1},
+            'lbl_mcKSel':{'text':'mc_K_sel','row':6,'column':0,'row_span':1,'col_span':1},
+            'tbx_mcKSel':{'text':'0','row':6,'column':1,'row_span':1,'col_span':1},
+            'lbl_en_BM_MC_ctrl':{'text':'en_BM_MC_ctrl','row':6,'column':2,'row_span':1,'col_span':1},
+            'tbx_en_BM_MC_ctrl':{'text':'0','row':6,'column':3,'row_span':1,'col_span':1},
+            'lbl_targetPos':{'text':'target pos','row':9,'column':0,'row_span':1,'col_span':1},
+            'tbx_targetPos':{'text':'0,0,0','row':9,'column':1,'row_span':1,'col_span':1},
+            'lbl_xyzOffsets':{'text':'x,y,z Offsets','row':10,'column':0,'row_span':1,'col_span':1},
+            'tbx_xyzOffsets':{'text':'0,0,0','row':10,'column':1,'row_span':1,'col_span':1},
+            'lbl_fourMics':{'text':'4 Mics','row':10,'column':3,'row_span':1,'col_span':1},
+            'tbx_fourMics':{'text':'0','row':10,'column':4,'row_span':1,'col_span':1},
         }
 
         widget = QWidget()
         outer_layout = QVBoxLayout()
 
         layout = QGridLayout()
-        layout.addWidget(QLabel('Test Page'),0,0,1,1)
+        lbl_title = QLabel('Test Page')
+        lbl_title.setStyleSheet(LABEL_STYLE_TEST_PAGE)
+        layout.addWidget(lbl_title,0,0,1,1)
 
         points = [(50, 50), (100, 100), (150, 150), (200, 200)]
         #point_selection = PointSelectionGUI(points,self.send_message)
@@ -1476,6 +1479,7 @@ class App(QWidget):
                 label = QLabel()
                 label.setText(properties["text"])
                 label.setObjectName(name)
+                label.setStyleSheet(LABEL_STYLE_TEST_PAGE)
                 layout.addWidget(
                     label,
                     properties["row"],
@@ -1487,6 +1491,7 @@ class App(QWidget):
                 line_edit = QLineEdit()
                 line_edit.setText(properties['text'])
                 line_edit.setObjectName(name)
+                line_edit.setStyleSheet(LINEEDIT_STYLE_TEST_PAGE)
                 layout.addWidget(
                     line_edit,
                     properties["row"],
@@ -1497,6 +1502,7 @@ class App(QWidget):
             elif name.startswith("cbx_"):
                 combo_box = QComboBox()
                 combo_box.setObjectName(name)
+                combo_box.setStyleSheet(COMBO_STYLE_TEST_PAGE)
                 combo_box.addItems(properties["items"])  # Add items to the combobox
                 layout.addWidget(
                     combo_box,
@@ -1507,21 +1513,25 @@ class App(QWidget):
                 )
 
         btnSendPacket = QPushButton('Send Packet')
+        btnSendPacket.setStyleSheet(BUTTON_STYLE_TEST_PAGE)
         btnSendPacket.clicked.connect(self.sendPacket)
 
         btnTestPing = QPushButton('Test Ping Host')
+        btnTestPing.setStyleSheet(BUTTON_STYLE_TEST_PAGE)
         btnTestPing.clicked.connect(self.testPingHost)
 
         btnExitTestPage = QPushButton('Exit Test Page')
+        btnExitTestPage.setStyleSheet(BUTTON_STYLE_TEST_PAGE)
         btnExitTestPage.clicked.connect(self.exitTestPage)
 
 
         self.lbl_msg = QLabel('')
+        self.lbl_msg.setStyleSheet(SMALL_LABEL_STYLE_TEST_PAGE)
 
-        layout.addWidget(btnSendPacket,14,4,1,1)
-        layout.addWidget(btnTestPing,14,5,1,1)
-        layout.addWidget(btnExitTestPage,14,6,1,1)
-        layout.addWidget(self.lbl_msg,15,0,1,3)
+        layout.addWidget(btnSendPacket,14,0,1,1)
+        layout.addWidget(btnTestPing,15,0,1,1)
+        layout.addWidget(btnExitTestPage,16,0,1,1)
+        layout.addWidget(self.lbl_msg,17,0,1,3)
         
         # Set border color and width for the inner layout
         frame = QFrame()
@@ -1531,8 +1541,10 @@ class App(QWidget):
         frame.setLineWidth(1)
         frame.setMidLineWidth(1)
         frame.setLayout(layout)
-        frame.setMinimumSize(400,300)
-        frame.setMaximumSize(1000,600)
+        frame.setFixedHeight(1000)
+        frame.setFixedWidth(1500)
+        # frame.setMinimumSize(400,300)
+        # frame.setMaximumSize(1000,600)
 
 
 
@@ -1906,7 +1918,7 @@ class App(QWidget):
                     self.mouse_press_timer.start(2000)  
             # message = create_and_send_packet(HOST,PORT, area.to_bytes( 2, byteorder='big'))
             #Test_delay_function()
-            self.sendPacket()
+            #self.sendPacket()
 
     # Added for 3d coordinates, Jason, 11 April 2024
     def on_send_packed_finished(self):

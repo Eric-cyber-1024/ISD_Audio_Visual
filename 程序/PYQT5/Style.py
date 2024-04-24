@@ -8,6 +8,76 @@ FRAME_WIDTH = 1600
 FRAME_HEIGHT = 800
 BUTTON_BAR_HEIGHT = 200
 
+
+LABEL_STYLE_TEST_PAGE='''
+        QLabel {
+            font-size: 34px;
+            font-weight: bold;
+            color: black;
+            height: 35px;
+            width: 120px;
+        }
+'''
+
+SMALL_LABEL_STYLE_TEST_PAGE='''
+        QLabel {
+            font-size: 14px;
+            color: black;
+            height: 15px;
+            width: 120px;
+        }
+'''
+
+BUTTON_STYLE_TEST_PAGE= '''
+        QPushButton {
+            background: qradialgradient(
+            cx: 0.3, cy: -0.4, fx: 0.3, fy: -0.4,
+            radius: 1.35, stop: 0 #fff, stop: 1 #888
+            );    
+            font-size: 28px;
+            height: 32px;
+            width: 120px;
+            border: 4px solid #000000;
+            padding: 10px;
+            border-radius: 20px;
+        }
+        QPushButton:hover {
+            color: white;
+            background-color: darkgreen
+        }
+
+'''
+
+COMBO_STYLE_TEST_PAGE= '''
+        QComboBox {
+            font-size: 34px;
+            height: 35px;
+            width: 120px;
+            border: 4px solid #000000;
+            padding: 0px;
+            border-radius: 2px;
+        }
+
+'''
+
+
+LINEEDIT_STYLE_TEST_PAGE='''
+        QLineEdit {
+            background: qradialgradient(
+            cx: 0.3, cy: -0.4, fx: 0.3, fy: -0.4,
+            radius: 1.35, stop: 0 #fff, stop: 1 #888
+            );    
+            font-size: 34px;
+            height: 35px;
+            width: 120px;
+            border: 4px solid #000000;
+            padding: 10px;
+            border-radius: 20px;
+        }
+
+'''
+
+
 LABEL_STYLE_ADMIN_FRAME='''
         QLabel {
             font-size: 30px;
