@@ -15,6 +15,7 @@ from test_delay_cal import *
 import tkinter as tk
 from tkinter import ttk, messagebox
 from data_logger import DataLogger
+import struct
 
 sel = selectors.DefaultSelector()
 sendBuf=b'SET0'
@@ -25,7 +26,7 @@ MIC_NUMBER=32
 HOST_NAME ='192.168.1.40'
 PORT      =5004
 INDEX =[x for x in range (MIC_NUMBER )]
-sVersion = '0.9'
+sVersion = '0.10'
 
 
 class labeledTextbox:
@@ -216,7 +217,11 @@ class paramsDialog:
         self.manualDelayConfig = tk.IntVar() # 1-- configure delays manually
         self.fourMics          = tk.IntVar() # 1-- 4 mics case (will set toUseYAML True)
         self.toUseYAML = False               # true for four mic case
-        
+
+        # new parameters,Brian,25 April 2024
+        self.bm_alpha_sel=0;	
+        self.mc_K_set=0x00036000
+        self.bm_uplimit_H= [0x00040122,0x0019A280,0x006D1400,0x00180244]
         self.create_dialog_box()
 
     # removed,Brian,27 Mar 2024
@@ -239,14 +244,15 @@ class paramsDialog:
     #     self.tbx_srcPos   = sSrcPos
         
     def __str__(self):
-        return f"params,{self.hostIP}, {self.hostPort}, {self.mode},{self.micIndx},{self.micGain},{self.setTest},{self.den_out_sel},{self.mc_beta_sel},{self.mc_K_sel},[{self.srcPos[0]},{self.srcPos[1]},{self.srcPos[2]}],[{self.offsets[0]},{self.offsets[1]},{self.offsets[2]}],{self.toUseYAML},{self.manualDelayConfig.get()}"
+        hex_string = ','.join('0x'+hex(value)[2:].zfill(8) for value in self.bm_uplimit_H)
+        return f"params,{self.hostIP}, {self.hostPort}, {self.mode},{self.micIndx},{self.micGain},{self.micDisable},{self.setTest},{self.den_out_sel},{self.mc_beta_sel},{self.mc_K_sel},[{self.srcPos[0]},{self.srcPos[1]},{self.srcPos[2]}],[{self.offsets[0]},{self.offsets[1]},{self.offsets[2]}],{self.bm_alpha_sel},{'0x'+hex(self.mc_K_set).zfill(8)},{hex_string},{self.toUseYAML},{self.manualDelayConfig.get()}"
 
 
     def printParams(self):
-        print(self.hostIP,self.hostPort,self.mode,self.micIndx,self.micGain,self.setTest,self.den_out_sel,self.mc_beta_sel,self.mc_K_sel,self.srcPos,self.offsets)
-        print(self.toUseYAML)
+        sParams = self.__str__()
+        print(sParams)
         # add[save to log as well],Brian,27 Mar 2024
-        logger.add_data(self.__str__())
+        logger.add_data(sParams)
 
     def fetchParamsFromUI(self):
         
@@ -278,6 +284,11 @@ class paramsDialog:
         else:
             self.toUseYAML  = False
     
+        # new parameters, Brian, 25 April 2024
+
+        self.bm_alpha_sel=int(self.tbx_bm_alpha_sel.get())
+        self.mc_K_set=int(self.tbx_mc_K_set.get(),16)   # in hexidecimal format
+        self.bm_uplimit_H= [int(self.tbx_bm_uplimit_H0.get(),16),int(self.tbx_bm_uplimit_H1.get(),16),int(self.tbx_bm_uplimit_H2.get(),16),int(self.tbx_bm_uplimit_H3.get(),16)]
 
         
 
@@ -322,6 +333,10 @@ class paramsDialog:
         self.sSrcPos    = '-1,-1,-1'
         self.manualDelayConfig.set(0)
         self.toUseYAML  = False
+
+        self.bm_alpha_sel=0;	
+        self.mc_K_set=0x00036000
+        self.bm_uplimit_H= [0x00040122,0x0019A280,0x006D1400,0x00180244]
         
         # Destroy the dialog box
         #self.dialog_box.destroy()
@@ -393,6 +408,17 @@ class paramsDialog:
 
         # revise[added message13],Brian, 28 Mar 2024
         message13 = int(self.en_BM_MC_ctrl) # en_BM_MC_ctrl
+
+        # add new parameters, 25 April 2024
+        message14 = int(self.bm_alpha_sel)
+
+        # five 32-bit parameters here
+        message15_18 = struct.pack('>I', self.mc_K_set)
+        message19_22 = struct.pack('>I', self.bm_uplimit_H[0])
+        message23_26 = struct.pack('>I', self.bm_uplimit_H[1])
+        message27_30 = struct.pack('>I', self.bm_uplimit_H[2])
+        message31_34 = struct.pack('>I', self.bm_uplimit_H[3])
+
  
         # check to configure delays manually or not
         if self.manualDelayConfig.get()==1:
@@ -435,6 +461,13 @@ class paramsDialog:
             print('packet not ok')
             
         sendBuf=bytes([message1,message2,message3,message4,message5,message6,message7,message8,message9,message10,message11,message12,message13])
+
+        sendBuf += bytes([message14])
+        sendBuf += bytes(message15_18)
+        sendBuf += bytes(message19_22)
+        sendBuf += bytes(message23_26)
+        sendBuf += bytes(message27_30)
+        sendBuf += bytes(message31_34)
             
         # append packet to sendBuf
         sendBuf += packet
@@ -491,6 +524,12 @@ class paramsDialog:
         self.cbx_mode.current(0)
         self.cbx_mode.grid(row=2,column=1)
 
+        lbl_bm_uplimit_H0 = ttk.Label(self.dialog_box, text="bm uplimit H0")
+        lbl_bm_uplimit_H0.grid(row=2,column=2)
+        self.tbx_bm_uplimit_H0 = ttk.Entry(self.dialog_box,font="Helvetica 24")
+        self.tbx_bm_uplimit_H0.insert(0,'0x00040122')
+        self.tbx_bm_uplimit_H0.grid(row=2,column=3)
+
         lbl_micIndx = ttk.Label(self.dialog_box, text="Mic#:")
         lbl_micIndx.grid(row=3,column=0)
 
@@ -498,6 +537,12 @@ class paramsDialog:
         self.cbx_micIndx = ttk.Combobox(self.dialog_box, values=self.micNames,font="Helvetica 24")
         self.cbx_micIndx.current(0)
         self.cbx_micIndx.grid(row=3,column=1)
+
+        lbl_bm_uplimit_H1 = ttk.Label(self.dialog_box, text="bm uplimit H1")
+        lbl_bm_uplimit_H1.grid(row=3,column=2)
+        self.tbx_bm_uplimit_H1 = ttk.Entry(self.dialog_box,font="Helvetica 24")
+        self.tbx_bm_uplimit_H1.insert(0,'0x0019A280')
+        self.tbx_bm_uplimit_H1.grid(row=3,column=3)
 
         # Create the textboxes with labels
         
@@ -509,11 +554,24 @@ class paramsDialog:
         self.tbx_micGain.grid(row=4,column=1)
 
 
+        lbl_bm_uplimit_H2 = ttk.Label(self.dialog_box, text="bm uplimit H2")
+        lbl_bm_uplimit_H2.grid(row=4,column=2)
+        self.tbx_bm_uplimit_H2 = ttk.Entry(self.dialog_box,font="Helvetica 24")
+        self.tbx_bm_uplimit_H2.insert(0,'0x006D1400')
+        self.tbx_bm_uplimit_H2.grid(row=4,column=3)
+
+
         label_4 = ttk.Label(self.dialog_box, text="mic disable")
         label_4.grid(row=5,column=0)
         self.textbox_2 = ttk.Entry(self.dialog_box,font="Helvetica 24")
         self.textbox_2.insert(0,'30')
         self.textbox_2.grid(row=5,column=1)
+
+        lbl_bm_uplimit_H3 = ttk.Label(self.dialog_box, text="bm uplimit H3")
+        lbl_bm_uplimit_H3.grid(row=5,column=2)
+        self.tbx_bm_uplimit_H3 = ttk.Entry(self.dialog_box,font="Helvetica 24")
+        self.tbx_bm_uplimit_H3.insert(0,'0x00180244')
+        self.tbx_bm_uplimit_H3.grid(row=5,column=3)
 
         label_5 = ttk.Label(self.dialog_box, text="set test")
         label_5.grid(row=6,column=0)
@@ -538,11 +596,23 @@ class paramsDialog:
         self.tbx_mc_beta_sel.insert(0,'4')
         self.tbx_mc_beta_sel.grid(row=8,column=1)
 
+        lbl_bm_alpha_sel = ttk.Label(self.dialog_box, text="bm_alpha_sel")
+        lbl_bm_alpha_sel.grid(row=8,column=2)
+        self.tbx_bm_alpha_sel = ttk.Entry(self.dialog_box,font="Helvetica 24")
+        self.tbx_bm_alpha_sel.insert(0,'0')
+        self.tbx_bm_alpha_sel.grid(row=8,column=3)
+
         lbl_mc_K_sel = ttk.Label(self.dialog_box, text="mc_K_sel")
         lbl_mc_K_sel.grid(row=9,column=0)
         self.tbx_mc_K_sel = ttk.Entry(self.dialog_box,font="Helvetica 24")
         self.tbx_mc_K_sel.insert(0,'0')
         self.tbx_mc_K_sel.grid(row=9,column=1)
+
+        lbl_mc_K_set = ttk.Label(self.dialog_box, text="mc_K_set")
+        lbl_mc_K_set.grid(row=9,column=2)
+        self.tbx_mc_K_set = ttk.Entry(self.dialog_box,font="Helvetica 24")
+        self.tbx_mc_K_set.insert(0,'0x00036000')
+        self.tbx_mc_K_set.grid(row=9,column=3)
 
 
         lbl_en_BM_MC_ctrl = ttk.Label(self.dialog_box, text = 'en_BM_MC_ctrl')
