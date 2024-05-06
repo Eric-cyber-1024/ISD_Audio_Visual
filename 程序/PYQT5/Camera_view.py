@@ -260,9 +260,9 @@ class d435():
 
     '''
 
-    DEPTH_CAM_WIDTH  = 1280
-    DEPTH_CAM_HEIGHT = 720
-    DEPTH_FPS        = 30
+    DEPTH_CAM_WIDTH  = 848#1280
+    DEPTH_CAM_HEIGHT = 480#720
+    DEPTH_FPS        = 60
 
     COLOR_CAM_WIDTH  = 1280#1920
     COLOR_CAM_HEIGHT = 720#1080
@@ -616,6 +616,8 @@ class VideoThread(QThread):
             video_width  = 1920
             video_height = 1080
 
+        cnt = 0
+        tm = time.time()     
         while True:
             if self.d435 is not None:
                 x0 = self.mousex
@@ -628,6 +630,12 @@ class VideoThread(QThread):
 
                 # self.cv_img, self.depth_frame, point = self.d435.getFrameWithAlignedFrames(mousex=x0,mousey=y0)
                 self.cv_img, self.depth_frame, point = self.d435.getFrame(mousex=x0,mousey=y0)
+
+                cnt+=1
+                if time.time() - tm > 1.0:
+                    print(f"CameraFPS: {cnt}")
+                    cnt = 0
+                    tm = time.time()
 
                 if point is not None:
                     # emit signal 
