@@ -262,7 +262,7 @@ class d435():
 
     DEPTH_CAM_WIDTH  = 848#1280
     DEPTH_CAM_HEIGHT = 480#720
-    DEPTH_FPS        = 60
+    DEPTH_FPS        = 60#60
 
     COLOR_CAM_WIDTH  = 1280#1920
     COLOR_CAM_HEIGHT = 720#1080
@@ -2038,7 +2038,8 @@ class App(QWidget):
         # dataLogger.stop_logging()
 
         # stop all the timers
-        self.mouse_press_timer.stop()
+        if hasattr(self, 'mouse_press_timer'):
+            self.mouse_press_timer.stop()
         exit()
 
 
