@@ -2059,8 +2059,8 @@ class App(QWidget):
 
 
     def exit_app(self):
-        # global dataLogger
-        # dataLogger.stop_logging()
+        global dataLogger
+        dataLogger.stop_logging()
 
         # stop all the timers
         if hasattr(self, 'mouse_press_timer'):
