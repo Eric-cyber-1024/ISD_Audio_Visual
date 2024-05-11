@@ -802,6 +802,11 @@ class App(QWidget):
 
     def __init__(self):
         super().__init__()
+
+        # try to load configurations from yaml file (if the config.yaml exists)
+        self.tryLoadConfig()
+
+
         if (QDesktopWidget().screenCount() > 1):
             self.screen_number = 1
         else:
@@ -1262,6 +1267,26 @@ class App(QWidget):
             raise Exception('exit from init')
 
         
+    def tryLoadConfig(self):
+        '''
+        check if config.yaml exists, if yes, load config params from it, else set default values manually
+
+        '''
+        configFileName = 'config.yaml'
+        if os.path.exists(configFileName):
+            with open(configFileName, 'r') as file:
+                configParams= yaml.safe_load(file)
+                self.configParams = configParams
+        else:
+            # set up default values manually
+            self.configParams = {
+                'debug': False,
+                'fourMic': True,
+                'adminRole': False,
+                'showROI': True,
+            }
+            print(self.configParams)
+
         
         
     def showAdminWidgets(self):
