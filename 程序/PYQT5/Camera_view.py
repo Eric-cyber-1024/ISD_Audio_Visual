@@ -678,8 +678,9 @@ class VideoThread(QThread):
                         pointStr = 'x:%.2f,y:%.2f,z:%.2f' % (point[0], point[1], point[2])
                         self.drawDebugText(pointStr)
 
-                        # draw dot of the mouse x,y
-                        cv2.circle(self.cv_img, (self.mousex,self.mousey), 3, (0, 0, 255), -1)
+                        # draw ROI of the mouse x,y
+                        cv2.rectangle(self.cv_img,(self.mousex-50,self.mousey-50),(self.mousex+50,self.mousey+50),(0,0,255),2)
+                        cv2.drawMarker(self.cv_img,(self.mousex,self.mousey),(0, 0, 255),cv2.MARKER_CROSS,20,3)
                 
 
 
@@ -799,12 +800,17 @@ class AudioThread(QThread):
 
 
 class App(QWidget):
-
+    
     def __init__(self):
+        global DEBUG
         super().__init__()
 
         # try to load configurations from yaml file (if the config.yaml exists)
-        self.tryLoadConfig()
+        self.configParams = self.tryLoadConfig()
+        print(self.configParams)
+
+        DEBUG = self.configParams['debug']
+
 
 
         if (QDesktopWidget().screenCount() > 1):
@@ -830,8 +836,8 @@ class App(QWidget):
         self.selected_camera_index = -1
         self.selected_camera = ''
         self.d435 = None 
-        self.adminRole=False # Add[if adminRole is True, will can show more features],Brian,05 April 2024
-        self.toUseYAML=False # true load mic locs from yaml file (for 4 mics case)
+        self.adminRole=self.configParams['adminRole'] # Add[if adminRole is True, will can show more features],Brian,05 April 2024
+        self.toUseYAML=self.configParams['fourMics']  # true load mic locs from yaml file (for 4 mics case)
 
         # create the label that holds the image
         self.image_label = Create_ImageWindow()
@@ -1071,75 +1077,8 @@ class App(QWidget):
             self.main_page.addWidget(self.main_page_button_widget, 1, 0, 1, 2,
                                      Qt.AlignCenter)
 
-        # revised[using Clickable Label instead],Brian, 05 April 2024
-        # Setting up Setting page for LPF and Gain and Voulme
-        # self.gain_label = QLabel("Mic Array Channel Gain  :")
-        self.gain_label = ClickableLabel("Mic Array Channel Gain  :")
-        # button_font = QFont("Arial",40)
-        # button_font.setPixelSize(40)
-        self.gain_label.setFont(BUTTON_FONT)
-        self.gain_label.clicked.connect(self.showPasswordDialog)
-
-        self.volume_label = QLabel("Mic Array Digital Volume :")
-        self.volume_label.setFont(BUTTON_FONT)
-        self.gain_fader = Create_Slider(-12, 12, 0, 1, SLIDER_STYLE_2,
-                                        function=update_label)
-        self.volume_fader = Create_Slider(0, 24, 0, 1, SLIDER_STYLE_2,
-                                          function=update_label)
-        self.filter_select_label = QLabel("Mic Array Filter Select     :")
-        self.filter_select_label.setFont(BUTTON_FONT)
-
-        self.checkbox_6kHz = Create_RadioBotton(
-            '6khz',
-            lambda: ToggleSelection(self, Frequency_Selection.LPF_6K.value))
-        self.checkbox_12kHz = Create_RadioBotton(
-            '12khz',
-            lambda: ToggleSelection(self, Frequency_Selection.LPF_12K.value))
-        self.checkbox_18kHz = Create_RadioBotton(
-            '18khz',
-            lambda: ToggleSelection(self, Frequency_Selection.LPF_18K.value))
-        self.checkbox_full = Create_RadioBotton(
-            'Full Range',
-            lambda: ToggleSelection(self, Frequency_Selection.LPF_FULL.value))
-        self.back_button = Create_Button(
-            "Back", lambda: switchPage(self, APP_PAGE.MAIN.value),
-            BUTTON_STYLE_TEXT)
-        self.ApplyButton = Create_Button("Apply", lambda: exit(), BUTTON_STYLE_TEXT)
-
-        self.setting_page = QGridLayout()
-        self.setting_page.addWidget(self.gain_label, 1, 0, 1, 1)
-        self.setting_page.addWidget(self.gain_fader, 1, 1, 1, 4,
-                                    Qt.AlignHCenter)
-
-        self.setting_page.addWidget(self.volume_label, 2, 0, 1, 1)
-        self.setting_page.addWidget(self.volume_fader, 2, 1, 1, 4,
-                                    Qt.AlignHCenter)
-
-        self.setting_page.addWidget(self.filter_select_label, 3, 0, 1, 1)
-        self.setting_page.addWidget(self.checkbox_6kHz, 3, 1, 1, 1,
-                                    Qt.AlignHCenter)
-        self.setting_page.addWidget(self.checkbox_12kHz, 3, 2, 1, 1,
-                                    Qt.AlignHCenter)
-        self.setting_page.addWidget(self.checkbox_18kHz, 3, 3, 1, 1,
-                                    Qt.AlignHCenter)
-        self.setting_page.addWidget(self.checkbox_full, 3, 4, 1, 1,
-                                    Qt.AlignHCenter)
-
-        self.setting_page.addWidget(self.ApplyButton, 4, 3, 1, 1,
-                                    Qt.AlignHCenter)
-        self.setting_page.addWidget(self.back_button, 4, 4, 1, 1,
-                                    Qt.AlignHCenter)
-        
-        self.adminFrame = self.setupAdminFrame()
-        self.setting_page.addWidget(self.adminFrame,5,0,1,1)
-        
-
-
-        self.setting_page_widget = QWidget()
-        self.setting_page_widget.setLayout(self.setting_page)
-        self.setting_page_widget.setFixedSize(WINDOW_WIDTH, WINDOW_HEIGHT)
-        # add[change background to gray],Brian,05 April 2024
-        self.setting_page_widget.setStyleSheet("background-color:gray")
+        # setup the setting page 
+        self.setupSettingsPage()
         
 
         self.main_page_widget = QWidget()
@@ -1276,7 +1215,7 @@ class App(QWidget):
         if os.path.exists(configFileName):
             with open(configFileName, 'r') as file:
                 configParams= yaml.safe_load(file)
-                self.configParams = configParams
+                return configParams
         else:
             # set up default values manually
             self.configParams = {
@@ -1285,7 +1224,7 @@ class App(QWidget):
                 'adminRole': False,
                 'showROI': True,
             }
-            print(self.configParams)
+            return self.configParams
 
         
         
@@ -1376,7 +1315,79 @@ class App(QWidget):
             theWidget[0].setText('%.2f,%.2f,%.2f' %(-point[0],-point[1],point[2]))    
         
 
-    def setupAdminFrame(self):
+    def setupSettingsPage(self):
+        # revised[using Clickable Label instead],Brian, 05 April 2024
+        # Setting up Setting page for LPF and Gain and Voulme
+        # self.gain_label = QLabel("Mic Array Channel Gain  :")
+        self.gain_label = ClickableLabel("Mic Array Channel Gain  :")
+        # button_font = QFont("Arial",40)
+        # button_font.setPixelSize(40)
+        self.gain_label.setFont(BUTTON_FONT)
+        self.gain_label.clicked.connect(self.showPasswordDialog)
+
+        self.volume_label = QLabel("Mic Array Digital Volume :")
+        self.volume_label.setFont(BUTTON_FONT)
+        self.gain_fader = Create_Slider(-12, 12, 0, 1, SLIDER_STYLE_2,
+                                        function=update_label)
+        self.volume_fader = Create_Slider(0, 24, 0, 1, SLIDER_STYLE_2,
+                                          function=update_label)
+        self.filter_select_label = QLabel("Mic Array Filter Select     :")
+        self.filter_select_label.setFont(BUTTON_FONT)
+
+        self.checkbox_6kHz = Create_RadioBotton(
+            '6khz',
+            lambda: ToggleSelection(self, Frequency_Selection.LPF_6K.value))
+        self.checkbox_12kHz = Create_RadioBotton(
+            '12khz',
+            lambda: ToggleSelection(self, Frequency_Selection.LPF_12K.value))
+        self.checkbox_18kHz = Create_RadioBotton(
+            '18khz',
+            lambda: ToggleSelection(self, Frequency_Selection.LPF_18K.value))
+        self.checkbox_full = Create_RadioBotton(
+            'Full Range',
+            lambda: ToggleSelection(self, Frequency_Selection.LPF_FULL.value))
+        self.back_button = Create_Button(
+            "Back", lambda: switchPage(self, APP_PAGE.MAIN.value),
+            BUTTON_STYLE_TEXT)
+        self.ApplyButton = Create_Button("Apply", lambda: exit(), BUTTON_STYLE_TEXT)
+
+        self.setting_page = QGridLayout()
+        self.setting_page.addWidget(self.gain_label, 1, 0, 1, 1)
+        self.setting_page.addWidget(self.gain_fader, 1, 1, 1, 4,
+                                    Qt.AlignHCenter)
+
+        self.setting_page.addWidget(self.volume_label, 2, 0, 1, 1)
+        self.setting_page.addWidget(self.volume_fader, 2, 1, 1, 4,
+                                    Qt.AlignHCenter)
+
+        self.setting_page.addWidget(self.filter_select_label, 3, 0, 1, 1)
+        self.setting_page.addWidget(self.checkbox_6kHz, 3, 1, 1, 1,
+                                    Qt.AlignHCenter)
+        self.setting_page.addWidget(self.checkbox_12kHz, 3, 2, 1, 1,
+                                    Qt.AlignHCenter)
+        self.setting_page.addWidget(self.checkbox_18kHz, 3, 3, 1, 1,
+                                    Qt.AlignHCenter)
+        self.setting_page.addWidget(self.checkbox_full, 3, 4, 1, 1,
+                                    Qt.AlignHCenter)
+
+        self.setting_page.addWidget(self.ApplyButton, 4, 3, 1, 1,
+                                    Qt.AlignHCenter)
+        self.setting_page.addWidget(self.back_button, 4, 4, 1, 1,
+                                    Qt.AlignHCenter)
+        
+        # show the adminFrame is 'adminRole' is True
+        self.adminFrame = self.setupAdminFrame(self.configParams['adminRole'])
+        self.setting_page.addWidget(self.adminFrame,5,0,1,1)
+        
+
+
+        self.setting_page_widget = QWidget()
+        self.setting_page_widget.setLayout(self.setting_page)
+        self.setting_page_widget.setFixedSize(WINDOW_WIDTH, WINDOW_HEIGHT)
+        # add[change background to gray],Brian,05 April 2024
+        self.setting_page_widget.setStyleSheet("background-color:gray")
+
+    def setupAdminFrame(self,toShow=False):
         '''
         create Frame for Admin Mode Features
 
@@ -1423,7 +1434,10 @@ class App(QWidget):
         adminFrame.setFixedWidth(1500)
         adminFrame.setFixedHeight(300)
         adminFrame.setLayout(adminLayout)
-        adminFrame.hide()
+        if toShow:
+            adminFrame.show()
+        else:
+            adminFrame.hide()
         return adminFrame
         
         
