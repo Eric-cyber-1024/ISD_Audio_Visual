@@ -807,8 +807,7 @@ class App(QWidget):
 
         # try to load configurations from yaml file (if the config.yaml exists)
         self.configParams = self.tryLoadConfig()
-        print(self.configParams)
-
+        
         DEBUG = self.configParams['debug']
 
 
@@ -1504,7 +1503,7 @@ class App(QWidget):
             'lbl_xyzOffsets':{'text':'x,y,z Offsets','row':10,'column':0,'row_span':1,'col_span':1},
             'tbx_xyzOffsets':{'text':'0,0,0','row':10,'column':1,'row_span':1,'col_span':1},
             'lbl_fourMics':{'text':'4 Mics','row':10,'column':3,'row_span':1,'col_span':1},
-            'tbx_fourMics':{'text':'0','row':10,'column':4,'row_span':1,'col_span':1},
+            'tbx_fourMics':{'text':'1' if self.toUseYAML else '0','row':10,'column':4,'row_span':1,'col_span':1},
         }
 
         widget = QWidget()
