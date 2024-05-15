@@ -634,7 +634,19 @@ class VideoThread(QThread):
         dim = (width, height)
         return cv2.resize(frame, dim, interpolation =cv2.INTER_AREA)
     
+    def getOrientation(self,rvecs,tvecs):
+        # converting Rodrigues format to 3x3 rotation matrix format
+        R_c = cv2.Rodrigues(rvecs)[0]
+        t_c = -np.matmul(R_c, tvecs)
+        T_c = np.hstack([R_c, t_c])
+        alpha, beta, gamma = cv2.decomposeProjectionMatrix(T_c)[-1]
         
+        # Convert euler angles to roll-pitch-yaw of a camera with X forward and Y left
+        roll = beta
+        pitch = -alpha - 90
+        yaw = gamma + 90
+
+        return roll,pitch,yaw
     
     def loadCalibrationData(self,yamlFileName):
         '''
@@ -726,7 +738,7 @@ class VideoThread(QThread):
 
                     if ret:
 
-                        roll,pitch,yaw = getOrientation(rvecs,tvecs)
+                        roll,pitch,yaw = self.getOrientation(rvecs,tvecs)
                         
                         
                         debug_message='%.2f,%.2f,%.2f,(%d,%d),(%.1f,%.1f,%.1f)' % (tvecs[0]/1e3,tvecs[1]/1e3,tvecs[2]/1e3,int(cc[1][0][0]),int(cc[1][0][1]),roll,pitch,yaw)
@@ -813,8 +825,7 @@ class VideoThread(QThread):
 
                 # try to perform 3d pose estimation here
                 output = self.pose_estimation(self.cv_img, self.aruco_dict_type, self.k, self.d)
-                cv2.imshow('Estimated Pose', output)
-                cv2.waitKey(1) 
+                
 
         
                 # if ret:
