@@ -704,7 +704,7 @@ def loadCalibrationData(yamlFileName):
     #print(camera_matrix,dist_coeffs)
     return camera_matrix,dist_coeffs
 
-def pose_esitmation(frame, aruco_dict_type, mtx, dist):
+def pose_estimation(frame, aruco_dict_type, mtx, dist):
 
     '''
     frame - Frame from the video stream
@@ -734,6 +734,7 @@ def pose_esitmation(frame, aruco_dict_type, mtx, dist):
     #cv2.aruco_dict = cv2.aruco.Dictionary_get(aruco_dict_type)
     #parameters = cv2.aruco.DetectorParameters_create()
 
+    
     arucoDict = cv2.aruco.getPredefinedDictionary(ARUCO_DICT[args["type"]])
     arucoParams = cv2.aruco.DetectorParameters()
     detector = cv2.aruco.ArucoDetector(arucoDict, arucoParams)
@@ -902,7 +903,7 @@ if __name__ == '__main__':
         if not ret:
             break
         
-        output = pose_esitmation(frame, aruco_dict_type, k, d)
+        output = pose_estimation(frame, aruco_dict_type, k, d)
 
         cv2.imshow('Estimated Pose', output)
         key = cv2.waitKey(1) & 0xFF
