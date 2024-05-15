@@ -33,6 +33,7 @@ from test_delay_cal import *
 import pyrealsense2 as rs
 
 from progress_bar import CustomProgressBarLogger
+from utils import ARUCO_DICT
 
 # from pywinauto import Desktop
 current_datetime = datetime.now()
@@ -296,6 +297,7 @@ class d435():
         # Get the intrinsics of the color camera
         self.colorProfile = rs.video_stream_profile(profile.get_stream(rs.stream.color))
         self.colorIntrinsics = self.colorProfile.get_intrinsics()
+        
 
         # Get the intrinsics of the depth camera
         self.depthProfile = rs.video_stream_profile(profile.get_stream(rs.stream.depth))
@@ -340,6 +342,34 @@ class d435():
                                                               # 0=Custom, 1=Default, 2=Hand, 3=High Accuracy, 4=High Density
         self.colorizer.set_option(rs.option.min_distance, self.depthMin)
         self.colorizer.set_option(rs.option.max_distance, self.depthMax)
+
+
+    def getOpencvIntrinsics(self):
+        '''
+        get color frame intrinsics in Opencv Format
+
+        '''
+        # get self.k, self.d from self.d435 color intrinsic matrix
+        intrinsics = self.colorIntrinsics
+
+        fx = intrinsics.fx  # Focal length in x
+        fy = intrinsics.fy  # Focal length in y
+        cx = intrinsics.ppx # Principal point x
+        cy = intrinsics.ppy # Principal point y
+
+        
+        distortion_coeffs = [[intrinsics.coeffs[0], intrinsics.coeffs[1], intrinsics.coeffs[4],
+                     intrinsics.coeffs[3], intrinsics.coeffs[2]]]
+        
+        print(distortion_coeffs)
+
+        camera_matrix = np.array([[fx, 0, cx],
+                        [0, fy, cy],
+                        [0, 0, 1]])
+        dist_coeffs = np.array(distortion_coeffs)
+        print(camera_matrix,dist_coeffs)
+
+        return camera_matrix,dist_coeffs
 
     def getFrame(self,mousex,mousey):
         global DEBUG
@@ -564,8 +594,16 @@ class VideoThread(QThread):
         self.mousex=0
         self.mousey=0
 
+        self.aruco_dict_type = ARUCO_DICT["DICT_ARUCO_ORIGINAL"]
+        
+
         if self.camera_name.startswith('Intel(R) RealSense(TM) Depth Camera 435') and self.camera_name.endswith('RGB'):
             self.d435 = d435()
+
+            self.k, self.d = self.d435.getOpencvIntrinsics()
+            
+            
+            
 
     def setMouseXY(self,mousex,mousey):
         self.mousex = mousex
@@ -595,6 +633,148 @@ class VideoThread(QThread):
         height = int(frame.shape[0] * percent/ 100)
         dim = (width, height)
         return cv2.resize(frame, dim, interpolation =cv2.INTER_AREA)
+    
+        
+    
+    def loadCalibrationData(self,yamlFileName):
+        '''
+        try to load camera intrinsic matrix from yaml file
+        '''
+        try:
+            with open(yamlFileName, 'r') as file:
+                data = yaml.safe_load(file)
+
+                # Extract the camera matrix and distortion coefficients
+                camera_matrix = np.array(data['camera_matrix'])
+                dist_coeffs = np.array(data['dist_coeff'])
+                #print(camera_matrix,dist_coeffs)
+                return camera_matrix,dist_coeffs
+        except:
+            return None, None
+        
+
+
+
+    def pose_estimation(self,frame, aruco_dict_type, mtx, dist):
+
+        '''
+        frame - Frame from the video stream
+        matrix_coefficients - Intrinsic matrix of the calibrated camera
+        distortion_coefficients - Distortion coefficients associated with your camera
+
+        return:-
+        frame - The frame with the axis drawn on it
+        '''
+
+        global prev_save_time, targetPosDepthCam, stacked_frame, debug_message
+
+        # Define the font settings
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        font_scale = 1.
+        font_color = (0, 0, 255)  # red color
+        line_type = cv2.LINE_AA
+
+        # Write the debug message on the image
+        
+        text_size, _ = cv2.getTextSize("Debug Message", font, font_scale, 1)
+        text_x = 10
+        text_y = 10 + text_size[1]
+        background_color = (50, 50, 50)  # dark grey background color
+
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        #cv2.aruco_dict = cv2.aruco.Dictionary_get(aruco_dict_type)
+        #parameters = cv2.aruco.DetectorParameters_create()
+
+        arucoDict = cv2.aruco.getPredefinedDictionary(aruco_dict_type)
+        arucoParams = cv2.aruco.DetectorParameters()
+        detector = cv2.aruco.ArucoDetector(arucoDict, arucoParams)
+
+        # 3D object points, assuming the chessboard lies on the X-Y plane (z=0) and square size of 38mm
+        square_size=38*2
+        objp = np.zeros((4, 3), np.float32)
+        #objp[:, :2] = np.mgrid[0:2, 0:2].T.reshape(-1, 2)*square_size
+        objp[0]=[0.,square_size*1.,0.]
+        objp[1]=[0.,0.,0.]
+        objp[2]=[square_size*1.,0.,0.]
+        objp[3]=[square_size*1.,square_size*1.,0.]
+
+        axis = np.float32([[1, 0, 0], [0, 1, 0], [0, 0, -1]]).reshape(-1, 3)*square_size
+
+
+        corners, ids, rejected_img_points = detector.detectMarkers(gray)
+
+        
+
+            # If markers are detected
+        if len(corners) > 0:
+            for i in range(0, len(ids)):
+                if ids[i][0]==590:
+                    
+                    
+                    # # Estimate pose of each marker and return the values rvec and tvec---(different from those of camera coefficients)
+                    # rvec, tvec, markerPoints = cv2.aruco.estimatePoseSingleMarkers(corners[i], 0.02, matrix_coefficients,
+                    #                                                            distortion_coefficients)
+                    # # Draw a square around the markers
+                    #cv2.aruco.drawDetectedMarkers(frame, [corners[i]]) 
+
+                    # # Draw Axis
+                    # cv2.aruco.drawAxis(frame, matrix_coefficients, distortion_coefficients, rvec, tvec, 0.01)  
+
+                    cc = corners[i][0]
+                    cc = np.reshape(cc, (cc.shape[0], 1, 2))
+                    ret, rvecs, tvecs = cv2.solvePnP(objp,cc, mtx, dist)
+
+                    if ret:
+
+                        roll,pitch,yaw = getOrientation(rvecs,tvecs)
+                        
+                        
+                        debug_message='%.2f,%.2f,%.2f,(%d,%d),(%.1f,%.1f,%.1f)' % (tvecs[0]/1e3,tvecs[1]/1e3,tvecs[2]/1e3,int(cc[1][0][0]),int(cc[1][0][1]),roll,pitch,yaw)
+
+                        
+
+                        # Get the text size
+                        (text_width, text_height), _ = cv2.getTextSize(debug_message, font, font_scale, 1)
+
+                        # Calculate the background rectangle coordinates
+                        background_rect_coords = ((0, 0), (text_width + 10, text_height + 10))  # Adjust padding as needed
+
+                        # Draw the background rectangle
+                        cv2.rectangle(frame, background_rect_coords[0], background_rect_coords[1], background_color, cv2.FILLED)
+                        cv2.putText(frame, debug_message, (text_x, text_y), font, font_scale, font_color, 1, line_type)
+                    
+                        
+                        
+                    
+
+                        # project 3D points to image plane
+                        imgpts, jac = cv2.projectPoints(axis, rvecs, tvecs, mtx, dist)
+
+                        frame = self.draw(frame, cc, imgpts)
+                        #cv2.imshow('Estimated Pose', img)
+
+
+                        
+
+        return frame
+    
+
+    
+    def draw(self,img, corners, imgpts):
+        '''
+        draw bounding box for 3d pose estimation
+        '''
+        # why it has to be corners[1]?!
+        corner = tuple(corners[1].ravel())
+        
+        # blue -- X
+        img = cv2.line(img, (int(corner[0]),int(corner[1])), (int(imgpts[0][0][0]),int(imgpts[0][0][1])), (255, 0, 0), 5)
+        # green -- Y 
+        img = cv2.line(img, (int(corner[0]),int(corner[1])), (int(imgpts[1][0][0]),int(imgpts[1][0][1])), (0, 255, 0), 5)
+        # red -- Z
+        img = cv2.line(img, (int(corner[0]),int(corner[1])), (int(imgpts[2][0][0]),int(imgpts[2][0][1])), (0, 0, 255), 5)
+        return img
+
 
     def run(self):
         global START_RECORDING, VIDEO_NAME, OUTPUT_NAME, AUDIO_NAME, ALIGNED_FRAMES
@@ -630,6 +810,42 @@ class VideoThread(QThread):
 
                 # self.cv_img, self.depth_frame, point = self.d435.getFrameWithAlignedFrames(mousex=x0,mousey=y0)
                 self.cv_img, self.depth_frame, point = self.d435.getFrame(mousex=x0,mousey=y0)
+
+                # try to perform 3d pose estimation here
+                output = self.pose_estimation(self.cv_img, self.aruco_dict_type, self.k, self.d)
+                cv2.imshow('Estimated Pose', output)
+                cv2.waitKey(1) 
+
+        
+                # if ret:
+                #     corners2 = cv2.cornerSubPix(gray, corners, (11, 11), (-1, -1), criteria)
+
+                #     # Draw and display the corners
+                #     imgAugmnt = cv2.drawChessboardCorners(self.cv_img, (n_row,n_col), corners2,ret)
+                #     cv2.imshow('Pose Estimation',imgAugmnt) 
+
+                    # Find the rotation and translation vectors
+                    # assuming word coordinates lies on the chessboard 
+                    #ret, rvecs, tvecs = cv2.solvePnP(objp, corners2, mtx, dist)
+
+                    # if ret:
+                        
+                    #     debug_message='%.2f,%.2f,%.2f' % (tvecs[0]/1e3,tvecs[1]/1e3,tvecs[2]/1e3)
+                    #     cv2.putText(img, debug_message, (text_x, text_y), font, font_scale, font_color, 1, line_type)
+                        
+                    #     # converting Rodrigues format to 3x3 rotation matrix format
+                    #     rotMatrix,_=cv2.Rodrigues(rvecs)
+                    #     #print(rotMatrix)
+                    
+
+                    #     # project 3D points to image plane
+                    #     imgpts, jac = cv2.projectPoints(axis, rvecs, tvecs, mtx, dist)
+
+                    #     img = draw(img, corners2, imgpts)
+                    #     cv.imshow('Pose Estimation', img)
+                    #     imgptsCube, jacCube = cv.projectPoints(axisCube, rvecs, tvecs, mtx, dist)
+                    #     imgCube = drawCube(img, corners2, imgptsCube)
+                    #     cv.imshow('Pose Estimation Cube', imgCube)
 
                 cnt+=1
                 if time.time() - tm > 1.0:
