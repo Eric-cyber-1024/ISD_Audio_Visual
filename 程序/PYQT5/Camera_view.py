@@ -586,13 +586,14 @@ class VideoThread(QThread):
     update_3d_coordinate = pyqtSignal(list)
     change_pixmap_signal = pyqtSignal(np.ndarray)
 
-    def __init__(self, camera_index, camera_name):
+    def __init__(self, camera_index, camera_name,usePoseEstimation=False):
         super().__init__()
         self.camera_index = camera_index
         self.camera_name  = camera_name
         self.d435 = None
         self.mousex=0
         self.mousey=0
+        self.usePoseEstimation=usePoseEstimation
 
         self.aruco_dict_type = ARUCO_DICT["DICT_ARUCO_ORIGINAL"]
         
@@ -690,7 +691,7 @@ class VideoThread(QThread):
         
         text_size, _ = cv2.getTextSize("Debug Message", font, font_scale, 1)
         text_x = 10
-        text_y = 10 + text_size[1]
+        text_y = 40 + text_size[1]
         background_color = (50, 50, 50)  # dark grey background color
 
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
@@ -824,7 +825,8 @@ class VideoThread(QThread):
                 self.cv_img, self.depth_frame, point = self.d435.getFrame(mousex=x0,mousey=y0)
 
                 # try to perform 3d pose estimation here
-                output = self.pose_estimation(self.cv_img, self.aruco_dict_type, self.k, self.d)
+                if self.usePoseEstimation:
+                    output = self.pose_estimation(self.cv_img, self.aruco_dict_type, self.k, self.d)
                 
 
         
@@ -1034,7 +1036,7 @@ class App(QWidget):
 
         # try to load configurations from yaml file (if the config.yaml exists)
         self.configParams = self.tryLoadConfig()
-        
+        print(self.configParams)
         DEBUG = self.configParams['debug']
 
 
@@ -1410,7 +1412,7 @@ class App(QWidget):
                 self.slider_mic_vol.valueChanged.connect(self.audio_inCtrl.set_volume)
 
                 # create the video capture thread
-                self.video_thread = VideoThread(self.selected_camera_index,self.selected_camera)
+                self.video_thread = VideoThread(self.selected_camera_index,self.selected_camera,self.configParams['usePoseEstimation'])
                 self.audio_thread = AudioThread(self.input_device)
                 
                 # connect its signal to the update_image slot
