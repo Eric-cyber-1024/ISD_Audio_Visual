@@ -1,0 +1,5 @@
+debug: False
+fourMics: True
+adminRole: True
+showROI: True
+usePoseEstimation: True
