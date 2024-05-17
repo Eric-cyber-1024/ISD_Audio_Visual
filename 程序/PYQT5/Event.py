@@ -35,6 +35,7 @@ def combine_video_audio(self):
     # Load the video clip
     video_clip = VideoFileClip(self.video_path, audio=False)
     # Cut off the first 3 second to align with the audio ( might need adjustment)
+    # Revised for testing
     video_clip = video_clip.subclip(3)  # need to find a way to align the video with audio, 
     # Load the audio clip
     audio_clip = AudioFileClip(self.audio_path)

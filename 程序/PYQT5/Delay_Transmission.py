@@ -72,7 +72,7 @@ def BintoINT(Binary):
 def send_and_receive_packet(host, port, packet, timeout=1):
     # Create a socket object
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-
+    sock.setblocking(False)
     # Set the timeout
     sock.settimeout(timeout)
 

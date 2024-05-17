@@ -25,7 +25,7 @@ from Event import *
 from Enum_library import *
 from Delay_Transmission import *
 from audio_controller import AudioDeviceDialog, AudioController, MyAudioUtilities
-from utility import audio_dev_to_str, networkController
+from utility import audio_dev_to_str, networkController, rescale_frame
 from data_logger import DataLogger
 from test_delay_cal import *
 
@@ -57,7 +57,17 @@ DEBUG = False
 ALIGNED_FRAMES = False
 FILTERED_FRAMES = False
 SENDING_PACKET = False
-sVersion='0.1.7'
+START_SEND_PACKET = True
+MOUSE_CLICKED = False
+sVersion='0.1.8'
+
+def config_path(relative_path):
+    try:
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+    
+    return os.path.join(base_path, relative_path)
 
 def resource_path(relative_path):
     try:
@@ -207,9 +217,6 @@ class MovingAverageCalculator:
         self.lock_var_range = 0.05
         self.locked_value = 0.0
         self.average = 0.0
-        self.timer = QTimer()
-        self.timer_interval = 1000
-        self.timer.timeout.connect(self.handle_timeout)
 
     def calculate_moving_average(self, x):
         self.window.append(x)
@@ -242,34 +249,144 @@ class MovingAverageCalculator:
 
         if self.locked:
             self.locked_value = self.average
-            # print("locked_value: ", self.locked_value)
-            # self.timer.start(self.timer_interval)
             return self.locked_value
         
         return 0.0
 
-    def handle_timeout(self):
-        # TODO: emit signal to send packet
-        # self.cal_timeout.emit()
-        pass
-
+    def isDepthLocked(self):
+        return self.locked
     
 
-class d435():
+class WebCam(QThread):
+    '''
+    class to get access to web camera data
+    '''
+    COLOR_CAM_WIDTH  = 1920#1920
+    COLOR_CAM_HEIGHT = 1080#1080
+    COLOR_FPS        = 15#15   # have to reduced to 15 on Surface Pro 9
+
+    def __init__(self, camera_index, display_width, display_height):
+        super().__init__()
+
+        self.is_paused = False
+
+        self.camera_index = camera_index
+        self.DISPLAY_WIDTH = display_width
+        self.DISPLAY_HEIGHT = display_height
+
+        self.time_per_frame = 1.0/WebCam.COLOR_FPS
+        self.fps_cnt = 0
+
+        self.q_color_frame = queue.Queue()
+        self.q_frame_output = queue.Queue()
+
+        self.cap = cv2.VideoCapture(self.camera_index)
+        # self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.DISPLAY_WIDTH)
+        # self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.DISPLAY_HEIGHT)
+        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.COLOR_CAM_WIDTH)
+        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.COLOR_CAM_HEIGHT)
+
+        # print(self.cap.get(3), self.cap.get(4))
+        # video_width = int(self.cap.get(3))
+        # video_height = int(self.cap.get(4))
+        # print("Input ratio w-h: ",video_width, video_height)
+
+    def setMousePixel(self, mousex, mousey):
+        if self.DISPLAY_HEIGHT != d435.COLOR_CAM_HEIGHT or self.DISPLAY_WIDTH != d435.COLOR_CAM_WIDTH:
+            mousex = mousex * d435.COLOR_CAM_WIDTH / self.DISPLAY_WIDTH
+            mousey = mousey * d435.COLOR_CAM_HEIGHT / self.DISPLAY_HEIGHT
+        
+        self.i = mousex
+        self.j = mousey
+
+    def readFrameFromDisplayQueue(self):
+        if self.q_color_frame.empty():
+            return True, {'frame': None}
+
+        # drop frames
+        q_size = self.q_color_frame.qsize()
+        if q_size > 1:
+            for i in range(q_size//2):
+                self.q_color_frame.get()
+
+        return False, self.q_color_frame.get()
+
+    def readFrameFromOutputQueue(self):
+        if self.q_frame_output.empty():
+            return True, {'frame': None, 'timestamp': None}
+
+        # drop frames
+        q_size = self.q_color_frame.qsize()
+        if q_size > 1:
+                self.q_color_frame.get()
+
+        return False, self.q_frame_output.get()
+
+    def pause_thread(self):
+        self.is_paused = True
+
+    def resume_thread(self):
+        self.prev_time = time.time()
+        self.is_paused = False
+
+    def run(self):
+        global START_RECORDING
+        self.prev_time = time.time()
+        prev_time_second = time.time()  # previous time for fps count
+        while True:
+            if self.is_paused:
+                self.sleep(5)
+                continue
+
+            try:
+                time_elapsed = time.time() - self.prev_time
+                _, cv_img = self.cap.read()
+
+                cur_time = time.time()
+                if time_elapsed > self.time_per_frame:
+                    self.prev_time += self.time_per_frame
+                    self.q_color_frame.put({'frame': cv_img})
+
+                    if START_RECORDING:
+                        self.q_frame_output.put({'frame': cv_img, 'timestamp': time.time()})
+                    self.fps_cnt += 1
+
+                if cur_time - prev_time_second > 1.0:
+                    print('CamFPS: ', self.fps_cnt)
+                    print('Frame QSize: ', self.q_color_frame.qsize())
+                    print('Out QSize: ', self.q_frame_output.qsize())
+                    prev_time_second = cur_time
+                    self.fps_cnt = 0
+            except:
+                print('getFrame Failed')
+
+
+class d435(QThread):
     '''
     class to get access to d435 data
-
     '''
+    frame_ready = pyqtSignal(tuple)
 
     DEPTH_CAM_WIDTH  = 848#1280
     DEPTH_CAM_HEIGHT = 480#720
-    DEPTH_FPS        = 60#60
+    DEPTH_FPS        = 15
 
     COLOR_CAM_WIDTH  = 1280#1920
     COLOR_CAM_HEIGHT = 720#1080
-    COLOR_FPS        = 30#15   # have to reduced to 15 on Surface Pro 9
+    COLOR_FPS        = 15#15   # have to reduced to 15 on Surface Pro 9
 
-    def __init__(self):
+    def __init__(self, display_width, display_height):
+        super().__init__()
+
+        self.is_paused = False
+
+        self.DISPLAY_WIDTH = display_width
+        self.DISPLAY_HEIGHT = display_height
+
+        # queue for color frames, Jason, 7 May 2024
+        self.q_color_frame = queue.Queue()  # RGB frame for display, {'frame':,'point':,'timestamp':}
+        self.q_frame_output = queue.Queue() # RGB frame for output, {'frame':,'timestamp':}
+
         # initialize the moving average calculator, window size =16 samples
         self.ma = MovingAverageCalculator(nSamples=16)
 
@@ -278,9 +395,6 @@ class d435():
 
         # Create a config object to configure the streams
         self.config = rs.config()
-
-        # point cloud
-        # pc = rs.pointcloud()
 
         # Enable the depth and color streams.
         self.config.enable_stream(rs.stream.depth, d435.DEPTH_CAM_WIDTH, d435.DEPTH_CAM_HEIGHT,
@@ -302,13 +416,13 @@ class d435():
         # Get the intrinsics of the depth camera
         self.depthProfile = rs.video_stream_profile(profile.get_stream(rs.stream.depth))
         self.depthIntrinsics = self.depthProfile.get_intrinsics()
-        print("depth_intrinsics: ", self.depthIntrinsics)
+        # print("depthIntrinsics: ", self.depthIntrinsics)
         w, h = self.depthIntrinsics.width, self.depthIntrinsics.height
 
         # Get the depth scale of the depth sensor
         self.depthSensor = profile.get_device().first_depth_sensor()
         self.depthScale  = self.depthSensor.get_depth_scale()
-        print("Depth Scale is: ", self.depthScale)
+        # print("depthScale: ", self.depthScale)
 
         # Get extrinsics
         self.depthToColorExtrinsics = self.depthProfile.get_extrinsics_to(self.colorProfile)
@@ -328,7 +442,6 @@ class d435():
 
         self.point = [-1.,-1.,-1]
 
-
         # # Print Visual Preset Information
         # depth_sensor = profile.get_device().first_depth_sensor()
         # preset_range = depth_sensor.get_option_range(rs.option.visual_preset)
@@ -342,7 +455,6 @@ class d435():
                                                               # 0=Custom, 1=Default, 2=Hand, 3=High Accuracy, 4=High Density
         self.colorizer.set_option(rs.option.min_distance, self.depthMin)
         self.colorizer.set_option(rs.option.max_distance, self.depthMax)
-
 
     def getOpencvIntrinsics(self):
         '''
@@ -371,80 +483,100 @@ class d435():
 
         return camera_matrix,dist_coeffs
 
-    def getFrame(self,mousex,mousey):
-        global DEBUG
-
+    # Revised, Jason, 14 May 2024
+    def setMousePixel(self, mousex, mousey):
+        '''
+        mousex, mousey - mouse click coordinates on display (can be scaled up)
+        self.i, self.j - mouse click coordinates on color frame
+        '''
+        if self.DISPLAY_HEIGHT != d435.COLOR_CAM_HEIGHT or self.DISPLAY_WIDTH != d435.COLOR_CAM_WIDTH:
+            mousex = mousex * d435.COLOR_CAM_WIDTH / self.DISPLAY_WIDTH
+            mousey = mousey * d435.COLOR_CAM_HEIGHT / self.DISPLAY_HEIGHT
+        
         self.i = mousex
         self.j = mousey
 
-        # print(self.i,self.j) # for debugging
+    # Add for reading queue, Jason, 7 May 2024
+    def readFrameFromDisplayQueue(self):
+        if self.q_color_frame.empty():
+            return True, {'frame': None, 'point': None, 'timestamp': None}
+
+        # drop frames
+        q_size = self.q_color_frame.qsize()
+        if q_size > 1:
+            for i in range(q_size//2):
+                self.q_color_frame.get()
+            
+        return False, self.q_color_frame.get()
+
+    def readFrameFromOutputQueue(self):
+        if self.q_frame_output.empty():
+            return True, {'frame': None, 'timestamp': None}
+
+        # drop frames
+        q_size = self.q_color_frame.qsize()
+        if q_size > 1:
+                self.q_color_frame.get()
+
+        return False, self.q_frame_output.get()
+    
+    # Revised, Jason, 14 May 2024
+    def getFrame(self):
+        global START_RECORDING
 
         # Get a frameset from the pipeline
         try:
             frameset = self.pipeline.wait_for_frames()
 
-            # Align the depth frame to the color frame
-            # aligned_frameset = align.process(frameset)
-
             # Get the aligned depth and color frames
             depthFrame = frameset.get_depth_frame()
             colorFrame = frameset.get_color_frame()
-       
-            # depth_frame = aligned_frameset.get_depth_frame()
-            # color_frame = aligned_frameset.get_color_frame()
-
+            
             # Validate that both frames are valid
             if not depthFrame or not colorFrame:
                 return None,None,None
-            
-            
 
             # Convert the images to numpy arrays
             depthImage = np.asanyarray(depthFrame.get_data())
             colorImage = np.asanyarray(colorFrame.get_data())
-
             
-
+            if START_RECORDING:
+                self.q_frame_output.put({'frame': colorImage, 'timestamp': time.time()})
             
             # project color pixel to depth pixel
             depthPixel = rs.rs2_project_color_pixel_to_depth_pixel(
                 depthFrame.get_data(), self.depthScale, self.depthMin,
                 self.depthMax, self.depthIntrinsics, self.colorIntrinsics,
                 self.depthToColorExtrinsics, self.colorToDepthExtrinsics, [self.i, self.j])
-            
+
             if depthPixel[0]>=0 and depthPixel[1]>=0:
-                #print("depthPixel: ", depthPixel)
                 depth = depthFrame.get_distance(int(depthPixel[0]),int(depthPixel[1]))
                 depth = self.ma.calculate_moving_average_lock(depth)
 
                 # project depth pixel to 3D point
                 # x is right+, y is down+, z is forward+
                 self.point = rs.rs2_deproject_pixel_to_point(self.depthIntrinsics,[int(depthPixel[0]), int(depthPixel[1])], depth)
-                
+
                 x = self.point[0]
                 y = self.point[1]
                 z = self.point[2]
-
-                #z = self.ma.calculate_moving_average(z)
-
-                self.point[2]=z
-
                 # print(self.i,self.j,depthPixel,self.point)
-
 
             # update self.iPrev,jPrev
             self.iPrev = self.i
             self.jPrev = self.j
-            return colorImage,depthImage,self.point
+
+            # Revised to use queue, Jason, 7 May 2024
+            self.q_color_frame.put({'frame': colorImage, 'point':self.point, 'timestamp': time.time()})
         except:
-            return None,None,None
+            print("getFrame Failed")
 
-    # Jason - 8 April 2024 - Aligned Frames
-    def getFrameWithAlignedFrames(self,mousex,mousey):
-        global DEBUG, FILTERED_FRAMES
+    # Revised, Jason - 17 May 2024 - Aligned Frames
+    def getFrameWithAlignedFrames(self):
+        global FILTERED_FRAMES, START_RECORDING
 
-        self.i = mousex
-        self.j = mousey
+        # self.i = mousex
+        # self.j = mousey
         # print(self.i,self.j) # for debugging
     
         # Get a frameset from the pipeline
@@ -457,7 +589,14 @@ class d435():
             depth_frame = aligned_frameset.get_depth_frame()
             color_frame = aligned_frameset.get_color_frame()
 
+            # Convert the images to numpy arrays
+            color_image = np.asanyarray(color_frame.get_data())
+
+            if START_RECORDING:
+                self.q_frame_output.put({'frame': color_image, 'timestamp': time.time()})
+
             # # test filters for depth frame, Jason, 12 April 2024
+            # Using default value
             # Depth Frame >> Decimation Filter >> Depth2Disparity Transform** 
             # -> Spatial Filter >> Temporal Filter >> Disparity2Depth Transform** 
             # >> Hole Filling Filter >> Filtered Depth.
@@ -479,49 +618,75 @@ class d435():
 
             # Validate that both frames are valid
             if not depth_frame or not color_frame:
-                return None,None,None
-
-            # Convert the images to numpy arrays
-            depth_image = np.asanyarray(depth_frame.get_data())
-            color_image = np.asanyarray(color_frame.get_data())
+                return
 
             # # project color pixel to depth pixel, need to check as it is not accurate for same resolution
-            # depthPixel = rs.rs2_project_color_pixel_to_depth_pixel(
-            #     depth_frame.get_data(), self.depthScale, self.depthMin,
-            #     self.depthMax, self.depthIntrinsics, self.colorIntrinsics,
-            #     self.depthToColorExtrinsics, self.colorToDepthExtrinsics, [self.i, self.j])
-            
-            depthPixel = [self.i, self.j]
+            depthPixel = rs.rs2_project_color_pixel_to_depth_pixel(
+                depth_frame.get_data(), self.depthScale, self.depthMin,
+                self.depthMax, self.depthIntrinsics, self.colorIntrinsics,
+                self.depthToColorExtrinsics, self.colorToDepthExtrinsics, [self.i, self.j])
+            # depthPixel = [self.i, self.j]
 
-            depth = depth_frame.get_distance(int(depthPixel[0]),int(depthPixel[1]))
+            if depthPixel[0]>=0 and depthPixel[1]>=0:
+                depth = depth_frame.get_distance(int(depthPixel[0]),int(depthPixel[1]))
 
-            # Add lock value, Jason, 10 April 2024
-            depth = self.ma.calculate_moving_average_lock(depth)
+                # Add lock value, Jason, 10 April 2024
+                depth = self.ma.calculate_moving_average_lock(depth)
 
-            # project depth pixel to 3D point
-            # x is right+, y is down+, z is forward+
-            self.point = rs.rs2_deproject_pixel_to_point(self.depthIntrinsics,[int(depthPixel[0]), int(depthPixel[1])], depth)
+                # project depth pixel to 3D point
+                # x is right+, y is down+, z is forward+
+                self.point = rs.rs2_deproject_pixel_to_point(self.depthIntrinsics,[int(depthPixel[0]), int(depthPixel[1])], depth)
 
-            x = self.point[0]
-            y = self.point[1]
-            z = self.point[2]
-
-            # z = self.ma.calculate_moving_average(z)
-            # a = self.ma.calculate_moving_average_lock(z)
-
-            self.point[2]=z
+                x = self.point[0]
+                y = self.point[1]
+                z = self.point[2]
 
             # update self.iPrev,jPrev
             self.iPrev = self.i
             self.jPrev = self.j
 
+            # add depth color to frame
+            depth_colormap = np.asanyarray(self.colorizer.colorize(depth_frame).get_data())
+            alpha = 0.5
             if FILTERED_FRAMES:
-                return color_image,filtered_depth_frame,self.point
-            else:
-                return color_image,depth_frame,self.point
+                if depth_colormap.shape[0]<720:
+                    depth_colormap = rescale_frame(depth_colormap, color_image.shape[1], color_image.shape[0])
+            
+            color_image = cv2.addWeighted(depth_colormap, alpha, color_image, 1 - alpha, 0 )
+            self.q_color_frame.put({'frame': color_image, 'point':self.point, 'timestamp': time.time()})
         except:
             print("getFrameWithAlignedFrames Failed")
-            return None,None,None
+
+    def pause_thread(self):
+        self.is_paused = True
+
+    def resume_thread(self):
+        self.is_paused = False
+
+    # Get frames continuously in thread, Jason, 14 May 2024
+    def run(self):
+        global ALIGNED_FRAMES
+
+        fps_cnt = 0
+        cur_time = time.time()
+        while True:
+            if self.is_paused:
+                self.sleep(5)   # sleep when combining video and audio
+                continue
+
+            if ALIGNED_FRAMES:
+                self.getFrameWithAlignedFrames()
+            else:
+                self.getFrame()
+            fps_cnt += 1
+            if time.time() - cur_time > 1.0:
+                print('Cam FPS: ', fps_cnt)
+                print('Frame QSize: ', self.q_color_frame.qsize())
+                print('Out QSize: ', self.q_frame_output.qsize())
+                fps_cnt = 0
+                cur_time = time.time()
+            # else:
+                # self.usleep(1000000//self.COLOR_FPS//2)
 
 
 class CameraSelectionDialog(QDialog):
@@ -564,7 +729,7 @@ class CameraSelectionDialog(QDialog):
 # Combine As output thread
 class VideoAudioThread(QThread):
     start_writing = pyqtSignal()
-    finished = pyqtSignal()
+    # finished = pyqtSignal()
 
     def __init__(self, video_path, audio_path, output_path, logger):
         super().__init__()
@@ -577,38 +742,47 @@ class VideoAudioThread(QThread):
         print("Combine Video")
         time.sleep(1)
         self.start_writing.emit()
+        print('v: ', self.video_path)
+        print('a: ', self.audio_path)
+        print('o: ', self.output_path)
         combine_video_audio(self)
 
 
 # Video Thread
 class VideoThread(QThread):
-
+    depth_value_locked = pyqtSignal()
     update_3d_coordinate = pyqtSignal(list)
     change_pixmap_signal = pyqtSignal(np.ndarray)
 
-    def __init__(self, camera_index, camera_name,usePoseEstimation=False):
+    def __init__(self, camera_index, camera_name, display_width, display_height, usePoseEstimation=False):
         super().__init__()
         self.camera_index = camera_index
         self.camera_name  = camera_name
-        self.d435 = None
+        self.d435 = None    # Intel RealSense D435
+        self.cam = None     # Generic camera without depth cam
         self.mousex=0
         self.mousey=0
+        self.DISPLAY_WIDTH = display_width
+        self.DISPLAY_HEIGHT = display_height
+        self.is_paused = False
         self.usePoseEstimation=usePoseEstimation
 
         self.aruco_dict_type = ARUCO_DICT["DICT_ARUCO_ORIGINAL"]
         
 
         if self.camera_name.startswith('Intel(R) RealSense(TM) Depth Camera 435') and self.camera_name.endswith('RGB'):
-            self.d435 = d435()
-
+            self.d435 = d435(self.DISPLAY_WIDTH, self.DISPLAY_HEIGHT)
             self.k, self.d = self.d435.getOpencvIntrinsics()
-            
-            
-            
+        else:
+            self.cam = WebCam(self.camera_index, self.DISPLAY_WIDTH, self.DISPLAY_HEIGHT)
 
     def setMouseXY(self,mousex,mousey):
         self.mousex = mousex
         self.mousey = mousey
+        if self.d435:
+            self.d435.setMousePixel(mousex, mousey)
+        if self.cam:
+            self.cam.setMousePixel(mousex, mousey)
 
     def drawDebugText(self,sMsg):
         fontFace = cv2.FONT_HERSHEY_SIMPLEX
@@ -629,12 +803,14 @@ class VideoThread(QThread):
         cv2.rectangle(self.cv_img, background_rect_coords[0], background_rect_coords[1], background_color, cv2.FILLED)
         cv2.putText(self.cv_img, sMsg, (text_x, text_y), fontFace, fontScale, textColor, 2, lineType)
 
-    def rescale_frame(self,frame, percent=75):
-        width  = int(frame.shape[1] * percent/ 100)
-        height = int(frame.shape[0] * percent/ 100)
-        dim = (width, height)
-        return cv2.resize(frame, dim, interpolation =cv2.INTER_AREA)
-    
+    # def rescale_frame(self,frame, target_width, target_height):
+    #     # width  = int(frame.shape[1] * percent/ 100)
+    #     # height = int(frame.shape[0] * percent/ 100)
+    #     width  = int(frame.shape[1] * target_width/ frame.shape[1])
+    #     height = int(frame.shape[0] * target_height/ frame.shape[0])
+    #     dim = (width, height)
+    #     return cv2.resize(frame, dim, interpolation =cv2.INTER_AREA)
+
     def getOrientation(self,rvecs,tvecs):
         # converting Rodrigues format to 3x3 rotation matrix format
         R_c = cv2.Rodrigues(rvecs)[0]
@@ -664,9 +840,6 @@ class VideoThread(QThread):
                 return camera_matrix,dist_coeffs
         except:
             return None, None
-        
-
-
 
     def pose_estimation(self,frame, aruco_dict_type, mtx, dist):
 
@@ -718,7 +891,7 @@ class VideoThread(QThread):
 
         
 
-            # If markers are detected
+        # If markers are detected
         if len(corners) > 0:
             for i in range(0, len(ids)):
                 if ids[i][0]==590:
@@ -788,173 +961,207 @@ class VideoThread(QThread):
         img = cv2.line(img, (int(corner[0]),int(corner[1])), (int(imgpts[2][0][0]),int(imgpts[2][0][1])), (0, 0, 255), 5)
         return img
 
+    def pause_thread(self):
+        self.is_paused = True
+
+    def resume_thread(self):
+        print('resume')
+        self.is_paused = False
 
     def run(self):
-        global START_RECORDING, VIDEO_NAME, OUTPUT_NAME, AUDIO_NAME, ALIGNED_FRAMES
+        global MOUSE_CLICKED, START_SEND_PACKET
 
-        # capture from web cam
-        i = 0
-        if self.d435 is None:
-            print(self.camera_index)
-            cap = cv2.VideoCapture(self.camera_index)
-            cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
-            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
-
-            print(cap.get(3), cap.get(4))
-
-            video_width = int(cap.get(3))
-            video_height = int(cap.get(4))
-            print("Input ratio : ", video_height, video_width)
-        else:
-            video_width  = 1920
-            video_height = 1080
-
-        cnt = 0
-        tm = time.time()     
         while True:
-            if self.d435 is not None:
-                x0 = self.mousex
-                y0 = self.mousey
-                if self.d435.COLOR_CAM_HEIGHT==720:
-                    # assuming that self.cv_img is of 720p!!
-                    # scale down mouse x, y by 1.5 times!!
-                    x0 = int(x0*1./1.5)
-                    y0 = int(y0*1./1.5)
+            if self.is_paused:
+                self.sleep(5)
+                continue
 
-                # self.cv_img, self.depth_frame, point = self.d435.getFrameWithAlignedFrames(mousex=x0,mousey=y0)
-                self.cv_img, self.depth_frame, point = self.d435.getFrame(mousex=x0,mousey=y0)
+            if self.d435:
+                is_empty, encoded_frame = self.d435.readFrameFromDisplayQueue()
 
-                # try to perform 3d pose estimation here
-                if self.usePoseEstimation:
-                    output = self.pose_estimation(self.cv_img, self.aruco_dict_type, self.k, self.d)
-                
+                if is_empty:
+                    self.msleep(15) # sleep for getting frames
+                    continue
 
-        
-                # if ret:
-                #     corners2 = cv2.cornerSubPix(gray, corners, (11, 11), (-1, -1), criteria)
-
-                #     # Draw and display the corners
-                #     imgAugmnt = cv2.drawChessboardCorners(self.cv_img, (n_row,n_col), corners2,ret)
-                #     cv2.imshow('Pose Estimation',imgAugmnt) 
-
-                    # Find the rotation and translation vectors
-                    # assuming word coordinates lies on the chessboard 
-                    #ret, rvecs, tvecs = cv2.solvePnP(objp, corners2, mtx, dist)
-
-                    # if ret:
-                        
-                    #     debug_message='%.2f,%.2f,%.2f' % (tvecs[0]/1e3,tvecs[1]/1e3,tvecs[2]/1e3)
-                    #     cv2.putText(img, debug_message, (text_x, text_y), font, font_scale, font_color, 1, line_type)
-                        
-                    #     # converting Rodrigues format to 3x3 rotation matrix format
-                    #     rotMatrix,_=cv2.Rodrigues(rvecs)
-                    #     #print(rotMatrix)
-                    
-
-                    #     # project 3D points to image plane
-                    #     imgpts, jac = cv2.projectPoints(axis, rvecs, tvecs, mtx, dist)
-
-                    #     img = draw(img, corners2, imgpts)
-                    #     cv.imshow('Pose Estimation', img)
-                    #     imgptsCube, jacCube = cv.projectPoints(axisCube, rvecs, tvecs, mtx, dist)
-                    #     imgCube = drawCube(img, corners2, imgptsCube)
-                    #     cv.imshow('Pose Estimation Cube', imgCube)
-
-                cnt+=1
-                if time.time() - tm > 1.0:
-                    print(f"CameraFPS: {cnt}")
-                    cnt = 0
-                    tm = time.time()
+                point = encoded_frame['point']
+                self.cv_img = encoded_frame['frame']
 
                 if point is not None:
                     # emit signal 
                     self.update_3d_coordinate.emit(point)
 
+                # send packet when depth locked, Jason, 16 April 2024
+                if START_SEND_PACKET and MOUSE_CLICKED and self.d435.ma.isDepthLocked():
+                    MOUSE_CLICKED = False
+                    self.depth_value_locked.emit()
+
+                # try to perform 3d pose estimation here
+                if self.usePoseEstimation:
+                    self.cv_img = self.pose_estimation(self.cv_img, self.aruco_dict_type, self.k, self.d)
+                
+
                 if self.cv_img is None:
                     ret = False
-                else:   
-                    if ALIGNED_FRAMES:
-                        if hasattr(self, 'depth_frame'):
-                            depth_colormap = np.asanyarray(self.d435.colorizer.colorize(self.depth_frame).get_data())
-                            alpha = 0.5
-                            # print("depth_colormap size: ", depth_colormap.shape)
-                            # print("cv_img size: ", self.cv_img.shape)
-                            if FILTERED_FRAMES:
-                                if depth_colormap.shape[0]<720:
-                                    depth_colormap = self.rescale_frame(depth_colormap,200)
-
-                            self.cv_img = cv2.addWeighted(depth_colormap, alpha, self.cv_img, 1 - alpha, 0 )
-                        else:
-                            print("no depth_frame")
-
+                    self.usleep(1000000//self.d435.COLOR_FPS)
+                else:
                     # add scale self.cv_img if it's not 1080p
                     if self.cv_img.shape[0]<1080:
-                        self.cv_img = self.rescale_frame(self.cv_img,150)
-                        # print(self.cv_img.shape)
+                        # self.cv_img = self.rescale_frame(self.cv_img,150)
+                        self.cv_img = rescale_frame(self.cv_img, 1920, 1080)
 
                     ret = True
 
-            else:
-                ret, self.cv_img = cap.read()
-            if DEBUG:
-                yInterval = video_height//4
-                xInterval = video_width//4
-                gridColor = (255,100,15)
+            elif self.cam:
+                is_empty, encoded_frame = self.cam.readFrameFromDisplayQueue()
 
-                if self.camera_name.startswith('Intel(R) RealSense(TM) Depth Camera 435') and self.camera_name.endswith('RGB'):
-                    if point is not None:
-                        # draw debug texts on top-left corner
-                        pointStr = 'x:%.2f,y:%.2f,z:%.2f' % (point[0], point[1], point[2])
-                        self.drawDebugText(pointStr)
+                if is_empty:
+                    self.msleep(15)
+                    continue
 
-                        # draw ROI of the mouse x,y
-                        cv2.rectangle(self.cv_img,(self.mousex-50,self.mousey-50),(self.mousex+50,self.mousey+50),(0,0,255),2)
-                        cv2.drawMarker(self.cv_img,(self.mousex,self.mousey),(0, 0, 255),cv2.MARKER_CROSS,20,3)
-                
-
-
-
-                # veritical grid lines
-                cv2.line(self.cv_img, (xInterval, 0),  (xInterval, video_height),  gridColor, 2)
-                cv2.line(self.cv_img, (2*xInterval, 0),(2*xInterval, video_height),gridColor, 2)
-                cv2.line(self.cv_img, (3*xInterval, 0),(3*xInterval, video_height),gridColor, 2)
-
-                # horizontal grid lines
-                cv2.line(self.cv_img, (0, yInterval),  (video_width, yInterval),  gridColor, 2)
-                cv2.line(self.cv_img, (0, 2*yInterval),(video_width, 2*yInterval),gridColor, 2)
-                cv2.line(self.cv_img, (0, 3*yInterval),(video_width, 3*yInterval),gridColor, 2)
-
-            if START_RECORDING:
-                if (i == 0):
-                    print("initiate Video")
-                    current_datetime = datetime.now()
-                    formatted_datetime = current_datetime.strftime(
-                        "[%m-%d-%y]%H_%M_%S")
-                    self.video_name = CURRENT_PATH + VIDEO_SAVE_DIRECTORY + VIDEO_DATE + "\\" + str(
-                        formatted_datetime) + '.avi'
-                    self.output_path = CURRENT_PATH + OUTPUT_PATH + VIDEO_DATE + "\\" + str(
-                        formatted_datetime) + '.mp4'
-                    print(self.video_name)
-                    print(self.output_path)
-                    VIDEO_NAME = self.video_name
-                    OUTPUT_NAME = self.output_path
-                    AUDIO_NAME = CURRENT_PATH + AUDIO_PATH + VIDEO_DATE + "\\" + str(
-                        formatted_datetime) + '.wav'
-                    FPS = 25
-                    out = cv2.VideoWriter(
-                        self.video_name,
-                        cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'), FPS,
-                        (video_width, video_height))
-                    i += 1
+                self.cv_img = encoded_frame['frame']
+                if self.cv_img is None:
+                    ret = False
+                    self.usleep(1000000//self.cam.COLOR_FPS)
                 else:
-                    out.write(self.cv_img)
+                    if self.cv_img.shape[0]<1080:
+                        # self.cv_img = self.rescale_frame(self.cv_img, 150)
+                        self.cv_img = rescale_frame(self.cv_img, 1920, 1080)
 
-            else:
-                if (i > 0):
-                    out.release()
-                    i = 0
+                    ret = True
+
             if ret:
+                if DEBUG:
+                    yInterval = self.DISPLAY_HEIGHT//4
+                    xInterval = self.DISPLAY_WIDTH//4
+                    gridColor = (255,100,15)
+
+                    if self.camera_name.startswith('Intel(R) RealSense(TM) Depth Camera 435') and self.camera_name.endswith('RGB'):
+                        if point is not None:
+                            # draw debug texts on top-left corner
+                            pointStr = 'x:%.2f,y:%.2f,z:%.2f' % (point[0], point[1], point[2])
+                            self.drawDebugText(pointStr)
+
+                            # draw ROI of the mouse x,y
+                            cv2.rectangle(self.cv_img,(self.mousex-50,self.mousey-50),(self.mousex+50,self.mousey+50),(0,0,255),2)
+                            cv2.drawMarker(self.cv_img,(self.mousex,self.mousey),(0, 0, 255),cv2.MARKER_CROSS,20,3)
+                    
+                    # veritical grid lines
+                    cv2.line(self.cv_img, (xInterval, 0),  (xInterval, self.DISPLAY_HEIGHT),  gridColor, 2)
+                    cv2.line(self.cv_img, (2*xInterval, 0),(2*xInterval, self.DISPLAY_HEIGHT),gridColor, 2)
+                    cv2.line(self.cv_img, (3*xInterval, 0),(3*xInterval, self.DISPLAY_HEIGHT),gridColor, 2)
+
+                    # horizontal grid lines
+                    cv2.line(self.cv_img, (0, yInterval),  (self.DISPLAY_WIDTH, yInterval),  gridColor, 2)
+                    cv2.line(self.cv_img, (0, 2*yInterval),(self.DISPLAY_WIDTH, 2*yInterval),gridColor, 2)
+                    cv2.line(self.cv_img, (0, 3*yInterval),(self.DISPLAY_WIDTH, 3*yInterval),gridColor, 2)
+
                 self.change_pixmap_signal.emit(self.cv_img)
+
+
+
+class VideoSavingThread(QThread):
+    def __init__(self, cam, d435, video_width, video_height):
+        global VIDEO_NAME, OUTPUT_NAME
+        super().__init__()
+        self.cam = cam
+        self.d435 = d435
+        self.video_width = video_width
+        self.video_height = video_height
+        self.is_initialized = False
+        print('Initiate Video')
+        current_datetime = datetime.now()
+        formatted_datetime = current_datetime.strftime(
+            "[%m-%d-%y]%H_%M_%S")
+        self.video_name = CURRENT_PATH + VIDEO_SAVE_DIRECTORY + VIDEO_DATE + "\\" + str(
+            formatted_datetime) + '.avi'
+        self.output_path = CURRENT_PATH + OUTPUT_PATH + VIDEO_DATE + "\\" + str(
+            formatted_datetime) + '.mp4'
+        VIDEO_NAME = self.video_name
+        OUTPUT_NAME = self.output_path
+        print('video name: ', self.video_name)
+        print('combined video: ', self.output_path)
+        if self.d435:
+            self.video_width = self.d435.COLOR_CAM_WIDTH
+            self.video_height = self.d435.COLOR_CAM_HEIGHT
+            self.FPS = self.d435.COLOR_FPS
+        elif self.cam:
+            self.video_width = self.cam.COLOR_CAM_WIDTH
+            self.video_height = self.cam.COLOR_CAM_HEIGHT
+            self.FPS = self.cam.COLOR_FPS
+
+        self.out = cv2.VideoWriter(
+            self.video_name,
+            cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'), self.FPS,
+            (self.video_width, self.video_height))
+
+        self.test_fps_cnt = 0   # real fps
+        self.out_fps_cnt = 0    # output fps - fixed
+        self.total_f_cnt = 0    # total number of frames
+
+    def run(self):
+        global START_RECORDING
+
+        while True:
+            if self.d435:
+                is_empty, encoded_frame = self.d435.readFrameFromOutputQueue()
+            elif self.cam:
+                is_empty, encoded_frame = self.cam.readFrameFromOutputQueue()
+            
+            if is_empty:
+                if not START_RECORDING: #finished recording
+                    break
+                else:
+                    self.msleep(15) #wait for next frame
+                    continue
+
+            frame = encoded_frame['frame']
+            frame_timestamp = encoded_frame['timestamp']
+
+            if not self.is_initialized:
+                self.video_start_time = frame_timestamp
+                self.prev_end_time = frame_timestamp
+                self.is_initialized = True
+
+            self.video_end_time = frame_timestamp
+            if frame_timestamp - self.prev_end_time >= 1.0:
+                # start next loop
+                fps_dif = self.FPS - self.out_fps_cnt
+                # print('Real FPS: ', self.test_fps_cnt)
+
+                if fps_dif > 0:     # have less frames then expected
+                    for j in range(fps_dif):
+                        self.out.write(frame)
+                        self.total_f_cnt += 1
+                        self.out_fps_cnt += 1
+                        # self.test_fps_cnt += 1
+                    # print('out fps: ', self.out_fps_cnt)
+                    self.out.write(frame)
+                    self.out_fps_cnt = 1
+                    self.test_fps_cnt = 1
+                    self.total_f_cnt += 1
+                    # print('FPS dropped')
+                elif fps_dif == 0:  # match FPS or have more frames
+                    self.out.write(frame)
+                    self.out_fps_cnt = 1
+                    self.test_fps_cnt = 1
+                    self.total_f_cnt += 1
+                    # print('FPS matched')
+
+                self.prev_end_time += 1.0
+                
+            else:
+                # write frame if within 1 second interval and count not exceed FPS
+                if self.out_fps_cnt < self.FPS:
+                    self.out.write(frame)
+                    self.out_fps_cnt += 1
+                    self.total_f_cnt += 1
+                self.test_fps_cnt += 1
+
+        if not START_RECORDING:
+            self.out.release()
+            print('total time: ', self.video_end_time - self.video_start_time)
+            print('total frame count: ', self.total_f_cnt)
+            self.out_fps_cnt = 0
 
 
 # Audio Thread
@@ -969,15 +1176,12 @@ class AudioThread(QThread):
         self.avgLevel = 0.
         self.q = queue.Queue()      # queue to save input stream data
             
-
     def setRecordTime(self):
         self.current_datetime = datetime.now()
         self.formatted_datetime = current_datetime.strftime("[%m-%d-%y]%H_%M_%S")
 
     def getLevel(self):
         return np.abs(self.avgLevel)
-
-        
 
     def run(self):
         global START_RECORDING, AUDIO_NAME
@@ -988,7 +1192,6 @@ class AudioThread(QThread):
                 print(status)
             #print("Recording audio...")
             if START_RECORDING:
-                # self.audio_buffer.append(indata.copy())
                 # save indata copy to q
                 self.q.put(indata.copy())
 
@@ -999,37 +1202,25 @@ class AudioThread(QThread):
             subtype = 'PCM_16'
             dtype = 'int16' 
             audio_name = CURRENT_PATH + AUDIO_PATH + VIDEO_DATE + "\\" + str(formatted_datetime) + '.wav'
+            AUDIO_NAME = audio_name
             print('audio file::',audio_name)
             with sf.SoundFile(audio_name, mode='w', subtype=subtype,samplerate=self.sample_rate, channels=1) as file:
                 print('starting soundfile',file)
                 with sd.InputStream(samplerate=self.sample_rate, dtype=dtype, channels=1, callback=callback):
                     while START_RECORDING:
                         try:
-                            file.write(self.q.get(timeout=0.1))
+                            file.write(self.q.get(timeout=0.3))
                         except:
                             break
-                    print('closing file')
+                    print('closing soundfile')
                     file.close()
-                        
-
-            # with sd.InputStream(device=self.input_device,callback=callback,
-            #                     channels=1,
-            #                     samplerate=self.sample_rate):
-            #     while not self.isInterruptionRequested():
-            #         self.msleep(100)  # Adjust the sleep interval based on your preference
-
-            # # Convert the buffer to a numpy array
-            # audio_data = np.concatenate(self.audio_buffer, axis=0)
-            # audio_name = CURRENT_PATH + AUDIO_PATH + VIDEO_DATE + "\\" + str(
-            #     formatted_datetime) + '.wav'
-            # AUDIO_NAME = audio_name
-            # # Save the audio data to a WAV file
-            # wavio.write(audio_name, audio_data, self.sample_rate, sampwidth=3)
-            # self.audio_buffer = []
 
 
 class App(QWidget):
-    
+
+    CAM_DISPLAY_WIDTH = 1920
+    CAM_DISPLAY_HEIGHT = 1080
+
     def __init__(self):
         global DEBUG
         super().__init__()
@@ -1039,7 +1230,7 @@ class App(QWidget):
         print(self.configParams)
         DEBUG = self.configParams['debug']
 
-
+        print('1')
 
         if (QDesktopWidget().screenCount() > 1):
             self.screen_number = 1
@@ -1047,7 +1238,7 @@ class App(QWidget):
             self.screen_number = 0
         self.setWindowTitle("ISD UI Mockup — v%s" %(sVersion))
         #self.setStyleSheet("background-color:gray")
-        
+        print('2')
         icon = QtGui.QIcon()
         icon.addPixmap(
             QtGui.QPixmap(
@@ -1060,13 +1251,16 @@ class App(QWidget):
         self.RECORDING = False
         self.MIC_ON = MIC_ON
         self.SOUND_ON = SOUND_ON
-
+        print('3')
         self.selected_camera_index = -1
+        print('33')
         self.selected_camera = ''
         self.d435 = None 
+        print('333')
         self.adminRole=self.configParams['adminRole'] # Add[if adminRole is True, will can show more features],Brian,05 April 2024
+        print('334')
         self.toUseYAML=self.configParams['fourMics']  # true load mic locs from yaml file (for 4 mics case)
-
+        print('4')
         # create the label that holds the image
         self.image_label = Create_ImageWindow()
         # self.image_label.setMinimumSize(QSize(640, 480))
@@ -1076,7 +1270,7 @@ class App(QWidget):
         self.exit_button = Create_Button("Exit", lambda: self.exit_app(), BUTTON_STYLE_TEXT)
         # self.setting_button = Create_Button("Setting",lambda:switchPage(self,APP_PAGE.SETTING.value),BUTTON_STYLE)
         # self.record_button = Create_Button("Record",self.record_button_clicked,BUTTON_STYLE_RED)
-
+        print('5')
         # Setting Button
         self.setting_button = Create_Button(
             "", lambda: switchPage(self, APP_PAGE.SETTING.value),
@@ -1113,7 +1307,7 @@ class App(QWidget):
         self.setting_button.setObjectName("btnSettings")
         self.setting_button.setFixedSize(NUM_ROUND_BUTTON_SIZE,
                                          NUM_ROUND_BUTTON_SIZE)
-
+        print('6')
         # Record Button
         self.icon_start_record = QIcon(
             resource_path(
@@ -1402,28 +1596,37 @@ class App(QWidget):
                 self.audio_outCtrl.set_volume(0)
                 self.slider_sound_vol.setValue(0)
                 self.slider_sound_vol.valueChanged.connect(self.audio_outCtrl.set_volume)
-
+                print('7')
                 # create audio controller for the input device
                 self.audio_inCtrl = AudioController(self.input_devid,'input','linear')
-
+                print('8')
                 # turn to zero volume at start
                 self.audio_inCtrl.set_volume(0)
                 self.slider_mic_vol.setValue(0)
                 self.slider_mic_vol.valueChanged.connect(self.audio_inCtrl.set_volume)
-
+                print('9')
                 # create the video capture thread
-                self.video_thread = VideoThread(self.selected_camera_index,self.selected_camera,self.configParams['usePoseEstimation'])
+                self.video_thread = VideoThread(self.selected_camera_index,self.selected_camera, App.CAM_DISPLAY_WIDTH, App.CAM_DISPLAY_HEIGHT, self.configParams['usePoseEstimation'])
+                print('10')
                 self.audio_thread = AudioThread(self.input_device)
-                
+                print('11')
+                # send packet when depth locked, Jason, 16 April 2024
+                if hasattr(self.video_thread, 'd435'):
+                    self.video_thread.depth_value_locked.connect(self.send_3d_point)
+                print('12')
                 # connect its signal to the update_image slot
                 self.video_thread.change_pixmap_signal.connect(self.update_image)
                 # connnect signal to update 3d coordinate
                 self.video_thread.update_3d_coordinate.connect(self.update_3d_coordinate)
                 # start video thread
+                if self.video_thread.d435:
+                    self.video_thread.d435.start()
+                elif self.video_thread.cam:
+                    self.video_thread.cam.start()
                 self.video_thread.start()
-
+                print('13')
                 self.logger = CustomProgressBarLogger()
-
+                print('14')
             else:
                 raise Exception('exit from init')
 
@@ -1440,17 +1643,20 @@ class App(QWidget):
 
         '''
         configFileName = 'config.yaml'
-        if os.path.exists(configFileName):
-            with open(configFileName, 'r') as file:
+        configFilePath = config_path(configFileName)
+        print('Config Path: ', configFilePath)
+        if os.path.exists(configFilePath):
+            with open(configFilePath, 'r') as file:
                 configParams= yaml.safe_load(file)
                 return configParams
         else:
             # set up default values manually
             self.configParams = {
                 'debug': False,
-                'fourMic': True,
+                'fourMics': True,
                 'adminRole': False,
                 'showROI': True,
+                'usePoseEstimation': False,
             }
             return self.configParams
 
@@ -1497,26 +1703,23 @@ class App(QWidget):
     def toggleAlignedFramesMode(self):
         global ALIGNED_FRAMES, FILTERED_FRAMES
         ALIGNED_FRAMES = not ALIGNED_FRAMES
-        if not ALIGNED_FRAMES:
-            FILTERED_FRAMES = False
-            self.btnToggleAlignedFrames.setText('Turn On Aligned Frame')
-        else:
+        if ALIGNED_FRAMES:
             self.btnToggleAlignedFrames.setText('Turn Off Aligned Frame')
-
+        else:
+            FILTERED_FRAMES = False
+            self.btnToggleAlignedFrames.setText('Turn On Aligned Frame')  
         print("ALIGNED_FRAMES: ", ALIGNED_FRAMES)
-
-        # # disabled aligned frames at this moment
-        # pass
 
     # Added, Jason - 12 April 2024
     def toggleFilteredFramesMode(self):
         global ALIGNED_FRAMES, FILTERED_FRAMES
         if ALIGNED_FRAMES:
             FILTERED_FRAMES = not FILTERED_FRAMES
+            if FILTERED_FRAMES:
+                self.btnToggleFilteredFrames.setText('Turn Off Filtered Frame')
+            else:
+                self.btnToggleFilteredFrames.setText('Turn On Filtered Frame')
         print("FILTERED_FRAMES: ", FILTERED_FRAMES)
-
-        # # disabled filtered frames at this moment
-        # pass
 
     def exitAdminMode(self):
         '''
@@ -1787,9 +1990,12 @@ class App(QWidget):
                     properties["col_span"],
                 )
 
+        # Revised to be a start button to enable sending packet after mouse click,
+        # Jason, 17 April 2024
         btnSendPacket = QPushButton('Send Packet')
         btnSendPacket.setStyleSheet(BUTTON_STYLE_TEST_PAGE)
         btnSendPacket.clicked.connect(self.sendPacket)
+        # btnSendPacket.clicked.connect(self.onSendPacketButtonClicked)
 
         btnTestPing = QPushButton('Test Ping Host')
         btnTestPing.setStyleSheet(BUTTON_STYLE_TEST_PAGE)
@@ -1882,13 +2088,25 @@ class App(QWidget):
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         self.lbl_msg.setText('%s, %s' %(timestamp,sMsg))
     
+    # Revised to be a start button to enable sending packet after mouse click,
+    # Jason, 17 April 2024
+    # def onSendPacketButtonClicked(self):
+    #     global START_SEND_PACKET
+    #     START_SEND_PACKET = not START_SEND_PACKET
+    #     if START_SEND_PACKET:
+    #         self.btnSendPacket.setText('Stop Send Packet')
+    #     else:
+    #         self.btnSendPacket.setText('Send Packet')
+
     def sendPacket(self):
-        global dataLogger, SENDING_PACKET
+        global dataLogger
 
         # clear lbl_info first
         self.showInfo('')
         sendBuf=b'SET0'
         
+        self.setTargetPos(self.targetPos)
+
         self.fetchParamsFromUI()
         self.printParams()
     
@@ -1988,7 +2206,7 @@ class App(QWidget):
 
 
     def sendPacket_v2(self):
-        global dataLogger, SENDING_PACKET
+        global dataLogger
 
         # clear lbl_info first
         self.showInfo('')
@@ -2156,6 +2374,7 @@ class App(QWidget):
         return QPixmap.fromImage(p)
 
     def mousePressEvent(self, event):
+        global MOUSE_CLICKED, START_SEND_PACKET
         # Handle mouse press events
         mouse_position = event.pos()
         # try to get 3d coordinate from camera if it's d435
@@ -2169,8 +2388,8 @@ class App(QWidget):
 
                 self.video_thread.setMouseXY(currentX,currentY)
 
-                if self.adminRole:
-                    self.setTargetPos(self.targetPos)
+                # if self.adminRole:
+                #     self.setTargetPos(self.targetPos)
 
             self.text_label.appendPlainText(
                 f"Clicked on [{mouse_position.x()},{mouse_position.y()}]")
@@ -2180,20 +2399,9 @@ class App(QWidget):
             area = row * 4 + col + 1
             self.text_label.appendPlainText(f"Area: {area}")
 
-            # Added for 3d coordinates, Jason, 10 April 2024
-            # The packet will be sent in 2 seconds after mouse click
-            # The 3d coordinates may not be stable, and can be zeros if the variance is too large
-            if self.adminRole:
-                if not hasattr(self, 'mouse_press_timer'):
-                    self.mouse_press_timer = QTimer()
-                    self.mouse_press_timer.setSingleShot(True)
-                    self.mouse_press_timer.timeout.connect(self.send_3d_point)
-                if not self.mouse_press_timer.isActive():
-                    print('start mouse press timer')
-                    self.mouse_press_timer.start(2000)  
-            # message = create_and_send_packet(HOST,PORT, area.to_bytes( 2, byteorder='big'))
-            #Test_delay_function()
-            #self.sendPacket()
+
+            if START_SEND_PACKET:
+                MOUSE_CLICKED = True
 
     # Added for 3d coordinates, Jason, 11 April 2024
     def on_send_packed_finished(self):
@@ -2205,49 +2413,76 @@ class App(QWidget):
     def send_3d_point(self):
         global SENDING_PACKET
 
+        if not self.adminRole:
+            return
+
+        if not hasattr(self, 'mouse_press_timer'):
+            self.mouse_press_timer = QTimer()
+            self.mouse_press_timer.setSingleShot(True)
+
         if not SENDING_PACKET:
+            SENDING_PACKET = True
             self.thread_send_packet = QThread()
-            print("self.targetPos: ", self.targetPos)
+            # Disabled send packet
             # self.thread_send_packet.run = self.sendPacket
             # self.thread_send_packet.finished.connect(self.on_send_packed_finished)
-            # # self.sendPacket()
-            SENDING_PACKET = True
-            print(self.targetPos)
-            print('Start sending packet')
+            print("self.targetPos: ", self.targetPos)
+            print('Start sending 3D point packet')
             self.thread_send_packet.start()
             
         else:
-            print('Waiting for sending the last packet...')
+            print('Wait for sending the last packet...')
             self.mouse_press_timer.start(2000)
 
-        # self.sendPacket()
+    def saving_thread_finished(self):
+        del self.video_saving_thread
+
+    def combine_thread_finished(self):
+        print('finished')
+        if self.video_thread.d435:
+            self.video_thread.d435.resume_thread()
+        elif self.video_thread.cam:
+            self.video_thread.cam.resume_thread()
+        self.video_thread.resume_thread()
+        self.show_combine_finished_dialog()
+        del self.combine_thread
 
     def record_button_clicked(self):
         global START_RECORDING, VIDEO_NAME, AUDIO_NAME, OUTPUT_NAME
         self.RECORDING = not self.RECORDING
         if self.RECORDING:
-            
+            START_RECORDING = True
             self.record_button.setIcon(self.icon_stop_record)
             # self.record_button.setStyleSheet("background-color:red ; color :white ;border-width: 4px;border-radius: 20px;")
 
             self.text_label.appendPlainText('Status: Recording')
-            #self.audio_outCtrl.start_stop_recording(self.RECORDING)
             start_recording(self)
-            START_RECORDING = True
+            
+            self.video_saving_thread = VideoSavingThread(self.video_thread.cam, self.video_thread.d435, App.CAM_DISPLAY_WIDTH, App.CAM_DISPLAY_HEIGHT)
+            self.video_saving_thread.finished.connect(self.saving_thread_finished)
+            self.video_saving_thread.start()
+            
 
         else:
+            START_RECORDING = False
+
             # self.record_button.setStyleSheet(BUTTON_STYLE_RED)
             self.record_button.setIcon(self.icon_start_record)
             self.text_label.appendPlainText('Status: Not Recording')
-            START_RECORDING = False
-            #self.audio_outCtrl.start_stop_recording(self.RECORDING)
+
             self.audio_thread.requestInterruption()
-            print("OUTPUT_NAME: ", OUTPUT_NAME)
-            # revised[not to combine video, audio],Brian,11 April 2024
-            # self.combine_thread = VideoAudioThread(VIDEO_NAME,AUDIO_NAME,OUTPUT_NAME, self.logger)
-            # self.combine_thread.start_writing.connect(self.show_progress_dialog)
-            # self.logger.signal_emitter.percentage_changed_signal.connect(self.update_progress_dialog)
-            # self.combine_thread.start()
+
+            # revised[combine video, audio],Jason,17 May 2024
+            self.combine_thread = VideoAudioThread(VIDEO_NAME,AUDIO_NAME,OUTPUT_NAME, self.logger)
+            self.combine_thread.start_writing.connect(self.show_progress_dialog)
+            self.combine_thread.start_writing.connect(self.video_thread.pause_thread)
+            if self.video_thread.d435:
+                self.combine_thread.start_writing.connect(self.video_thread.d435.pause_thread)
+            elif self.video_thread.cam:
+                self.combine_thread.start_writing.connect(self.video_thread.cam.pause_thread)
+            self.combine_thread.finished.connect(self.combine_thread_finished)
+            self.logger.signal_emitter.percentage_changed_signal.connect(self.update_progress_dialog)
+            self.combine_thread.start()
 
     def mic_on_off_button_clicked(self):
         self.MIC_ON = not self.MIC_ON
@@ -2284,6 +2519,16 @@ class App(QWidget):
         message_box.setText(sMsg)
         message_box.addButton(QMessageBox.Ok)
         message_box.exec_()
+
+    def show_combine_finished_dialog(self):
+        self.video_combine_finished_dialog = QDialog(self)
+        self.video_combine_finished_dialog.setWindowTitle('Video')
+        layout = QVBoxLayout()
+        message = QLabel('Finished generating video ' + OUTPUT_NAME)
+        layout.addWidget(message)
+        self.video_combine_finished_dialog.setLayout(layout)
+        self.video_combine_finished_dialog.exec_()
+
 
     def show_progress_dialog(self):
         self.video_progress_dialog = QProgressDialog(self)

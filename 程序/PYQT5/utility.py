@@ -1,6 +1,15 @@
 import sounddevice as sd
 # import netifaces
 import socket, time
+import cv2
+
+def rescale_frame(frame, target_width, target_height):
+        # width  = int(frame.shape[1] * percent/ 100)
+        # height = int(frame.shape[0] * percent/ 100)
+        width  = int(frame.shape[1] * target_width/ frame.shape[1])
+        height = int(frame.shape[0] * target_height/ frame.shape[0])
+        dim = (width, height)
+        return cv2.resize(frame, dim, interpolation =cv2.INTER_AREA)
 
 def audio_dev_to_str(device):
     '''
@@ -13,7 +22,6 @@ def audio_dev_to_str(device):
         ins=device['max_input_channels'],
         outs=device['max_output_channels'])
     return text
-
 
 # Add,Brian,05 April 2024
 class networkController:
