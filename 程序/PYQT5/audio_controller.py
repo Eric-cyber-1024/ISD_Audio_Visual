@@ -316,20 +316,30 @@ class AudioController:
 
         # convert volumeVal to dB
         volumeVal = min(1.0,max(0.0,volumeVal)) # make sure that volumeVal is in the correct range
-        if volumeVal>0.:
-            if self.mapping == 'linear':
-                # simply map volumeVal linearly somewhere between self.minDB and self.maxDB
-                volumeDB = self.minDB + volumeVal*(self.maxDB-self.minDB)
-            else:
-                # log scale mapping, why 0.6?!
-                volumeDB = 20*np.log10(volumeVal)/0.6
-            if volumeDB<self.minDB:
-                volumeDB = self.minDB
-        else:
-            volumeDB = self.minDB
+        if self.mapping == 'default':
+            print('vol: ', volumeVal)
+            self.selectedDevice.SetMasterVolumeLevelScalar(volumeVal, None)
+            # return
+
+        # if volumeVal>0.:
+        #     if self.mapping == 'default':
+        #         print('vol: ', volumeVal)
+        #         self.selectedDevice.SetMasterVolumeLevelScalar(volumeVal, None)
+        #         return
+        #     if self.mapping == 'linear':
+        #         # simply map volumeVal linearly somewhere between self.minDB and self.maxDB
+        #         volumeDB = self.minDB + volumeVal*(self.maxDB-self.minDB)
+        #     elif self.mapping == 'log':
+        #         # log scale mapping, why 0.6?!
+        #         volumeDB = 20*np.log10(volumeVal)/0.6
+        #     if volumeDB<self.minDB:
+        #         volumeDB = self.minDB
+        # else:
+        #     volumeDB = self.minDB
 
         # print(volumeVal,volumeDB) # for debugging
-        self.selectedDevice.SetMasterVolumeLevel(volumeDB, None)
+        # self.selectedDevice.SetMasterVolumeLevel(volumeDB, None)
+        
 
 
         # self.volume = min(1.0, max(0.0, decibels/100.0))

@@ -24,19 +24,17 @@ def update_label(value):
 
 
 def start_recording(self):
-    self.is_recording = True
     self.text_label.appendPlainText('Status: Recording')
     self.audio_thread.start()
 
 
 def combine_video_audio(self):
-    global OUTPUT_NAME,AUDIO_NAME,VIDEO_NAME
     ffmpeg_options = "-analyzeduration 100M -probesize 100M"
     # Load the video clip
     video_clip = VideoFileClip(self.video_path, audio=False)
     # Cut off the first 3 second to align with the audio ( might need adjustment)
     # Revised for testing
-    video_clip = video_clip.subclip(3)  # need to find a way to align the video with audio, 
+    # video_clip = video_clip.subclip(3)  # need to find a way to align the video with audio, 
     # Load the audio clip
     audio_clip = AudioFileClip(self.audio_path)
 
@@ -45,8 +43,10 @@ def combine_video_audio(self):
     # audio_clip.close()
 
     # Write the combined clip to a new file
-    video_clip.write_videofile(self.output_path, codec="libx264", audio_codec="aac", temp_audiofile='temp.m4a', remove_temp=False, logger=self.logger)
+    video_clip.write_videofile(self.output_path, codec="libx264", audio_codec="aac", temp_audiofile='temp.m4a', remove_temp=True, logger=self.logger)
     # video_clip.write_videofile(output_path, codec="libx264", audio_codec="aac", remove_temp=False)
+    # video_clip.write_videofile(self.output_path, codec="libx264", audio_codec="aac", logger=self.logger)
+
     # video_clip.close()
 
 def switchPage(self,PAGE):         

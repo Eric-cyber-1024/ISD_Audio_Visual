@@ -353,8 +353,8 @@ class WebCam(QThread):
 
                 if cur_time - prev_time_second > 1.0:
                     print('CamFPS: ', self.fps_cnt)
-                    print('Frame QSize: ', self.q_color_frame.qsize())
-                    print('Out QSize: ', self.q_frame_output.qsize())
+                    # print('Frame QSize: ', self.q_color_frame.qsize())
+                    # print('Out QSize: ', self.q_frame_output.qsize())
                     prev_time_second = cur_time
                     self.fps_cnt = 0
             except:
@@ -411,8 +411,7 @@ class d435(QThread):
         # Get the intrinsics of the color camera
         self.colorProfile = rs.video_stream_profile(profile.get_stream(rs.stream.color))
         self.colorIntrinsics = self.colorProfile.get_intrinsics()
-        
-
+        print("colorIntrinsics: ", self.colorIntrinsics)
         # Get the intrinsics of the depth camera
         self.depthProfile = rs.video_stream_profile(profile.get_stream(rs.stream.depth))
         self.depthIntrinsics = self.depthProfile.get_intrinsics()
@@ -681,8 +680,8 @@ class d435(QThread):
             fps_cnt += 1
             if time.time() - cur_time > 1.0:
                 print('Cam FPS: ', fps_cnt)
-                print('Frame QSize: ', self.q_color_frame.qsize())
-                print('Out QSize: ', self.q_frame_output.qsize())
+                # print('Frame QSize: ', self.q_color_frame.qsize())
+                # print('Out QSize: ', self.q_frame_output.qsize())
                 fps_cnt = 0
                 cur_time = time.time()
             # else:
@@ -1230,15 +1229,13 @@ class App(QWidget):
         print(self.configParams)
         DEBUG = self.configParams['debug']
 
-        print('1')
-
         if (QDesktopWidget().screenCount() > 1):
             self.screen_number = 1
         else:
             self.screen_number = 0
         self.setWindowTitle("ISD UI Mockup — v%s" %(sVersion))
         #self.setStyleSheet("background-color:gray")
-        print('2')
+
         icon = QtGui.QIcon()
         icon.addPixmap(
             QtGui.QPixmap(
@@ -1251,16 +1248,12 @@ class App(QWidget):
         self.RECORDING = False
         self.MIC_ON = MIC_ON
         self.SOUND_ON = SOUND_ON
-        print('3')
         self.selected_camera_index = -1
-        print('33')
         self.selected_camera = ''
         self.d435 = None 
-        print('333')
         self.adminRole=self.configParams['adminRole'] # Add[if adminRole is True, will can show more features],Brian,05 April 2024
-        print('334')
         self.toUseYAML=self.configParams['fourMics']  # true load mic locs from yaml file (for 4 mics case)
-        print('4')
+
         # create the label that holds the image
         self.image_label = Create_ImageWindow()
         # self.image_label.setMinimumSize(QSize(640, 480))
@@ -1270,7 +1263,7 @@ class App(QWidget):
         self.exit_button = Create_Button("Exit", lambda: self.exit_app(), BUTTON_STYLE_TEXT)
         # self.setting_button = Create_Button("Setting",lambda:switchPage(self,APP_PAGE.SETTING.value),BUTTON_STYLE)
         # self.record_button = Create_Button("Record",self.record_button_clicked,BUTTON_STYLE_RED)
-        print('5')
+
         # Setting Button
         self.setting_button = Create_Button(
             "", lambda: switchPage(self, APP_PAGE.SETTING.value),
@@ -1307,7 +1300,6 @@ class App(QWidget):
         self.setting_button.setObjectName("btnSettings")
         self.setting_button.setFixedSize(NUM_ROUND_BUTTON_SIZE,
                                          NUM_ROUND_BUTTON_SIZE)
-        print('6')
         # Record Button
         self.icon_start_record = QIcon(
             resource_path(
@@ -1588,7 +1580,7 @@ class App(QWidget):
                 print("output device: ", self.output_device,self.output_devid)
 
                 # create audio controller for the output device
-                self.audio_outCtrl = AudioController(self.output_devid,'output','log')
+                self.audio_outCtrl = AudioController(self.output_devid,'output','default')
                 self.audio_outCtrl.listAllSections()
                 print(self.audio_outCtrl.volume)
 
@@ -1596,24 +1588,23 @@ class App(QWidget):
                 self.audio_outCtrl.set_volume(0)
                 self.slider_sound_vol.setValue(0)
                 self.slider_sound_vol.valueChanged.connect(self.audio_outCtrl.set_volume)
-                print('7')
+
                 # create audio controller for the input device
-                self.audio_inCtrl = AudioController(self.input_devid,'input','linear')
-                print('8')
+                self.audio_inCtrl = AudioController(self.input_devid,'input','default')
+
                 # turn to zero volume at start
                 self.audio_inCtrl.set_volume(0)
                 self.slider_mic_vol.setValue(0)
                 self.slider_mic_vol.valueChanged.connect(self.audio_inCtrl.set_volume)
-                print('9')
+
                 # create the video capture thread
                 self.video_thread = VideoThread(self.selected_camera_index,self.selected_camera, App.CAM_DISPLAY_WIDTH, App.CAM_DISPLAY_HEIGHT, self.configParams['usePoseEstimation'])
-                print('10')
                 self.audio_thread = AudioThread(self.input_device)
-                print('11')
+
                 # send packet when depth locked, Jason, 16 April 2024
                 if hasattr(self.video_thread, 'd435'):
                     self.video_thread.depth_value_locked.connect(self.send_3d_point)
-                print('12')
+
                 # connect its signal to the update_image slot
                 self.video_thread.change_pixmap_signal.connect(self.update_image)
                 # connnect signal to update 3d coordinate
@@ -1624,9 +1615,8 @@ class App(QWidget):
                 elif self.video_thread.cam:
                     self.video_thread.cam.start()
                 self.video_thread.start()
-                print('13')
+
                 self.logger = CustomProgressBarLogger()
-                print('14')
             else:
                 raise Exception('exit from init')
 
@@ -1643,10 +1633,10 @@ class App(QWidget):
 
         '''
         configFileName = 'config.yaml'
-        configFilePath = config_path(configFileName)
-        print('Config Path: ', configFilePath)
-        if os.path.exists(configFilePath):
-            with open(configFilePath, 'r') as file:
+        # configFilePath = config_path(configFileName)
+        print('Config Path: ', configFileName)
+        if os.path.exists(configFileName):
+            with open(configFileName, 'r') as file:
                 configParams= yaml.safe_load(file)
                 return configParams
         else:
@@ -2424,8 +2414,8 @@ class App(QWidget):
             SENDING_PACKET = True
             self.thread_send_packet = QThread()
             # Disabled send packet
-            # self.thread_send_packet.run = self.sendPacket
-            # self.thread_send_packet.finished.connect(self.on_send_packed_finished)
+            self.thread_send_packet.run = self.sendPacket
+            self.thread_send_packet.finished.connect(self.on_send_packed_finished)
             print("self.targetPos: ", self.targetPos)
             print('Start sending 3D point packet')
             self.thread_send_packet.start()
@@ -2447,12 +2437,22 @@ class App(QWidget):
         self.show_combine_finished_dialog()
         del self.combine_thread
 
+    def record_button_debounce_finished(self):
+        self.record_button.setEnabled(True)
+
     def record_button_clicked(self):
         global START_RECORDING, VIDEO_NAME, AUDIO_NAME, OUTPUT_NAME
         self.RECORDING = not self.RECORDING
         if self.RECORDING:
             START_RECORDING = True
             self.record_button.setIcon(self.icon_stop_record)
+            self.record_button.setEnabled(False)
+
+            if not hasattr(self, 'record_button_debounce_timer'):
+                self.record_button_debounce_timer = QTimer()
+                self.record_button_debounce_timer.setSingleShot(True)
+                self.record_button_debounce_timer.timeout.connect(self.record_button_debounce_finished)
+            self.record_button_debounce_timer.start(2000)
             # self.record_button.setStyleSheet("background-color:red ; color :white ;border-width: 4px;border-radius: 20px;")
 
             self.text_label.appendPlainText('Status: Recording')
@@ -2461,14 +2461,14 @@ class App(QWidget):
             self.video_saving_thread = VideoSavingThread(self.video_thread.cam, self.video_thread.d435, App.CAM_DISPLAY_WIDTH, App.CAM_DISPLAY_HEIGHT)
             self.video_saving_thread.finished.connect(self.saving_thread_finished)
             self.video_saving_thread.start()
-            
-
         else:
             START_RECORDING = False
 
             # self.record_button.setStyleSheet(BUTTON_STYLE_RED)
             self.record_button.setIcon(self.icon_start_record)
             self.text_label.appendPlainText('Status: Not Recording')
+            self.record_button.setEnabled(False)
+            self.record_button_debounce_timer.start(2000)
 
             self.audio_thread.requestInterruption()
 
@@ -2481,7 +2481,9 @@ class App(QWidget):
             elif self.video_thread.cam:
                 self.combine_thread.start_writing.connect(self.video_thread.cam.pause_thread)
             self.combine_thread.finished.connect(self.combine_thread_finished)
-            self.logger.signal_emitter.percentage_changed_signal.connect(self.update_progress_dialog)
+            self.logger.signal_emitter.percentage_changed_signal.connect(self.update_progress_dialog_percentage)
+            self.logger.signal_emitter.text_changed_signal.connect(self.update_progress_dialog_text)
+            # disable combine, Jason, 20 May 2024
             self.combine_thread.start()
 
     def mic_on_off_button_clicked(self):
@@ -2531,19 +2533,27 @@ class App(QWidget):
 
 
     def show_progress_dialog(self):
+        print('show progress dialog')
         self.video_progress_dialog = QProgressDialog(self)
         self.video_progress_dialog.setWindowTitle("Video")  
         self.video_progress_dialog.setLabelText("Generating video " + OUTPUT_NAME)
         self.video_progress_dialog.setCancelButton(None)
+        self.video_progress_dialog.setWindowFlags(Qt.Window | Qt.WindowType.WindowTitleHint | Qt.WindowType.CustomizeWindowHint)
         self.video_progress_dialog.setMinimumDuration(5)
         self.video_progress_dialog.setWindowModality(Qt.WindowModal)
         self.video_progress_dialog.setRange(0,100)
         # self.video_progress_dialog.setGeometry(0, 0, 600, 100)
 
     @pyqtSlot(float)
-    def update_progress_dialog(self, percentage):
-        self.video_progress_dialog.setValue(round(percentage))
+    def update_progress_dialog_percentage(self, percentage):
+        # print('u')
+        if not self.video_progress_dialog.wasCanceled():
+            self.video_progress_dialog.setValue(round(percentage))
 
+    @pyqtSlot(str)
+    def update_progress_dialog_text(self, text):
+        if not self.video_progress_dialog.wasCanceled():
+            self.video_progress_dialog.setLabelText(text + " Generating video " + OUTPUT_NAME)
 
     def exit_app(self):
         global dataLogger
