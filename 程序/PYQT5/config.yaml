@@ -1,4 +1,4 @@
-debug: False
+debug: True
 fourMics: True
 adminRole: True
 showROI: True

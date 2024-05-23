@@ -367,8 +367,8 @@ class d435(QThread):
     '''
     frame_ready = pyqtSignal(tuple)
 
-    DEPTH_CAM_WIDTH  = 848#1280
-    DEPTH_CAM_HEIGHT = 480#720
+    DEPTH_CAM_WIDTH  = 1280#848#1280
+    DEPTH_CAM_HEIGHT = 720#480#720
     DEPTH_FPS        = 15
 
     COLOR_CAM_WIDTH  = 1280#1920
@@ -429,7 +429,7 @@ class d435(QThread):
 
         # for visualization
         self.depthMin = 0.1  #meter
-        self.depthMax = 11.0  #meter
+        self.depthMax = 15.0  #meter
 
         # 2D image coordinate
         self.i=0  # from mouse x
@@ -521,7 +521,7 @@ class d435(QThread):
     
     # Revised, Jason, 14 May 2024
     def getFrame(self):
-        global START_RECORDING
+        global START_RECORDING, ALIGNED_FRAMES
 
         # Get a frameset from the pipeline
         try:
@@ -536,18 +536,22 @@ class d435(QThread):
                 return None,None,None
 
             # Convert the images to numpy arrays
-            depthImage = np.asanyarray(depthFrame.get_data())
+            depthFrameData=depthFrame.get_data()
+            depthImage = np.asanyarray(depthFrameData)
             colorImage = np.asanyarray(colorFrame.get_data())
             
             if START_RECORDING:
                 self.q_frame_output.put({'frame': colorImage, 'timestamp': time.time()})
             
+            
             # project color pixel to depth pixel
+            # note that self.i,self.j are mouse x,y from 1920x1020 displayed frame divided by 1.5
+            # assuming colorFrame is a 1280x720 frame !!
             depthPixel = rs.rs2_project_color_pixel_to_depth_pixel(
-                depthFrame.get_data(), self.depthScale, self.depthMin,
+                depthFrameData, self.depthScale, self.depthMin,
                 self.depthMax, self.depthIntrinsics, self.colorIntrinsics,
                 self.depthToColorExtrinsics, self.colorToDepthExtrinsics, [self.i, self.j])
-
+            
             if depthPixel[0]>=0 and depthPixel[1]>=0:
                 depth = depthFrame.get_distance(int(depthPixel[0]),int(depthPixel[1]))
                 depth = self.ma.calculate_moving_average_lock(depth)
@@ -564,6 +568,31 @@ class d435(QThread):
             # update self.iPrev,jPrev
             self.iPrev = self.i
             self.jPrev = self.j
+
+
+            # try to add aligned frame,Brian,23 May 2024
+            if ALIGNED_FRAMES:
+
+                if FILTERED_FRAMES:
+                    filtered_depth_frame = depthFrame
+                    dec_filter = rs.decimation_filter()
+                    depth_to_disparity = rs.disparity_transform(True)
+                    spat_filter = rs.spatial_filter()
+                    temp_filter = rs.temporal_filter()
+                    disparity_to_depth = rs.disparity_transform(False)
+                    hole_filling = rs.hole_filling_filter()
+
+                    # filtered_depth_frame = dec_filter.process(filtered_depth_frame)
+                    filtered_depth_frame = depth_to_disparity.process(filtered_depth_frame)
+                    filtered_depth_frame = spat_filter.process(filtered_depth_frame)
+                    filtered_depth_frame = temp_filter.process(filtered_depth_frame) #need more frames
+                    filtered_depth_frame = disparity_to_depth.process(filtered_depth_frame)
+                    filtered_depth_frame = hole_filling.process(filtered_depth_frame)
+
+
+                depth_colormap = np.asanyarray(self.colorizer.colorize(depthFrame).get_data())
+                alpha = 0.5
+                colorImage = cv2.addWeighted(depth_colormap, alpha, colorImage, 1 - alpha, 0 )
 
             # Revised to use queue, Jason, 7 May 2024
             self.q_color_frame.put({'frame': colorImage, 'point':self.point, 'timestamp': time.time()})
@@ -636,9 +665,9 @@ class d435(QThread):
                 # x is right+, y is down+, z is forward+
                 self.point = rs.rs2_deproject_pixel_to_point(self.depthIntrinsics,[int(depthPixel[0]), int(depthPixel[1])], depth)
 
-                x = self.point[0]
-                y = self.point[1]
-                z = self.point[2]
+                x = self.point[0]/1.1
+                y = self.point[1]/1.1
+                z = self.point[2]/1.1
 
             # update self.iPrev,jPrev
             self.iPrev = self.i
@@ -673,10 +702,12 @@ class d435(QThread):
                 self.sleep(5)   # sleep when combining video and audio
                 continue
 
-            if ALIGNED_FRAMES:
-                self.getFrameWithAlignedFrames()
-            else:
-                self.getFrame()
+            # revised[keep using getFrame to handle showing aligned frame or not],Brian,23 May 2024
+            # if ALIGNED_FRAMES:
+            #     self.getFrameWithAlignedFrames()
+            # else:
+            #     self.getFrame()
+            self.getFrame()
             fps_cnt += 1
             if time.time() - cur_time > 1.0:
                 print('Cam FPS: ', fps_cnt)
@@ -1233,7 +1264,7 @@ class App(QWidget):
             self.screen_number = 1
         else:
             self.screen_number = 0
-        self.setWindowTitle("ISD UI Mockup — v%s" %(sVersion))
+        self.setWindowTitle("ISD Mic Array Control Panel — v%s" %(sVersion))
         #self.setStyleSheet("background-color:gray")
 
         icon = QtGui.QIcon()
@@ -1479,17 +1510,19 @@ class App(QWidget):
                                                   BUTTON_BAR_HEIGHT)
         # self.main_page_button_widget.setStyleSheet("background-color:transparent; border:1px solid rgb(0, 255, 0);")
 
-        if DEBUG == True:
-            self.main_page.addWidget(self.text_label,
-                                     0,
-                                     0,
-                                     1,
-                                     2,
-                                     alignment=Qt.AlignRight)
-            self.main_page.addWidget(self.main_page_button_widget, 1, 0, 1, 2)
-        else:
-            self.main_page.addWidget(self.main_page_button_widget, 1, 0, 1, 2,
-                                     Qt.AlignCenter)
+        # removed the text_label for debugging
+        # if DEBUG == True:
+        #     self.main_page.addWidget(self.text_label,
+        #                              0,
+        #                              0,
+        #                              1,
+        #                              2,
+        #                              alignment=Qt.AlignRight)
+        #     self.main_page.addWidget(self.main_page_button_widget, 1, 0, 1, 2)
+        # else:
+        #     self.main_page.addWidget(self.main_page_button_widget, 1, 0, 1, 2,
+        #                              Qt.AlignCenter)
+        self.main_page.addWidget(self.main_page_button_widget, 1, 0, 1, 2,Qt.AlignCenter)
 
         # setup the setting page 
         self.setupSettingsPage()
