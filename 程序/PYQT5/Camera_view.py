@@ -539,9 +539,13 @@ class d435(QThread):
         try:
             frameset = self.pipeline.wait_for_frames()
 
+            # Align the depth frame to the color frame
+            aligned_frameset = self.align.process(frameset)
+
             # Get the aligned depth and color frames
-            depthFrame = frameset.get_depth_frame()
-            colorFrame = frameset.get_color_frame()
+            depthFrame = aligned_frameset.get_depth_frame()
+            colorFrame = aligned_frameset.get_color_frame()
+
             # print('depthIntrinsics: ', depthFrame.profile.as_video_stream_profile().intrinsics)
             # print('colorIntrinsics: ', colorFrame.profile.as_video_stream_profile().intrinsics)
             # print('depthToColor Extrinsics: ', depthFrame.profile.get_extrinsics_to(colorFrame.profile))
@@ -602,34 +606,6 @@ class d435(QThread):
             self.iPrev = self.i
             self.jPrev = self.j
 
-
-            # try to add aligned frame,Brian,23 May 2024
-            if ALIGNED_FRAMES:
-
-                if FILTERED_FRAMES:
-                    filtered_depth_frame = depthFrame
-                    dec_filter = rs.decimation_filter()
-                    depth_to_disparity = rs.disparity_transform(True)
-                    spat_filter = rs.spatial_filter()
-                    temp_filter = rs.temporal_filter()
-                    disparity_to_depth = rs.disparity_transform(False)
-                    hole_filling = rs.hole_filling_filter()
-
-                    # filtered_depth_frame = dec_filter.process(filtered_depth_frame)
-                    filtered_depth_frame = depth_to_disparity.process(filtered_depth_frame)
-                    filtered_depth_frame = spat_filter.process(filtered_depth_frame)
-                    filtered_depth_frame = temp_filter.process(filtered_depth_frame) #need more frames
-                    filtered_depth_frame = disparity_to_depth.process(filtered_depth_frame)
-                    filtered_depth_frame = hole_filling.process(filtered_depth_frame)
-                    depthFrame = filtered_depth_frame
-
-                depth_colormap = np.asanyarray(self.colorizer.colorize(depthFrame).get_data())
-                print(depth_colormap.shape[0], depth_colormap.shape[1])
-                if depth_colormap.shape[0]<720:
-                    depth_colormap = rescale_frame(depth_colormap, colorImage.shape[1], colorImage.shape[0])
-
-                alpha = 0.5
-                colorImage = cv2.addWeighted(depth_colormap, alpha, colorImage, 1 - alpha, 0 )
 
             # Revised to use queue, Jason, 7 May 2024
             self.q_color_frame.put({'frame': colorImage, 'point':self.point, 'timestamp': time.time()})
@@ -731,6 +707,8 @@ class d435(QThread):
                 # y = self.point[1]
                 # z = self.point[2]
 
+                # print(self.i,self.j,depthPixel,self.point,depth)
+
             # update self.iPrev,jPrev
             self.iPrev = self.i
             self.jPrev = self.j
@@ -744,7 +722,8 @@ class d435(QThread):
             
             color_image = cv2.addWeighted(depth_colormap, alpha, color_image, 1 - alpha, 0 )
             self.q_color_frame.put({'frame': color_image, 'point':self.point, 'timestamp': time.time()})
-        except:
+        except Exception as e:
+            print(repr(e))
             print("getFrameWithAlignedFrames Failed")
 
     def pause_thread(self):
