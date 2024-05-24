@@ -59,7 +59,7 @@ FILTERED_FRAMES = False
 SENDING_PACKET = False
 START_SEND_PACKET = True
 MOUSE_CLICKED = False
-sVersion='0.1.8'
+sVersion='0.1.9'
 
 def config_path(relative_path):
     try:
@@ -566,9 +566,9 @@ class d435(QThread):
                 # x is right+, y is down+, z is forward+
                 self.point = rs.rs2_deproject_pixel_to_point(self.depthIntrinsics,[int(depthPixel[0]), int(depthPixel[1])], depth)
 
-                x = self.point[0]
-                y = self.point[1]
-                z = self.point[2]
+                x = self.point[0]/1.1
+                y = self.point[1]/1.1
+                z = self.point[2]/1.1
                 # print(self.i,self.j,depthPixel,self.point)
 
             # update self.iPrev,jPrev
