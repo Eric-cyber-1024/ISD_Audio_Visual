@@ -82,7 +82,13 @@ def get_camera_list():
     # Get available camera indices
     available_cameras = []
     for i, camera in enumerate(QCameraInfo.availableCameras()):
-        available_cameras.append(camera.description())
+        devLongName    = camera.deviceName()
+        devDescription = camera.description()
+
+        # check devLongName to find D455 RGB Camera as it appeared as "USB Video Camera" instead sometimes
+        if devLongName.find('vid_8086&pid_0b5c&mi_03')>0:
+            devDescription = 'Intel(R) RealSense(TM) Depth Camera 455  RGB'
+        available_cameras.append(devDescription)
     return available_cameras
 
 class ClickableLabel(QLabel):
@@ -263,7 +269,7 @@ class WebCam(QThread):
     '''
     COLOR_CAM_WIDTH  = 1920#1920
     COLOR_CAM_HEIGHT = 1080#1080
-    COLOR_FPS        = 15#15   # have to reduced to 15 on Surface Pro 9
+    COLOR_FPS        = 15   # have to reduced to 15 on Surface Pro 9
 
     def __init__(self, camera_index, display_width, display_height):
         super().__init__()
@@ -800,7 +806,7 @@ class VideoThread(QThread):
         self.aruco_dict_type = ARUCO_DICT["DICT_ARUCO_ORIGINAL"]
         
 
-        if self.camera_name.startswith('Intel(R) RealSense(TM) Depth Camera 435') and self.camera_name.endswith('RGB'):
+        if self.camera_name.startswith('Intel(R) RealSense(TM) Depth Camera 4') and self.camera_name.endswith('RGB'):
             self.d435 = d435(self.DISPLAY_WIDTH, self.DISPLAY_HEIGHT)
             self.k, self.d = self.d435.getOpencvIntrinsics()
         else:
@@ -1065,7 +1071,7 @@ class VideoThread(QThread):
                     xInterval = self.DISPLAY_WIDTH//4
                     gridColor = (255,100,15)
 
-                    if self.camera_name.startswith('Intel(R) RealSense(TM) Depth Camera 435') and self.camera_name.endswith('RGB'):
+                    if self.camera_name.startswith('Intel(R) RealSense(TM) Depth Camera 4') and self.camera_name.endswith('RGB'):
                         if point is not None:
                             # draw debug texts on top-left corner
                             pointStr = 'x:%.2f,y:%.2f,z:%.2f' % (point[0], point[1], point[2])
@@ -2405,7 +2411,7 @@ class App(QWidget):
 
         # revised[make sure that stacked_widget is at index 0],Brian,05 April 2024
         if self.stacked_widget.currentIndex()==0:
-            if self.selected_camera.startswith('Intel(R) RealSense(TM) Depth Camera 435') and self.selected_camera.endswith('RGB'):
+            if self.selected_camera.startswith('Intel(R) RealSense(TM) Depth Camera 4') and self.selected_camera.endswith('RGB'):
                 currentX = mouse_position.x()
                 currentY = mouse_position.y()
 
@@ -2636,7 +2642,9 @@ if __name__ == "__main__":
         app.aboutToQuit.connect(dataLogger.stop_logging)
         app.aboutToQuit.connect(a.cleanUp)
         exit(app.exec_())
-    except Exception:
+    except Exception as e:
+        # revised[add e and write to log if exception was caught],Brian,24 May 2024
+        print(repr(e))
         dataLogger.stop_logging()
 
         
