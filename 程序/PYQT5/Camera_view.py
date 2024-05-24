@@ -565,6 +565,13 @@ class d435(QThread):
             
             
             if not self.is_get_frame_initialized:
+                # log camera params before alignment
+                with open("camera_params.txt", "w") as f:
+                    f.write(str(self.depthIntrinsics))
+                    f.write(str(self.colorIntrinsics))
+                    f.write(str(self.depthToColorExtrinsics))
+                    f.write(str(self.colorToDepthExtrinsics))
+
                 self.is_get_frame_initialized = True
                 self.is_get_align_frame_initialized = False
                 print('depthIntrinsics: ', depthFrame.profile.as_video_stream_profile().intrinsics)
@@ -577,6 +584,12 @@ class d435(QThread):
                 self.depthToColorExtrinsics = depthFrame.profile.get_extrinsics_to(colorFrame.profile)
                 self.colorToDepthExtrinsics = colorFrame.profile.get_extrinsics_to(depthFrame.profile)
 
+                # log camera params after alignment
+                with open("camera_params2.txt", "w") as f:
+                    f.write(str(self.depthIntrinsics))
+                    f.write(str(self.colorIntrinsics))
+                    f.write(str(self.depthToColorExtrinsics))
+                    f.write(str(self.colorToDepthExtrinsics))
 
             # project color pixel to depth pixel
             # note that self.i,self.j are mouse x,y from 1920x1020 displayed frame divided by 1.5
@@ -600,7 +613,7 @@ class d435(QThread):
                 x = self.point[0]/1.1
                 y = self.point[1]/1.1
                 z = self.point[2]/1.1
-                # print(self.i,self.j,depthPixel,self.point)
+                # print(self.i,self.j,depthPixel,self.point,depth)
 
             # update self.iPrev,jPrev
             self.iPrev = self.i
@@ -609,7 +622,8 @@ class d435(QThread):
 
             # Revised to use queue, Jason, 7 May 2024
             self.q_color_frame.put({'frame': colorImage, 'point':self.point, 'timestamp': time.time()})
-        except:
+        except Exception as e:
+            print(repr(e))
             print("getFrame Failed")
 
     # Revised, Jason - 17 May 2024 - Aligned Frames
