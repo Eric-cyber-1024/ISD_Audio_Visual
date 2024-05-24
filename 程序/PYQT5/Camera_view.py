@@ -386,6 +386,10 @@ class d435(QThread):
 
         self.is_paused = False
 
+        # flag to check if the frame profile is updated
+        self.is_get_frame_initialized = False
+        self.is_get_align_frame_initialized = False
+
         self.DISPLAY_WIDTH = display_width
         self.DISPLAY_HEIGHT = display_height
 
@@ -410,7 +414,7 @@ class d435(QThread):
 
         # Start the pipeline streaming
         profile = self.pipeline.start(self.config)
-
+        self.profile = profile
         # Create an align object to align the depth and color frames
         self.align = rs.align(rs.stream.color)
 
@@ -421,7 +425,7 @@ class d435(QThread):
         # Get the intrinsics of the depth camera
         self.depthProfile = rs.video_stream_profile(profile.get_stream(rs.stream.depth))
         self.depthIntrinsics = self.depthProfile.get_intrinsics()
-        # print("depthIntrinsics: ", self.depthIntrinsics)
+        print("depthIntrinsics: ", self.depthIntrinsics)
         w, h = self.depthIntrinsics.width, self.depthIntrinsics.height
 
         # Get the depth scale of the depth sensor
@@ -432,6 +436,8 @@ class d435(QThread):
         # Get extrinsics
         self.depthToColorExtrinsics = self.depthProfile.get_extrinsics_to(self.colorProfile)
         self.colorToDepthExtrinsics = self.colorProfile.get_extrinsics_to(self.depthProfile)
+        print('depthToColor Extrinsics: ', self.depthToColorExtrinsics)
+        print('colorToDepth Extrinsics: ', self.colorToDepthExtrinsics)
 
         # for visualization
         self.depthMin = 0.1  #meter
@@ -536,20 +542,38 @@ class d435(QThread):
             # Get the aligned depth and color frames
             depthFrame = frameset.get_depth_frame()
             colorFrame = frameset.get_color_frame()
-            
+            # print('depthIntrinsics: ', depthFrame.profile.as_video_stream_profile().intrinsics)
+            # print('colorIntrinsics: ', colorFrame.profile.as_video_stream_profile().intrinsics)
+            # print('depthToColor Extrinsics: ', depthFrame.profile.get_extrinsics_to(colorFrame.profile))
+            # print('colorToDepth Extrinsics: ', colorFrame.profile.get_extrinsics_to(depthFrame.profile))
+
             # Validate that both frames are valid
             if not depthFrame or not colorFrame:
                 return None,None,None
 
             # Convert the images to numpy arrays
             depthFrameData=depthFrame.get_data()
-            depthImage = np.asanyarray(depthFrameData)
+            # depthImage = np.asanyarray(depthFrameData)
             colorImage = np.asanyarray(colorFrame.get_data())
             
             if START_RECORDING:
                 self.q_frame_output.put({'frame': colorImage, 'timestamp': time.time()})
             
             
+            if not self.is_get_frame_initialized:
+                self.is_get_frame_initialized = True
+                self.is_get_align_frame_initialized = False
+                print('depthIntrinsics: ', depthFrame.profile.as_video_stream_profile().intrinsics)
+                print('colorIntrinsics: ', colorFrame.profile.as_video_stream_profile().intrinsics)
+                print('depthToColor Extrinsics: ', depthFrame.profile.get_extrinsics_to(colorFrame.profile))
+                print('colorToDepth Extrinsics: ', colorFrame.profile.get_extrinsics_to(depthFrame.profile))
+                print('getFrame cam params initialized')
+                self.depthIntrinsics = depthFrame.profile.as_video_stream_profile().intrinsics
+                self.colorIntrinsics = colorFrame.profile.as_video_stream_profile().intrinsics
+                self.depthToColorExtrinsics = depthFrame.profile.get_extrinsics_to(colorFrame.profile)
+                self.colorToDepthExtrinsics = colorFrame.profile.get_extrinsics_to(depthFrame.profile)
+
+
             # project color pixel to depth pixel
             # note that self.i,self.j are mouse x,y from 1920x1020 displayed frame divided by 1.5
             # assuming colorFrame is a 1280x720 frame !!
@@ -557,7 +581,10 @@ class d435(QThread):
                 depthFrameData, self.depthScale, self.depthMin,
                 self.depthMax, self.depthIntrinsics, self.colorIntrinsics,
                 self.depthToColorExtrinsics, self.colorToDepthExtrinsics, [self.i, self.j])
-            
+
+            # print('i j: ', self.i, self.j)
+            # print('depth pixel: ', depthPixel)
+
             if depthPixel[0]>=0 and depthPixel[1]>=0:
                 depth = depthFrame.get_distance(int(depthPixel[0]),int(depthPixel[1]))
                 depth = self.ma.calculate_moving_average_lock(depth)
@@ -594,9 +621,13 @@ class d435(QThread):
                     filtered_depth_frame = temp_filter.process(filtered_depth_frame) #need more frames
                     filtered_depth_frame = disparity_to_depth.process(filtered_depth_frame)
                     filtered_depth_frame = hole_filling.process(filtered_depth_frame)
-
+                    depthFrame = filtered_depth_frame
 
                 depth_colormap = np.asanyarray(self.colorizer.colorize(depthFrame).get_data())
+                print(depth_colormap.shape[0], depth_colormap.shape[1])
+                if depth_colormap.shape[0]<720:
+                    depth_colormap = rescale_frame(depth_colormap, colorImage.shape[1], colorImage.shape[0])
+
                 alpha = 0.5
                 colorImage = cv2.addWeighted(depth_colormap, alpha, colorImage, 1 - alpha, 0 )
 
@@ -619,10 +650,10 @@ class d435(QThread):
 
             # Align the depth frame to the color frame
             aligned_frameset = self.align.process(frameset)
-       
+
             depth_frame = aligned_frameset.get_depth_frame()
             color_frame = aligned_frameset.get_color_frame()
-
+            
             # Convert the images to numpy arrays
             color_image = np.asanyarray(color_frame.get_data())
 
@@ -649,18 +680,40 @@ class d435(QThread):
                 filtered_depth_frame = temp_filter.process(filtered_depth_frame) #need more frames
                 filtered_depth_frame = disparity_to_depth.process(filtered_depth_frame)
                 filtered_depth_frame = hole_filling.process(filtered_depth_frame)
+                depth_frame = filtered_depth_frame
 
             # Validate that both frames are valid
             if not depth_frame or not color_frame:
                 return
 
             # # project color pixel to depth pixel, need to check as it is not accurate for same resolution
+            # depthPixel = rs.rs2_project_color_pixel_to_depth_pixel(
+            #     depth_frame.get_data(), self.depthScale, self.depthMin,
+            #     self.depthMax, self.depthIntrinsics, self.colorIntrinsics,
+            #     self.depthToColorExtrinsics, self.colorToDepthExtrinsics, [self.i, self.j])
+            # depthPixel = [self.i, self.j]
+
+            #test
+            if not self.is_get_align_frame_initialized:
+                print('depthIntrinsics: ', depth_frame.profile.as_video_stream_profile().intrinsics)
+                print('colorIntrinsics: ', color_frame.profile.as_video_stream_profile().intrinsics)
+                print('depthToColor Extrinsics: ', depth_frame.profile.get_extrinsics_to(color_frame.profile))
+                print('colorToDepth Extrinsics: ', color_frame.profile.get_extrinsics_to(depth_frame.profile))
+                print('Align cam params initialized')
+                self.is_get_align_frame_initialized = True
+                self.is_get_frame_initialized = False
+                self.depthIntrinsics = depth_frame.profile.as_video_stream_profile().intrinsics
+                self.colorIntrinsics = color_frame.profile.as_video_stream_profile().intrinsics
+                self.depthToColorExtrinsics = depth_frame.profile.get_extrinsics_to(color_frame.profile)
+                self.colorToDepthExtrinsics = color_frame.profile.get_extrinsics_to(depth_frame.profile)
+
+
             depthPixel = rs.rs2_project_color_pixel_to_depth_pixel(
                 depth_frame.get_data(), self.depthScale, self.depthMin,
                 self.depthMax, self.depthIntrinsics, self.colorIntrinsics,
                 self.depthToColorExtrinsics, self.colorToDepthExtrinsics, [self.i, self.j])
-            # depthPixel = [self.i, self.j]
-
+            # print('i j: ', self.i, self.j)
+            # print('depth pixel: ', depthPixel)
             if depthPixel[0]>=0 and depthPixel[1]>=0:
                 depth = depth_frame.get_distance(int(depthPixel[0]),int(depthPixel[1]))
 
@@ -674,6 +727,9 @@ class d435(QThread):
                 x = self.point[0]/1.1
                 y = self.point[1]/1.1
                 z = self.point[2]/1.1
+                # x = self.point[0]
+                # y = self.point[1]
+                # z = self.point[2]
 
             # update self.iPrev,jPrev
             self.iPrev = self.i
@@ -709,20 +765,16 @@ class d435(QThread):
                 continue
 
             # revised[keep using getFrame to handle showing aligned frame or not],Brian,23 May 2024
-            # if ALIGNED_FRAMES:
-            #     self.getFrameWithAlignedFrames()
-            # else:
-            #     self.getFrame()
-            self.getFrame()
-            fps_cnt += 1
-            if time.time() - cur_time > 1.0:
-                print('Cam FPS: ', fps_cnt)
-                # print('Frame QSize: ', self.q_color_frame.qsize())
-                # print('Out QSize: ', self.q_frame_output.qsize())
-                fps_cnt = 0
-                cur_time = time.time()
-            # else:
-                # self.usleep(1000000//self.COLOR_FPS//2)
+            if ALIGNED_FRAMES:
+                self.getFrameWithAlignedFrames()
+            else:
+                self.getFrame()
+            # self.getFrame()
+            # fps_cnt += 1
+            # if time.time() - cur_time > 1.0:
+                # print('Cam FPS: ', fps_cnt)
+                # fps_cnt = 0
+                # cur_time = time.time()
 
 
 class CameraSelectionDialog(QDialog):
