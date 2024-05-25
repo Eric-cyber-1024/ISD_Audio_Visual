@@ -414,6 +414,8 @@ class d435(QThread):
 
         # Start the pipeline streaming
         profile = self.pipeline.start(self.config)
+        
+        
         self.profile = profile
         # Create an align object to align the depth and color frames
         self.align = rs.align(rs.stream.color)
@@ -586,10 +588,12 @@ class d435(QThread):
 
                 # log camera params after alignment
                 with open("camera_params2.txt", "w") as f:
+                    depth_sensor = self.profile.get_device().first_depth_sensor()
                     f.write(str(self.depthIntrinsics))
                     f.write(str(self.colorIntrinsics))
                     f.write(str(self.depthToColorExtrinsics))
                     f.write(str(self.colorToDepthExtrinsics))
+                    
 
             # project color pixel to depth pixel
             # note that self.i,self.j are mouse x,y from 1920x1020 displayed frame divided by 1.5
@@ -722,6 +726,7 @@ class d435(QThread):
                 # z = self.point[2]
 
                 # print(self.i,self.j,depthPixel,self.point,depth)
+            
 
             # update self.iPrev,jPrev
             self.iPrev = self.i
@@ -2179,7 +2184,7 @@ class App(QWidget):
         self.showInfo('')
         sendBuf=b'SET0'
         
-        self.setTargetPos(self.targetPos)
+        # self.setTargetPos(self.targetPos)
 
         self.fetchParamsFromUI()
         self.printParams()
