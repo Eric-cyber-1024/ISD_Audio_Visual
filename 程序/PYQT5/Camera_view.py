@@ -617,7 +617,7 @@ class d435(QThread):
                 x = self.point[0]/1.1
                 y = self.point[1]/1.1
                 z = self.point[2]/1.1
-                # print(self.i,self.j,depthPixel,self.point,depth)
+                print(self.i,self.j,depthPixel,self.point,depth)
 
             # update self.iPrev,jPrev
             self.iPrev = self.i
@@ -1124,7 +1124,7 @@ class VideoThread(QThread):
                     if self.camera_name.startswith('Intel(R) RealSense(TM) Depth Camera 4') and self.camera_name.endswith('RGB'):
                         if point is not None:
                             # draw debug texts on top-left corner
-                            pointStr = 'x:%.2f,y:%.2f,z:%.2f' % (point[0], point[1], point[2])
+                            pointStr = 'x:%.2f,y:%.2f,z:%.2f,%d,%d' % (point[0], point[1], point[2],self.mousex,self.mousey)
                             self.drawDebugText(pointStr)
 
                             # draw ROI of the mouse x,y
