@@ -2203,7 +2203,7 @@ class App(QWidget):
         self.showInfo('')
         sendBuf=b'SET0'
         
-        # self.setTargetPos(self.targetPos)
+        self.setTargetPos(self.targetPos)
 
         self.fetchParamsFromUI()
         self.printParams()
