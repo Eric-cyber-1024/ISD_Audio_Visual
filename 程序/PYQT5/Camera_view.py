@@ -628,11 +628,14 @@ class d435(QThread):
                 # x is right+, y is down+, z is forward+
                 self.point = rs.rs2_deproject_pixel_to_point(self.depthIntrinsics,[int(depthPixel[0]), int(depthPixel[1])], depth)
 
-                x = self.point[0]/1.1
-                y = self.point[1]/1.1
-                z = self.point[2]/1.1
+                x = self.point[0]
+                y = self.point[1]
+                z = self.point[2]
                 # add [map to 0.37,0.345,3.03 if x,y,z is close to 0.54,0.49,3.15],Brian,27 May 2024
                 x,y,z = self.remap(x,y,z)
+                self.point[0]=x
+                self.point[1]=y
+                self.point[2]=z
                 print(self.i,self.j,depthPixel,self.point,depth)
 
             # update self.iPrev,jPrev
