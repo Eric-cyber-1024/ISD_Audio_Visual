@@ -633,11 +633,6 @@ class d435(QThread):
                 z = self.point[2]/1.1
                 # add [map to 0.37,0.345,3.03 if x,y,z is close to 0.54,0.49,3.15],Brian,27 May 2024
                 x,y,z = self.remap(x,y,z)
-
-                for x in np.arange(0.5,0.6,0.05):
-                    for y in np.arange(0.4,0.5,0.05):
-                        for z in np.arange(2,4,0.1):
-                            print(self.remap(0.54,0.49,3.11))
                 print(self.i,self.j,depthPixel,self.point,depth)
 
             # update self.iPrev,jPrev
