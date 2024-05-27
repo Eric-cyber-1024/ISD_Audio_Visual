@@ -111,7 +111,7 @@ if __name__ == '__main__':
     
     # generate test vectors 
     K1 = 0.25
-    K2 = 0.01
+    K2 = 2.
     z1 = 5.
     z2 = 8.
     # srcLocs, micLocs, ref_micLocs = generateTestVectors(N,K1,K2,z1,z2)
