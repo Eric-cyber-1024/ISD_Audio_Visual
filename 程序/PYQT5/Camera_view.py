@@ -59,7 +59,7 @@ FILTERED_FRAMES = False
 SENDING_PACKET = False
 START_SEND_PACKET = True
 MOUSE_CLICKED = False
-sVersion='0.1.9'
+sVersion='0.1.9d'
 
 def config_path(relative_path):
     try:
@@ -533,6 +533,20 @@ class d435(QThread):
 
         return False, self.q_frame_output.get()
     
+
+    # add,Brian,27 May 2024
+    def remap(self,x,y,z,err_max=0.3):
+        '''
+        map to 0.37,0.345,3.03 if x,y,z is close to 0.54,0.49,3.15
+        '''
+        # get distance of input x,y,z to ref
+        d = np.sqrt((x-0.54)**2 + (y-0.49)**2 + (z-3.15)**2)
+
+        if d< err_max:
+            return 0.37,0.345,3.03
+        else:
+            return x,y,z
+    
     # Revised, Jason, 14 May 2024
     def getFrame(self):
         global START_RECORDING, ALIGNED_FRAMES
@@ -617,6 +631,13 @@ class d435(QThread):
                 x = self.point[0]/1.1
                 y = self.point[1]/1.1
                 z = self.point[2]/1.1
+                # add [map to 0.37,0.345,3.03 if x,y,z is close to 0.54,0.49,3.15],Brian,27 May 2024
+                x,y,z = self.remap(x,y,z)
+
+                for x in np.arange(0.5,0.6,0.05):
+                    for y in np.arange(0.4,0.5,0.05):
+                        for z in np.arange(2,4,0.1):
+                            print(self.remap(0.54,0.49,3.11))
                 print(self.i,self.j,depthPixel,self.point,depth)
 
             # update self.iPrev,jPrev
