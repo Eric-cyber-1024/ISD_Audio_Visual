@@ -26,7 +26,11 @@ MIC_NUMBER=32
 HOST_NAME ='192.168.1.40'
 PORT      =5004
 INDEX =[x for x in range (MIC_NUMBER )]
-sVersion = '0.10'
+sVersion = '0.11'
+
+# Version History:
+# 
+# 0.11  -- added set Test = 1 to enable LPF
 
 
 class labeledTextbox:
@@ -189,6 +193,7 @@ class paramsDialog:
 
         self.testModes=[
             '0: PS_enMC-0,PS_enBM-0,FFTgain: 2, MIC8-data_bm_n, MIC9-ifftout',
+            '1: Enable LPF'
             '4: PS_enMC-0,PS_enBM-0,FFTgain: 5, MIC8-data_bm_n, MIC9-ifftout',
             '8: PS_enMC-0,PS_enBM-0,FFTgain: 5, MIC8-data_bm_n, MIC9-ifftout, delta_t=0',
             '9: PS_enMC-0,PS_enBM-0,FFTgain: 5, MIC8-data_bm_n, MIC9-data_fbf_d_MC',
