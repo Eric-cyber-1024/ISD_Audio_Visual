@@ -59,7 +59,7 @@ FILTERED_FRAMES = False
 SENDING_PACKET = False
 START_SEND_PACKET = True
 MOUSE_CLICKED = False
-sVersion='0.1.9d'
+sVersion='0.1.9e'
 
 def config_path(relative_path):
     try:
@@ -375,7 +375,7 @@ class d435(QThread):
 
     DEPTH_CAM_WIDTH  = 1280#848#1280
     DEPTH_CAM_HEIGHT = 720#480#720
-    DEPTH_FPS        = 15
+    DEPTH_FPS        = 30 # higher to avoid creating too much interferences to audio recording
 
     COLOR_CAM_WIDTH  = 1280#1920
     COLOR_CAM_HEIGHT = 720#1080
