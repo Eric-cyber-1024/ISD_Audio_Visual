@@ -192,6 +192,8 @@ class AudioController:
         sMapping -- audio level mapping 'linear' or 'log'
 
         '''
+        
+
         self.volume = 0.0
         self.prev_volume = 0.0
         self.deviceId = deviceId
@@ -237,6 +239,8 @@ class AudioController:
 
         interface = myDevice.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
         self.selectedDevice = cast(interface, POINTER(IAudioEndpointVolume))
+
+        
         print("volume.GetMute(): %s" % self.selectedDevice.GetMute())
         print("volume.GetMasterVolumeLevel(): %s" % self.selectedDevice.GetMasterVolumeLevel())
         print("volume.GetVolumeRange(): (%s, %s, %s)" % self.selectedDevice.GetVolumeRange())
@@ -317,7 +321,7 @@ class AudioController:
         # convert volumeVal to dB
         volumeVal = min(1.0,max(0.0,volumeVal)) # make sure that volumeVal is in the correct range
         if self.mapping == 'default':
-            print('vol: ', volumeVal)
+            # print('vol: ', volumeVal)
             self.selectedDevice.SetMasterVolumeLevelScalar(volumeVal, None)
             # return
 
@@ -362,7 +366,7 @@ class AudioController:
                 # 0.0 is the min value, reduce by decibels
                 self.volume = max(0.0, self.volume - decibels)
                 interface.SetMasterVolume(self.volume, None)
-                print("Volume reduced to", self.volume)  # debug
+                # print("Volume reduced to", self.volume)  # debug
 
     def increase_volume(self, decibels):
         sessions = AudioUtilities.GetAllSessions()
@@ -372,7 +376,7 @@ class AudioController:
                 # 1.0 is the max value, raise by decibels
                 self.volume = min(1.0, self.volume + decibels)
                 interface.SetMasterVolume(self.volume, None)
-                print("Volume raised to", self.volume)  # debug
+                # print("Volume raised to", self.volume)  # debug
 
     # def callback(self, indata, frames, time, status):
     #     if status:

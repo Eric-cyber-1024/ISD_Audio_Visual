@@ -59,7 +59,9 @@ FILTERED_FRAMES = False
 SENDING_PACKET = False
 START_SEND_PACKET = True
 MOUSE_CLICKED = False
-sVersion='0.1.9e'
+DEBUG_LEVEL   = 0 # Add,Brian,30 May 2024
+
+sVersion='0.1.10'
 
 def config_path(relative_path):
     try:
@@ -382,6 +384,8 @@ class d435(QThread):
     COLOR_FPS        = 15#15   # have to reduced to 15 on Surface Pro 9
 
     def __init__(self, display_width, display_height):
+        global DEBUG_LEVEL
+
         super().__init__()
 
         self.is_paused = False
@@ -423,11 +427,15 @@ class d435(QThread):
         # Get the intrinsics of the color camera
         self.colorProfile = rs.video_stream_profile(profile.get_stream(rs.stream.color))
         self.colorIntrinsics = self.colorProfile.get_intrinsics()
-        print("colorIntrinsics: ", self.colorIntrinsics)
+        
         # Get the intrinsics of the depth camera
         self.depthProfile = rs.video_stream_profile(profile.get_stream(rs.stream.depth))
         self.depthIntrinsics = self.depthProfile.get_intrinsics()
-        print("depthIntrinsics: ", self.depthIntrinsics)
+
+        if DEBUG_LEVEL==3:
+            print("colorIntrinsics: ", self.colorIntrinsics)
+            print("depthIntrinsics: ", self.depthIntrinsics)
+
         w, h = self.depthIntrinsics.width, self.depthIntrinsics.height
 
         # Get the depth scale of the depth sensor
@@ -438,8 +446,10 @@ class d435(QThread):
         # Get extrinsics
         self.depthToColorExtrinsics = self.depthProfile.get_extrinsics_to(self.colorProfile)
         self.colorToDepthExtrinsics = self.colorProfile.get_extrinsics_to(self.depthProfile)
-        print('depthToColor Extrinsics: ', self.depthToColorExtrinsics)
-        print('colorToDepth Extrinsics: ', self.colorToDepthExtrinsics)
+
+        if DEBUG_LEVEL==3:
+            print('depthToColor Extrinsics: ', self.depthToColorExtrinsics)
+            print('colorToDepth Extrinsics: ', self.colorToDepthExtrinsics)
 
         # for visualization
         self.depthMin = 0.1  #meter
@@ -549,7 +559,7 @@ class d435(QThread):
     
     # Revised, Jason, 14 May 2024
     def getFrame(self):
-        global START_RECORDING, ALIGNED_FRAMES
+        global START_RECORDING, ALIGNED_FRAMES, DEBUG_LEVEL
 
         # Get a frameset from the pipeline
         try:
@@ -590,11 +600,12 @@ class d435(QThread):
 
                 self.is_get_frame_initialized = True
                 self.is_get_align_frame_initialized = False
-                print('depthIntrinsics: ', depthFrame.profile.as_video_stream_profile().intrinsics)
-                print('colorIntrinsics: ', colorFrame.profile.as_video_stream_profile().intrinsics)
-                print('depthToColor Extrinsics: ', depthFrame.profile.get_extrinsics_to(colorFrame.profile))
-                print('colorToDepth Extrinsics: ', colorFrame.profile.get_extrinsics_to(depthFrame.profile))
-                print('getFrame cam params initialized')
+                if DEBUG_LEVEL==3:
+                    print('depthIntrinsics: ', depthFrame.profile.as_video_stream_profile().intrinsics)
+                    print('colorIntrinsics: ', colorFrame.profile.as_video_stream_profile().intrinsics)
+                    print('depthToColor Extrinsics: ', depthFrame.profile.get_extrinsics_to(colorFrame.profile))
+                    print('colorToDepth Extrinsics: ', colorFrame.profile.get_extrinsics_to(depthFrame.profile))
+                    print('getFrame cam params initialized')
                 self.depthIntrinsics = depthFrame.profile.as_video_stream_profile().intrinsics
                 self.colorIntrinsics = colorFrame.profile.as_video_stream_profile().intrinsics
                 self.depthToColorExtrinsics = depthFrame.profile.get_extrinsics_to(colorFrame.profile)
@@ -636,7 +647,8 @@ class d435(QThread):
                 self.point[0]=x
                 self.point[1]=y
                 self.point[2]=z
-                print(self.i,self.j,depthPixel,self.point,depth)
+                if DEBUG_LEVEL==3:
+                    print(self.i,self.j,depthPixel,self.point,depth)
 
             # update self.iPrev,jPrev
             self.iPrev = self.i
@@ -646,7 +658,7 @@ class d435(QThread):
             # Revised to use queue, Jason, 7 May 2024
             self.q_color_frame.put({'frame': colorImage, 'point':self.point, 'timestamp': time.time()})
         except Exception as e:
-            print(repr(e))
+            print('exception::',repr(e))
             print("getFrame Failed")
 
     # Revised, Jason - 17 May 2024 - Aligned Frames
@@ -844,12 +856,17 @@ class VideoAudioThread(QThread):
         self.logger = logger
 
     def run(self):
-        print("Combine Video")
+        global DEBUG_LEVEL
+
+        if DEBUG_LEVEL==3:
+            print("Combine Video")
         time.sleep(1)
         self.start_writing.emit()
-        print('v: ', self.video_path)
-        print('a: ', self.audio_path)
-        print('o: ', self.output_path)
+
+        if DEBUG_LEVEL==3:
+            print('v: ', self.video_path)
+            print('a: ', self.audio_path)
+            print('o: ', self.output_path)
         combine_video_audio(self)
 
 
@@ -1166,14 +1183,15 @@ class VideoThread(QThread):
 
 class VideoSavingThread(QThread):
     def __init__(self, cam, d435, video_width, video_height):
-        global VIDEO_NAME, OUTPUT_NAME
+        global VIDEO_NAME, OUTPUT_NAME, DEBUG_LEVEL
         super().__init__()
         self.cam = cam
         self.d435 = d435
         self.video_width = video_width
         self.video_height = video_height
         self.is_initialized = False
-        print('Initiate Video')
+        if DEBUG_LEVEL==3:
+            print('Initiate Video')
         current_datetime = datetime.now()
         formatted_datetime = current_datetime.strftime(
             "[%m-%d-%y]%H_%M_%S")
@@ -1183,8 +1201,9 @@ class VideoSavingThread(QThread):
             formatted_datetime) + '.mp4'
         VIDEO_NAME = self.video_name
         OUTPUT_NAME = self.output_path
-        print('video name: ', self.video_name)
-        print('combined video: ', self.output_path)
+        if DEBUG_LEVEL==3:
+            print('video name: ', self.video_name)
+            print('combined video: ', self.output_path)
         if self.d435:
             self.video_width = self.d435.COLOR_CAM_WIDTH
             self.video_height = self.d435.COLOR_CAM_HEIGHT
@@ -1264,8 +1283,9 @@ class VideoSavingThread(QThread):
 
         if not START_RECORDING:
             self.out.release()
-            print('total time: ', self.video_end_time - self.video_start_time)
-            print('total frame count: ', self.total_f_cnt)
+            if DEBUG_LEVEL==3:
+                print('total time: ', self.video_end_time - self.video_start_time)
+                print('total frame count: ', self.total_f_cnt)
             self.out_fps_cnt = 0
 
 
@@ -1289,7 +1309,7 @@ class AudioThread(QThread):
         return np.abs(self.avgLevel)
 
     def run(self):
-        global START_RECORDING, AUDIO_NAME
+        global START_RECORDING, AUDIO_NAME, DEBUG_LEVEL
 
         # Use a callback function for non-blocking audio recording
         def callback(indata, frames, time, status):
@@ -1308,16 +1328,20 @@ class AudioThread(QThread):
             dtype = 'int16' 
             audio_name = CURRENT_PATH + AUDIO_PATH + VIDEO_DATE + "\\" + str(formatted_datetime) + '.wav'
             AUDIO_NAME = audio_name
-            print('audio file::',audio_name)
+
+            if DEBUG_LEVEL==3:
+                print('audio file::',audio_name)
             with sf.SoundFile(audio_name, mode='w', subtype=subtype,samplerate=self.sample_rate, channels=1) as file:
-                print('starting soundfile',file)
+                if DEBUG_LEVEL==3:
+                    print('starting soundfile',file)
                 with sd.InputStream(samplerate=self.sample_rate, dtype=dtype, channels=1, callback=callback):
                     while START_RECORDING:
                         try:
                             file.write(self.q.get(timeout=0.3))
                         except:
                             break
-                    print('closing soundfile')
+                    if DEBUG_LEVEL==3:
+                        print('closing soundfile')
                     file.close()
 
 
@@ -1332,8 +1356,11 @@ class App(QWidget):
 
         # try to load configurations from yaml file (if the config.yaml exists)
         self.configParams = self.tryLoadConfig()
-        print(self.configParams)
         DEBUG = self.configParams['debug']
+        DEBUG_LEVEL = self.configParams['debugLevel']
+        if DEBUG_LEVEL == 3:
+            print(self.configParams)
+        
 
         if (QDesktopWidget().screenCount() > 1):
             self.screen_number = 1
@@ -1570,8 +1597,10 @@ class App(QWidget):
                                             Qt.AlignCenter)
         self.button_slider_layout.addWidget(self.sound_on_off_button, 1, 1, 1,
                                             1, Qt.AlignCenter)
-        self.button_slider_layout.addWidget(self.setting_button, 0, 3, 2, 1,
-                                            Qt.AlignCenter)
+        
+        # remove setting button,Brian,30 May 2024
+        # self.button_slider_layout.addWidget(self.setting_button, 0, 3, 2, 1,
+        #                                     Qt.AlignCenter)
         
         self.button_slider_layout.setSpacing(20)
         self.main_page_button.addLayout(self.button_slider_layout, 0, 2, 1, 2,
@@ -1684,13 +1713,16 @@ class App(QWidget):
                     self.showAlert('Error','Failed to select the right audio input device! Have to exit now!',self.windowIcon())
                     exit()
 
-                print("input device: ", self.input_device,self.input_devid)
-                print("output device: ", self.output_device,self.output_devid)
+                if DEBUG_LEVEL>0:
+                    print("input device: ", self.input_device,self.input_devid)
+                    print("output device: ", self.output_device,self.output_devid)
 
                 # create audio controller for the output device
                 self.audio_outCtrl = AudioController(self.output_devid,'output','default')
                 self.audio_outCtrl.listAllSections()
-                print(self.audio_outCtrl.volume)
+
+                if DEBUG_LEVEL==3:
+                    print(self.audio_outCtrl.volume)
 
                 # turn to zero volume at start
                 self.audio_outCtrl.set_volume(0)
@@ -1736,13 +1768,15 @@ class App(QWidget):
 
         
     def tryLoadConfig(self):
+        global DEBUG_LEVEL
         '''
         check if config.yaml exists, if yes, load config params from it, else set default values manually
 
         '''
         configFileName = 'config.yaml'
         # configFilePath = config_path(configFileName)
-        print('Config Path: ', configFileName)
+        if DEBUG_LEVEL==3:
+            print('Config Path: ', configFileName)
         if os.path.exists(configFileName):
             with open(configFileName, 'r') as file:
                 configParams= yaml.safe_load(file)
@@ -1755,6 +1789,7 @@ class App(QWidget):
                 'adminRole': False,
                 'showROI': True,
                 'usePoseEstimation': False,
+                'debugLevel':0
             }
             return self.configParams
 
@@ -1810,14 +1845,15 @@ class App(QWidget):
 
     # Added, Jason - 12 April 2024
     def toggleFilteredFramesMode(self):
-        global ALIGNED_FRAMES, FILTERED_FRAMES
+        global ALIGNED_FRAMES, FILTERED_FRAMES, DEBUG_LEVEL
         if ALIGNED_FRAMES:
             FILTERED_FRAMES = not FILTERED_FRAMES
             if FILTERED_FRAMES:
                 self.btnToggleFilteredFrames.setText('Turn Off Filtered Frame')
             else:
                 self.btnToggleFilteredFrames.setText('Turn On Filtered Frame')
-        print("FILTERED_FRAMES: ", FILTERED_FRAMES)
+        if DEBUG_LEVEL>0:
+            print("FILTERED_FRAMES: ", FILTERED_FRAMES)
 
     def exitAdminMode(self):
         '''
@@ -2197,7 +2233,7 @@ class App(QWidget):
     #         self.btnSendPacket.setText('Send Packet')
 
     def sendPacket(self):
-        global dataLogger
+        global dataLogger, DEBUG_LEVEL
 
         # clear lbl_info first
         self.showInfo('')
@@ -2215,7 +2251,8 @@ class App(QWidget):
 
         # revised[add offsets],Brian,18 Mar 2024
         delay=delay_calculation_v1(this_location)
-        print(delay)
+        if DEBUG_LEVEL==3: 
+            print(delay)
         
         #converting the delay into binary format 
         delay_binary_output = delay_to_binary(delay)
@@ -2231,15 +2268,17 @@ class App(QWidget):
         type=0
         reserved=0
         message=struct_packet(RW_field,mode,mic_gain,mic_num,en_bm,en_bc,delay_binary_output[0],mic_en,type,reserved)
-        print(message)
         messagehex = BintoINT(message)
-        print(messagehex)
         message1 = int(messagehex[2:4],16) # hex at  1 and 2  
         message2 = int(messagehex[4:6],16) # hex at  3 and 4 
         message3 = int(messagehex[6:8],16)  # hex at  5 and 6 
         message4 = int(messagehex[8:],16)
-        print("m1:{},m2:{},m3:{},m4:{}\n".format(message1,message2,message3,message4))
-    
+
+        if DEBUG_LEVEL==3:
+            print(message)
+            print(messagehex)
+            print("m1:{},m2:{},m3:{},m4:{}\n".format(message1,message2,message3,message4))
+        
 
         message5  = int(self.mode)        # mode
         message6  = int(self.micIndx)     # mic
@@ -2273,9 +2312,11 @@ class App(QWidget):
             
         refDelay = refDelay.astype(np.uint8)
         payload = refDelay.tobytes()
-        print('refDelay',refDelay)
-        print('payload',payload)
-        print('sendBuf',sendBuf)
+
+        if DEBUG_LEVEL==3:
+            print('refDelay',refDelay)
+            print('payload',payload)
+            print('sendBuf',sendBuf)
 
         
 
@@ -2294,17 +2335,19 @@ class App(QWidget):
 
 
         if send_and_receive_packet(self.hostIP,self.hostPort,sendBuf,timeout=3):
-            print('data transmission ok')
+            if DEBUG_LEVEL==3:
+                print('data transmission ok')
             self.showInfo('tx ok')
             dataLogger.add_data('tx ok')
         else:
-            print('data transmission failed')
+            if DEBUG_LEVEL==3:
+                print('data transmission failed')
             dataLogger.add_data('tx failed')
 
 
 
     def sendPacket_v2(self):
-        global dataLogger
+        global dataLogger, DEBUG_LEVEL
 
         # clear lbl_info first
         self.showInfo('')
@@ -2334,15 +2377,17 @@ class App(QWidget):
         type=0
         reserved=0
         message=struct_packet(RW_field,mode,mic_gain,mic_num,en_bm,en_bc,delay_binary_output[0],mic_en,type,reserved)
-        print(message)
         messagehex = BintoINT(message)
-        print(messagehex)
         message1 = int(messagehex[2:4],16) # hex at  1 and 2  
         message2 = int(messagehex[4:6],16) # hex at  3 and 4 
         message3 = int(messagehex[6:8],16)  # hex at  5 and 6 
         message4 = int(messagehex[8:],16)
-        print("m1:{},m2:{},m3:{},m4:{}\n".format(message1,message2,message3,message4))
-    
+
+        if DEBUG_LEVEL==3:
+            print(message)
+            print(messagehex)
+            print("m1:{},m2:{},m3:{},m4:{}\n".format(message1,message2,message3,message4))
+        
 
         message5  = int('0')        # mode
         message6  = int('1')        # mic
@@ -2373,9 +2418,11 @@ class App(QWidget):
             
         refDelay = refDelay.astype(np.uint8)
         payload = refDelay.tobytes()
-        print('refDelay',refDelay)
-        print('payload',payload)
-        print('sendBuf',sendBuf)
+
+        if DEBUG_LEVEL==3:
+            print('refDelay',refDelay)
+            print('payload',payload)
+            print('sendBuf',sendBuf)
 
         
 
@@ -2394,11 +2441,13 @@ class App(QWidget):
 
 
         if send_and_receive_packet(self.hostIP,self.hostPort,sendBuf,timeout=3):
-            print('data transmission ok')
+            if DEBUG_LEVEL==3:
+                print('data transmission ok')
             self.showInfo('tx ok')
             dataLogger.add_data('tx ok')
         else:
-            print('data transmission failed')
+            if DEBUG_LEVEL==3:
+                print('data transmission failed')
             dataLogger.add_data('tx failed')
 
 
@@ -2509,7 +2558,7 @@ class App(QWidget):
 
     # Added for 3d coordinates, Jason, 11 April 2024
     def send_3d_point(self):
-        global SENDING_PACKET
+        global SENDING_PACKET, DEBUG_LEVEL
 
         if not self.adminRole:
             return
@@ -2524,19 +2573,23 @@ class App(QWidget):
             # Disabled send packet
             self.thread_send_packet.run = self.sendPacket
             self.thread_send_packet.finished.connect(self.on_send_packed_finished)
-            print("self.targetPos: ", self.targetPos)
-            print('Start sending 3D point packet')
+            if DEBUG_LEVEL==3:
+                print("self.targetPos: ", self.targetPos)
+                print('Start sending 3D point packet')
             self.thread_send_packet.start()
             
         else:
-            print('Wait for sending the last packet...')
+            if DEBUG_LEVEL==3:
+                print('Wait for sending the last packet...')
             self.mouse_press_timer.start(2000)
 
     def saving_thread_finished(self):
         del self.video_saving_thread
 
     def combine_thread_finished(self):
-        print('finished')
+        global DEBUG_LEVEL
+        if DEBUG_LEVEL==3:
+            print('finished combining video and audio as mp4 file')
         if self.video_thread.d435:
             self.video_thread.d435.resume_thread()
         elif self.video_thread.cam:

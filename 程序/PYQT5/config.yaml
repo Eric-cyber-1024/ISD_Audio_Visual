@@ -1,5 +1,6 @@
 debug: True
 fourMics: True
-adminRole: True
+adminRole: False
 showROI: True
 usePoseEstimation: True
+debugLevel: 0
