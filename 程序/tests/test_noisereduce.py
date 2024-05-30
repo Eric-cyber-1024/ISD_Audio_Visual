@@ -4,8 +4,8 @@ from scipy.io import wavfile
 fileName = 'Adjust_whitenoise_4M25-gain0.wav'
 audio_path  = 'C:/Users/LSCM_/Downloads/20240529/4-mic demo/'+fileName
 
-fileName    = '[05-29-24]18_17_14.wav'
-audio_path  = 'C:/Users/LSCM_/Documents/'+fileName
+# fileName    = '[05-29-24]18_17_14.wav'
+# audio_path  = 'C:/Users/LSCM_/Documents/'+fileName
 
 
 # Load data from a WAV file (replace 'output.wav' with your actual file)
