@@ -216,6 +216,7 @@ class CanvasWidget(QWidget):
 # Add[for getting moving averages],Brian,1 April 2024
 class MovingAverageCalculator:
     
+    mutex = QMutex()
     cal_timeout = pyqtSignal()
 
     def __init__(self, nSamples):
@@ -223,8 +224,16 @@ class MovingAverageCalculator:
         self.window = []
         self.locked = 0
         self.lock_var_range = 0.05
+        # self.lock_var_range = 0.001
         self.locked_value = 0.0
         self.average = 0.0
+
+    def reset_calculation(self):
+        print('reset ma')
+        self.mutex.lock()
+        self.window = []
+        self.locked = 0
+        self.mutex.unlock()
 
     def calculate_moving_average(self, x):
         self.window.append(x)
@@ -242,21 +251,29 @@ class MovingAverageCalculator:
         the variance of the data in the window is smaller than
         lock_var_range
         '''
+        self.mutex.lock()
         self.window.append(x)
+        if len(self.window) == 1:
+            if x < 6:
+                self.lock_var_range = 0.01
+            else:
+                self.lock_var_range = 0.05
 
         if len(self.window) > self.nSamples:
             self.window.pop(0)
         
         self.average = sum(self.window) / len(self.window)
-
+        # print('average: ', self.average)
         # print('var: ', np.var(self.window))
-        if np.var(self.window) < self.lock_var_range:
+        if len(self.window) > 5 and np.var(self.window) < self.lock_var_range and self.average != 0.0:
+            self.locked_value = self.average
             self.locked = 1
+            # print('locked')
         else:
             self.locked = 0
 
+        self.mutex.unlock()
         if self.locked:
-            self.locked_value = self.average
             return self.locked_value
         
         return 0.0
@@ -522,7 +539,7 @@ class d435(QThread):
     # Add for reading queue, Jason, 7 May 2024
     def readFrameFromDisplayQueue(self):
         if self.q_color_frame.empty():
-            return True, {'frame': None, 'point': None, 'timestamp': None}
+            return True, {'frame': None, 'point': None, 'timestamp': None, 'depth_pixel': None}
 
         # drop frames
         q_size = self.q_color_frame.qsize()
@@ -642,12 +659,12 @@ class d435(QThread):
                 x = self.point[0]
                 y = self.point[1]
                 z = self.point[2]
-                # add [map to 0.37,0.345,3.03 if x,y,z is close to 0.54,0.49,3.15],Brian,27 May 2024
-                x,y,z = self.remap(x,y,z)
-                self.point[0]=x
-                self.point[1]=y
-                self.point[2]=z
-                if DEBUG_LEVEL==3:
+                # # add [map to 0.37,0.345,3.03 if x,y,z is close to 0.54,0.49,3.15],Brian,27 May 2024
+                # x,y,z = self.remap(x,y,z)
+                # self.point[0]=x
+                # self.point[1]=y
+                # self.point[2]=z
+                if DEBUG_LEVEL==4:
                     print(self.i,self.j,depthPixel,self.point,depth)
 
             # update self.iPrev,jPrev
@@ -656,7 +673,7 @@ class d435(QThread):
 
 
             # Revised to use queue, Jason, 7 May 2024
-            self.q_color_frame.put({'frame': colorImage, 'point':self.point, 'timestamp': time.time()})
+            self.q_color_frame.put({'frame': colorImage, 'point':self.point, 'timestamp': time.time(), 'depth_pixel': depthPixel})
         except Exception as e:
             print('exception::',repr(e))
             print("getFrame Failed")
@@ -771,7 +788,7 @@ class d435(QThread):
                     depth_colormap = rescale_frame(depth_colormap, color_image.shape[1], color_image.shape[0])
             
             color_image = cv2.addWeighted(depth_colormap, alpha, color_image, 1 - alpha, 0 )
-            self.q_color_frame.put({'frame': color_image, 'point':self.point, 'timestamp': time.time()})
+            self.q_color_frame.put({'frame': color_image, 'point':self.point, 'timestamp': time.time(), 'depth_pixel': depthPixel})
         except Exception as e:
             print(repr(e))
             print("getFrameWithAlignedFrames Failed")
@@ -1091,7 +1108,7 @@ class VideoThread(QThread):
         self.is_paused = False
 
     def run(self):
-        global MOUSE_CLICKED, START_SEND_PACKET
+        global MOUSE_CLICKED, START_SEND_PACKET,  ALIGNED_FRAMES,DEBUG_LEVEL
 
         while True:
             if self.is_paused:
@@ -1107,15 +1124,15 @@ class VideoThread(QThread):
 
                 point = encoded_frame['point']
                 self.cv_img = encoded_frame['frame']
+                depth_pixel = encoded_frame['depth_pixel']
 
-                if point is not None:
-                    # emit signal 
-                    self.update_3d_coordinate.emit(point)
+                if MOUSE_CLICKED and point is not None:
+                    self.update_3d_coordinate.emit(point)   # update 3d point
 
                 # send packet when depth locked, Jason, 16 April 2024
                 if START_SEND_PACKET and MOUSE_CLICKED and self.d435.ma.isDepthLocked():
                     MOUSE_CLICKED = False
-                    self.depth_value_locked.emit()
+                    self.depth_value_locked.emit()  # send 3d point
 
                 # try to perform 3d pose estimation here
                 if self.usePoseEstimation:
@@ -1161,7 +1178,8 @@ class VideoThread(QThread):
                         if point is not None:
                             # draw debug texts on top-left corner
                             pointStr = 'x:%.2f,y:%.2f,z:%.2f,%d,%d' % (point[0], point[1], point[2],self.mousex,self.mousey)
-                            self.drawDebugText(pointStr)
+                            if DEBUG_LEVEL>0:
+                                self.drawDebugText(pointStr)
 
                             # draw ROI of the mouse x,y
                             cv2.rectangle(self.cv_img,(self.mousex-50,self.mousey-50),(self.mousex+50,self.mousey+50),(0,0,255),2)
@@ -1250,7 +1268,7 @@ class VideoSavingThread(QThread):
             if frame_timestamp - self.prev_end_time >= 1.0:
                 # start next loop
                 fps_dif = self.FPS - self.out_fps_cnt
-                # print('Real FPS: ', self.test_fps_cnt)
+                print('Real FPS: ', self.test_fps_cnt)
 
                 if fps_dif > 0:     # have less frames then expected
                     for j in range(fps_dif):
@@ -1351,7 +1369,7 @@ class App(QWidget):
     CAM_DISPLAY_HEIGHT = 1080
 
     def __init__(self):
-        global DEBUG
+        global DEBUG, DEBUG_LEVEL
         super().__init__()
 
         # try to load configurations from yaml file (if the config.yaml exists)
@@ -1599,8 +1617,8 @@ class App(QWidget):
                                             1, Qt.AlignCenter)
         
         # remove setting button,Brian,30 May 2024
-        # self.button_slider_layout.addWidget(self.setting_button, 0, 3, 2, 1,
-        #                                     Qt.AlignCenter)
+        if DEBUG_LEVEL==3:
+            self.button_slider_layout.addWidget(self.setting_button, 0, 3, 2, 1,Qt.AlignCenter)
         
         self.button_slider_layout.setSpacing(20)
         self.main_page_button.addLayout(self.button_slider_layout, 0, 2, 1, 2,
@@ -1768,15 +1786,14 @@ class App(QWidget):
 
         
     def tryLoadConfig(self):
-        global DEBUG_LEVEL
+        
         '''
         check if config.yaml exists, if yes, load config params from it, else set default values manually
 
         '''
         configFileName = 'config.yaml'
         # configFilePath = config_path(configFileName)
-        if DEBUG_LEVEL==3:
-            print('Config Path: ', configFileName)
+        # print('Config Path: ', configFileName)
         if os.path.exists(configFileName):
             with open(configFileName, 'r') as file:
                 configParams= yaml.safe_load(file)
@@ -2067,7 +2084,7 @@ class App(QWidget):
             'lbl_targetPos':{'text':'target pos','row':9,'column':0,'row_span':1,'col_span':1},
             'tbx_targetPos':{'text':'0,0,0','row':9,'column':1,'row_span':1,'col_span':1},
             'lbl_xyzOffsets':{'text':'x,y,z Offsets','row':10,'column':0,'row_span':1,'col_span':1},
-            'tbx_xyzOffsets':{'text':'0,0,0','row':10,'column':1,'row_span':1,'col_span':1},
+            'tbx_xyzOffsets':{'text':'0,-0.1,0','row':10,'column':1,'row_span':1,'col_span':1},
             'lbl_fourMics':{'text':'4 Mics','row':10,'column':3,'row_span':1,'col_span':1},
             'tbx_fourMics':{'text':'1' if self.toUseYAML else '0','row':10,'column':4,'row_span':1,'col_span':1},
         }
@@ -2521,7 +2538,7 @@ class App(QWidget):
         return QPixmap.fromImage(p)
 
     def mousePressEvent(self, event):
-        global MOUSE_CLICKED, START_SEND_PACKET
+        global MOUSE_CLICKED, START_SEND_PACKET, DEBUG_LEVEL
         # Handle mouse press events
         mouse_position = event.pos()
         # try to get 3d coordinate from camera if it's d435
@@ -2542,7 +2559,8 @@ class App(QWidget):
                 f"Clicked on [{mouse_position.x()},{mouse_position.y()}]")
             row = int(mouse_position.y()) // (WINDOW_HEIGHT // 4)
             col = int(mouse_position.x()) // (WINDOW_WIDTH // 4)
-            print(row, col)
+            if DEBUG_LEVEL==3:
+                print(row, col)
             area = row * 4 + col + 1
             self.text_label.appendPlainText(f"Area: {area}")
 
@@ -2560,8 +2578,8 @@ class App(QWidget):
     def send_3d_point(self):
         global SENDING_PACKET, DEBUG_LEVEL
 
-        if not self.adminRole:
-            return
+        # if not self.adminRole:
+        #     return
 
         if not hasattr(self, 'mouse_press_timer'):
             self.mouse_press_timer = QTimer()
