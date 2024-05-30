@@ -381,7 +381,7 @@ class d435(QThread):
 
     COLOR_CAM_WIDTH  = 1280#1920
     COLOR_CAM_HEIGHT = 720#1080
-    COLOR_FPS        = 15#15   # have to reduced to 15 on Surface Pro 9
+    COLOR_FPS        = 30#15   # have to reduced to 15 on Surface Pro 9
 
     def __init__(self, display_width, display_height):
         global DEBUG_LEVEL
