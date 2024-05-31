@@ -34,6 +34,7 @@ import pyrealsense2 as rs
 
 from progress_bar import CustomProgressBarLogger
 from utils import ARUCO_DICT
+import struct # Add,Brian,31 May 2024
 
 # from pywinauto import Desktop
 current_datetime = datetime.now()
@@ -59,6 +60,7 @@ FILTERED_FRAMES = False
 SENDING_PACKET = False
 START_SEND_PACKET = True
 MOUSE_CLICKED = False
+TARGET_POS_UPDATED = False
 DEBUG_LEVEL   = 0 # Add,Brian,30 May 2024
 COMBINE_VIDEO = True # Add,Brian,31 May 2024
 
@@ -230,10 +232,13 @@ class MovingAverageCalculator:
         self.average = 0.0
 
     def reset_calculation(self):
+        global TARGET_POS_UPDATED
         print('reset ma')
         self.mutex.lock()
+        TARGET_POS_UPDATED = False
         self.window = []
         self.locked = 0
+        self.locked_value = 0.0
         self.mutex.unlock()
 
     def calculate_moving_average(self, x):
@@ -255,10 +260,12 @@ class MovingAverageCalculator:
         self.mutex.lock()
         self.window.append(x)
         if len(self.window) == 1:
-            if x < 6:
+            print('x: ', x)
+            if x < 5.0:
                 self.lock_var_range = 0.01
             else:
-                self.lock_var_range = 0.05
+                # self.lock_var_range = 0.05
+                self.lock_var_range = 0.1
 
         if len(self.window) > self.nSamples:
             self.window.pop(0)
@@ -280,7 +287,10 @@ class MovingAverageCalculator:
         return 0.0
 
     def isDepthLocked(self):
-        return self.locked
+        if self.locked_value == 0.0:
+            return False
+        else:
+            return self.locked
     
 
 class WebCam(QThread):
@@ -393,9 +403,11 @@ class d435(QThread):
     '''
     frame_ready = pyqtSignal(tuple)
 
-    DEPTH_CAM_WIDTH  = 1280#848#1280
-    DEPTH_CAM_HEIGHT = 720#480#720
-    DEPTH_FPS        = 30 # higher to avoid creating too much interferences to audio recording
+    # DEPTH_CAM_WIDTH  = 1280#848#1280
+    # DEPTH_CAM_HEIGHT = 720#480#720
+    DEPTH_CAM_WIDTH  = 848#1280
+    DEPTH_CAM_HEIGHT = 480#720
+    DEPTH_FPS        = 15
 
     COLOR_CAM_WIDTH  = 1280#1920
     COLOR_CAM_HEIGHT = 720#1080
@@ -587,9 +599,8 @@ class d435(QThread):
             aligned_frameset = self.align.process(frameset)
 
             # Get the aligned depth and color frames
-            depthFrame = aligned_frameset.get_depth_frame()
-            colorFrame = aligned_frameset.get_color_frame()
-
+            depthFrame = frameset.get_depth_frame()
+            colorFrame = frameset.get_color_frame()
             # print('depthIntrinsics: ', depthFrame.profile.as_video_stream_profile().intrinsics)
             # print('colorIntrinsics: ', colorFrame.profile.as_video_stream_profile().intrinsics)
             # print('depthToColor Extrinsics: ', depthFrame.profile.get_extrinsics_to(colorFrame.profile))
@@ -673,6 +684,33 @@ class d435(QThread):
             self.jPrev = self.j
 
 
+            # try to add aligned frame,Brian,23 May 2024
+            if ALIGNED_FRAMES:
+
+                if FILTERED_FRAMES:
+                    filtered_depth_frame = depthFrame
+                    dec_filter = rs.decimation_filter()
+                    depth_to_disparity = rs.disparity_transform(True)
+                    spat_filter = rs.spatial_filter()
+                    temp_filter = rs.temporal_filter()
+                    disparity_to_depth = rs.disparity_transform(False)
+                    hole_filling = rs.hole_filling_filter()
+
+                    # filtered_depth_frame = dec_filter.process(filtered_depth_frame)
+                    filtered_depth_frame = depth_to_disparity.process(filtered_depth_frame)
+                    filtered_depth_frame = spat_filter.process(filtered_depth_frame)
+                    filtered_depth_frame = temp_filter.process(filtered_depth_frame) #need more frames
+                    filtered_depth_frame = disparity_to_depth.process(filtered_depth_frame)
+                    filtered_depth_frame = hole_filling.process(filtered_depth_frame)
+                    depthFrame = filtered_depth_frame
+
+                depth_colormap = np.asanyarray(self.colorizer.colorize(depthFrame).get_data())
+                if depth_colormap.shape[0]<720:
+                    depth_colormap = rescale_frame(depth_colormap, colorImage.shape[1], colorImage.shape[0])
+
+                alpha = 0.5
+                colorImage = cv2.addWeighted(depth_colormap, alpha, colorImage, 1 - alpha, 0 )
+
             # Revised to use queue, Jason, 7 May 2024
             self.q_color_frame.put({'frame': colorImage, 'point':self.point, 'timestamp': time.time(), 'depth_pixel': depthPixel})
         except Exception as e:
@@ -750,7 +788,7 @@ class d435(QThread):
                 self.depthToColorExtrinsics = depth_frame.profile.get_extrinsics_to(color_frame.profile)
                 self.colorToDepthExtrinsics = color_frame.profile.get_extrinsics_to(depth_frame.profile)
 
-
+            # depthPixel should be equal to self.i, self.j
             depthPixel = rs.rs2_project_color_pixel_to_depth_pixel(
                 depth_frame.get_data(), self.depthScale, self.depthMin,
                 self.depthMax, self.depthIntrinsics, self.colorIntrinsics,
@@ -767,28 +805,26 @@ class d435(QThread):
                 # x is right+, y is down+, z is forward+
                 self.point = rs.rs2_deproject_pixel_to_point(self.depthIntrinsics,[int(depthPixel[0]), int(depthPixel[1])], depth)
 
-                x = self.point[0]/1.1
-                y = self.point[1]/1.1
-                z = self.point[2]/1.1
-                # x = self.point[0]
-                # y = self.point[1]
-                # z = self.point[2]
+                # need tuning
+                # if self.point[2] > 0.0:
+                #     self.point[0] = (self.point[0]/self.point[2] - 0.0816) / 0.7531 * self.point[2]
+                #     self.point[1] = (self.point[1]/self.point[2] - 0.0042) / 1.0736 * self.point[2]
+                #     self.point[2] /= 1.17
 
-                # print(self.i,self.j,depthPixel,self.point,depth)
-            
 
             # update self.iPrev,jPrev
             self.iPrev = self.i
             self.jPrev = self.j
 
             # add depth color to frame
-            depth_colormap = np.asanyarray(self.colorizer.colorize(depth_frame).get_data())
-            alpha = 0.5
-            if FILTERED_FRAMES:
-                if depth_colormap.shape[0]<720:
-                    depth_colormap = rescale_frame(depth_colormap, color_image.shape[1], color_image.shape[0])
-            
-            color_image = cv2.addWeighted(depth_colormap, alpha, color_image, 1 - alpha, 0 )
+            if ALIGNED_FRAMES:
+                depth_colormap = np.asanyarray(self.colorizer.colorize(depth_frame).get_data())
+                alpha = 0.5
+                if FILTERED_FRAMES:
+                    if depth_colormap.shape[0]<720:
+                        depth_colormap = rescale_frame(depth_colormap, color_image.shape[1], color_image.shape[0])
+                
+                color_image = cv2.addWeighted(depth_colormap, alpha, color_image, 1 - alpha, 0 )
             self.q_color_frame.put({'frame': color_image, 'point':self.point, 'timestamp': time.time(), 'depth_pixel': depthPixel})
         except Exception as e:
             print(repr(e))
@@ -811,17 +847,21 @@ class d435(QThread):
                 self.sleep(5)   # sleep when combining video and audio
                 continue
 
-            # revised[keep using getFrame to handle showing aligned frame or not],Brian,23 May 2024
-            if ALIGNED_FRAMES:
-                self.getFrameWithAlignedFrames()
-            else:
-                self.getFrame()
-            # self.getFrame()
-            # fps_cnt += 1
-            # if time.time() - cur_time > 1.0:
-                # print('Cam FPS: ', fps_cnt)
-                # fps_cnt = 0
-                # cur_time = time.time()
+            # revised[keep using getFrameWithAlignedFrames to handle showing aligned frame or not],Jason,29 May 2024
+            # if ALIGNED_FRAMES:
+            #     self.getFrameWithAlignedFrames()
+            # else:
+            #     self.getFrame()
+
+            self.getFrame()
+
+            # self.getFrameWithAlignedFrames()
+
+            fps_cnt += 1
+            if time.time() - cur_time > 1.0:
+                print('Cam FPS: ', fps_cnt)
+                fps_cnt = 0
+                cur_time = time.time()
 
 
 class CameraSelectionDialog(QDialog):
@@ -1131,7 +1171,7 @@ class VideoThread(QThread):
                     self.update_3d_coordinate.emit(point)   # update 3d point
 
                 # send packet when depth locked, Jason, 16 April 2024
-                if START_SEND_PACKET and MOUSE_CLICKED and self.d435.ma.isDepthLocked():
+                if START_SEND_PACKET and MOUSE_CLICKED and TARGET_POS_UPDATED and self.d435.ma.isDepthLocked():
                     MOUSE_CLICKED = False
                     self.depth_value_locked.emit()  # send 3d point
 
@@ -1142,7 +1182,7 @@ class VideoThread(QThread):
 
                 if self.cv_img is None:
                     ret = False
-                    self.usleep(1000000//self.d435.COLOR_FPS)
+                    self.usleep(1000000//self.d435.COLOR_FPS//2)
                 else:
                     # add scale self.cv_img if it's not 1080p
                     if self.cv_img.shape[0]<1080:
@@ -1185,7 +1225,17 @@ class VideoThread(QThread):
                             # draw ROI of the mouse x,y
                             cv2.rectangle(self.cv_img,(self.mousex-50,self.mousey-50),(self.mousex+50,self.mousey+50),(0,0,255),2)
                             cv2.drawMarker(self.cv_img,(self.mousex,self.mousey),(0, 0, 255),cv2.MARKER_CROSS,20,3)
-                    
+
+                            # draw ROI of the mouse x,y in depth frame, 848x480->1920x1080
+                            # if self.d435 and depth_pixel:
+                            #     depth_pixel_x = int(depth_pixel[0] * 2.264)
+                            #     depth_pixel_y = int(depth_pixel[1] * 2.25)
+                            #     cv2.rectangle(self.cv_img,(depth_pixel_x-50,depth_pixel_y-50),(depth_pixel_x+50,depth_pixel_y+50),(0,0,255),2)
+                            #     cv2.drawMarker(self.cv_img,(depth_pixel_x,depth_pixel_y),(0, 0, 255),cv2.MARKER_TRIANGLE_UP,20,3)
+
+                            #     cv2.drawMarker(self.cv_img,(1300,880),(0, 0, 255),cv2.MARKER_TRIANGLE_UP,20,3)
+
+
                     # veritical grid lines
                     cv2.line(self.cv_img, (xInterval, 0),  (xInterval, self.DISPLAY_HEIGHT),  gridColor, 2)
                     cv2.line(self.cv_img, (2*xInterval, 0),(2*xInterval, self.DISPLAY_HEIGHT),gridColor, 2)
@@ -1269,7 +1319,7 @@ class VideoSavingThread(QThread):
             if frame_timestamp - self.prev_end_time >= 1.0:
                 # start next loop
                 fps_dif = self.FPS - self.out_fps_cnt
-                print('Real FPS: ', self.test_fps_cnt)
+                # print('Real FPS: ', self.test_fps_cnt)
 
                 if fps_dif > 0:     # have less frames then expected
                     for j in range(fps_dif):
@@ -1794,7 +1844,7 @@ class App(QWidget):
         '''
         configFileName = 'config.yaml'
         # configFilePath = config_path(configFileName)
-        # print('Config Path: ', configFileName)
+        print('Config Path: ', configFileName)
         if os.path.exists(configFileName):
             with open(configFileName, 'r') as file:
                 configParams= yaml.safe_load(file)
@@ -2310,7 +2360,7 @@ class App(QWidget):
         delay=delay_calculation_v1(this_location)
         if DEBUG_LEVEL>=3: 
             print(delay)
-        
+        dataLogger.add_data('%s,%s' %('delay',np.array2string(delay)))
         #converting the delay into binary format 
         delay_binary_output = delay_to_binary(delay)
         #print(delay_binary_output)
@@ -2350,6 +2400,26 @@ class App(QWidget):
 
         # revise[added message13],Brian, 28 Mar 2024
         message13 = int(self.en_BM_MC_ctrl) # en_BM_MC_ctrl
+
+        # Add[sync with system tool v0.11],Brian,31 May 2024
+
+        self.bm_alpha_sel=0;	
+        self.mc_K_set=0x00036000
+        self.bm_uplimit_H= [0x00040122,0x0019A280,0x006D1400,0x00180244]
+
+
+        # add new parameters, 25 April 2024
+
+        # message14-34
+        message14 = int(self.bm_alpha_sel)
+
+        # five 32-bit parameters here
+        message15_18 = struct.pack('>I', self.mc_K_set)
+        message19_22 = struct.pack('>I', self.bm_uplimit_H[0])
+        message23_26 = struct.pack('>I', self.bm_uplimit_H[1])
+        message27_30 = struct.pack('>I', self.bm_uplimit_H[2])
+        message31_34 = struct.pack('>I', self.bm_uplimit_H[3])
+
  
         
         _,refDelay,_ = delay_calculation(self.targetPos,self.offsets[0],self.offsets[1],self.offsets[2],toUseYAML=self.toUseYAML)   
@@ -2385,6 +2455,13 @@ class App(QWidget):
             print('packet not ok')
             
         sendBuf=bytes([message1,message2,message3,message4,message5,message6,message7,message8,message9,message10,message11,message12,message13])
+
+        sendBuf += bytes([message14])
+        sendBuf += bytes(message15_18)
+        sendBuf += bytes(message19_22)
+        sendBuf += bytes(message23_26)
+        sendBuf += bytes(message27_30)
+        sendBuf += bytes(message31_34)
             
         # append packet to sendBuf
         sendBuf += packet
@@ -2610,6 +2687,8 @@ class App(QWidget):
 
 
             if START_SEND_PACKET:
+                if self.video_thread.d435:
+                    self.video_thread.d435.ma.reset_calculation()
                 MOUSE_CLICKED = True
 
     # Added for 3d coordinates, Jason, 11 April 2024
