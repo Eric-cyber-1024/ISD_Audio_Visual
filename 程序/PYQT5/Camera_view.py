@@ -1916,7 +1916,9 @@ class App(QWidget):
 
         # update gain label as well
         valdB = (value//2)*0.5
-        self.gain_label.setText("Mic Array Channel Gain  :\t%d(%.1f dB)" %(value,valdB))
+        valStr= '%d(%.1f dB)' %(value,valdB)
+        valStr= valStr.ljust(15)
+        self.gain_label.setText("Mic Array Channel Gain  : %s" %(valStr))
         
 
 
@@ -1924,7 +1926,7 @@ class App(QWidget):
         # revised[using Clickable Label instead],Brian, 05 April 2024
         # Setting up Setting page for LPF and Gain and Voulme
         # self.gain_label = QLabel("Mic Array Channel Gain  :")
-        self.gain_label = ClickableLabel("Mic Array Channel Gain  :\t0(0 dB)")
+        self.gain_label = ClickableLabel("Mic Array Channel Gain  : 0(0 dB)               ")
         # button_font = QFont("Arial",40)
         # button_font.setPixelSize(40)
         self.gain_label.setFont(BUTTON_FONT)
