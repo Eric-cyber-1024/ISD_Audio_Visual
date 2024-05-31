@@ -60,6 +60,7 @@ SENDING_PACKET = False
 START_SEND_PACKET = True
 MOUSE_CLICKED = False
 DEBUG_LEVEL   = 0 # Add,Brian,30 May 2024
+COMBINE_VIDEO = True # Add,Brian,31 May 2024
 
 sVersion='0.1.10'
 
@@ -1369,13 +1370,14 @@ class App(QWidget):
     CAM_DISPLAY_HEIGHT = 1080
 
     def __init__(self):
-        global DEBUG, DEBUG_LEVEL
+        global DEBUG, DEBUG_LEVEL, COMBINE_VIDEO
         super().__init__()
 
         # try to load configurations from yaml file (if the config.yaml exists)
         self.configParams = self.tryLoadConfig()
         DEBUG = self.configParams['debug']
         DEBUG_LEVEL = self.configParams['debugLevel']
+        COMBINE_VIDEO = self.configParams['combineVideo']
         if DEBUG_LEVEL == 3:
             print(self.configParams)
         
@@ -1806,6 +1808,7 @@ class App(QWidget):
                 'adminRole': False,
                 'showROI': True,
                 'usePoseEstimation': False,
+                'combineVideo': True,
                 'debugLevel':0
             }
             return self.configParams
@@ -2620,7 +2623,7 @@ class App(QWidget):
         self.record_button.setEnabled(True)
 
     def record_button_clicked(self):
-        global START_RECORDING, VIDEO_NAME, AUDIO_NAME, OUTPUT_NAME
+        global START_RECORDING, VIDEO_NAME, AUDIO_NAME, OUTPUT_NAME, COMBINE_VIDEO
         self.RECORDING = not self.RECORDING
         if self.RECORDING:
             START_RECORDING = True
@@ -2651,19 +2654,24 @@ class App(QWidget):
 
             self.audio_thread.requestInterruption()
 
-            # revised[combine video, audio],Jason,17 May 2024
-            self.combine_thread = VideoAudioThread(VIDEO_NAME,AUDIO_NAME,OUTPUT_NAME, self.logger)
-            self.combine_thread.start_writing.connect(self.show_progress_dialog)
-            self.combine_thread.start_writing.connect(self.video_thread.pause_thread)
-            if self.video_thread.d435:
-                self.combine_thread.start_writing.connect(self.video_thread.d435.pause_thread)
-            elif self.video_thread.cam:
-                self.combine_thread.start_writing.connect(self.video_thread.cam.pause_thread)
-            self.combine_thread.finished.connect(self.combine_thread_finished)
-            self.logger.signal_emitter.percentage_changed_signal.connect(self.update_progress_dialog_percentage)
-            self.logger.signal_emitter.text_changed_signal.connect(self.update_progress_dialog_text)
-            # disable combine, Jason, 20 May 2024
-            self.combine_thread.start()
+            # add[enable/disable video combine by COMBINE_VIDEO],Brian,31 May 2024
+            if COMBINE_VIDEO:
+                # revised[combine video, audio],Jason,17 May 2024
+                self.combine_thread = VideoAudioThread(VIDEO_NAME,AUDIO_NAME,OUTPUT_NAME, self.logger)
+                self.combine_thread.start_writing.connect(self.show_progress_dialog)
+                self.combine_thread.start_writing.connect(self.video_thread.pause_thread)
+                if self.video_thread.d435:
+                    self.combine_thread.start_writing.connect(self.video_thread.d435.pause_thread)
+                elif self.video_thread.cam:
+                    self.combine_thread.start_writing.connect(self.video_thread.cam.pause_thread)
+                self.combine_thread.finished.connect(self.combine_thread_finished)
+                self.logger.signal_emitter.percentage_changed_signal.connect(self.update_progress_dialog_percentage)
+                self.logger.signal_emitter.text_changed_signal.connect(self.update_progress_dialog_text)
+                # disable combine, Jason, 20 May 2024
+                self.combine_thread.start()
+            else:
+                # simply pop up a message window to indicate that the recording process ended 
+                self.show_record_finished_dialog()
 
     def mic_on_off_button_clicked(self):
         self.MIC_ON = not self.MIC_ON
@@ -2710,6 +2718,25 @@ class App(QWidget):
         self.video_combine_finished_dialog.setLayout(layout)
         self.video_combine_finished_dialog.exec_()
 
+    # add[messagebox to show that recording ended without combine],Brian,31 May 2024
+    def show_record_finished_dialog(self):
+        self.video_record_finished_dialog = QDialog(self)
+        self.video_record_finished_dialog.setWindowTitle('Recording')
+        self.video_record_finished_dialog.setWindowFlags(self.windowFlags() & ~Qt.WindowSystemMenuHint)
+        self.video_record_finished_dialog.setGeometry(100, 100, 400, 100)
+        
+        # Set the fixed width of the dialog
+        self.video_record_finished_dialog.setFixedWidth(400)
+        
+        # Set the minimum and maximum width of the dialog
+        self.video_record_finished_dialog.setMinimumWidth(400)
+        self.video_record_finished_dialog.setMaximumWidth(400)
+        
+        layout = QVBoxLayout()
+        message = QLabel('Finished Recording')
+        layout.addWidget(message)
+        self.video_record_finished_dialog.setLayout(layout)
+        self.video_record_finished_dialog.exec_()
 
     def show_progress_dialog(self):
         print('show progress dialog')

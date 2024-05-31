@@ -1,6 +1,7 @@
 debug: True
 fourMics: True
-adminRole: False
+adminRole: True
 showROI: True
 usePoseEstimation: True
-debugLevel: 0
+combineVideo: False
+debugLevel: 4
