@@ -64,7 +64,7 @@ TARGET_POS_UPDATED = False
 DEBUG_LEVEL   = 0 # Add,Brian,30 May 2024
 COMBINE_VIDEO = True # Add,Brian,31 May 2024
 
-sVersion='0.1.10'
+sVersion='0.1.10c'
 
 
 # Add,Brian,31 May 2024
@@ -420,7 +420,7 @@ class d435(QThread):
     # DEPTH_CAM_HEIGHT = 720#480#720
     DEPTH_CAM_WIDTH  = 848#1280
     DEPTH_CAM_HEIGHT = 480#720
-    DEPTH_FPS        = 15
+    DEPTH_FPS        = 30
 
     COLOR_CAM_WIDTH  = 1280#1920
     COLOR_CAM_HEIGHT = 720#1080
@@ -594,12 +594,14 @@ class d435(QThread):
     def remap(self,x,y,z,err_max=0.3):
         '''
         map to 0.37,0.345,3.03 if x,y,z is close to 0.54,0.49,3.15
+
+        -0.69 -0.48  3.16
         '''
         # get distance of input x,y,z to ref
-        d = np.sqrt((x-0.54)**2 + (y-0.49)**2 + (z-3.15)**2)
+        d = np.sqrt((x-0.69)**2 + (y-0.48)**2 + (z-3.16)**2)
 
         if d< err_max:
-            return 0.37,0.345,3.03
+            return 0.47,0.345,3.10
         else:
             return x,y,z
     
@@ -687,11 +689,11 @@ class d435(QThread):
                 x = self.point[0]
                 y = self.point[1]
                 z = self.point[2]
-                # # add [map to 0.37,0.345,3.03 if x,y,z is close to 0.54,0.49,3.15],Brian,27 May 2024
-                # x,y,z = self.remap(x,y,z)
-                # self.point[0]=x
-                # self.point[1]=y
-                # self.point[2]=z
+                # add [map to 0.37,0.345,3.03 if x,y,z is close to 0.54,0.49,3.15],Brian,27 May 2024
+                x,y,z = self.remap(x,y,z)
+                self.point[0]=x
+                self.point[1]=y
+                self.point[2]=z
                 if DEBUG_LEVEL==4:
                     print(self.i,self.j,depthPixel,self.point,depth)
 
@@ -2015,7 +2017,9 @@ class App(QWidget):
         theWidget = [textbox for textbox in self.test_page_widget.findChildren(QLineEdit) if textbox.objectName()=='tbx_targetPos']
         if len(theWidget)>0:
             # remember that x, y need to *-1 !!
-            theWidget[0].setText('%.2f,%.2f,%.2f' %(-point[0],-point[1],point[2]))    
+            if self.fpgaMode==FPGA_MODE.BM_ON:
+                theWidget[0].setText('%.2f,%.2f,%.2f' %(-point[0],-point[1],point[2]))  
+    
         
 
     # add[set test page mic gain textbox value],Brian,31 May 2024
