@@ -1618,9 +1618,8 @@ class App(QWidget):
         self.button_slider_layout.addWidget(self.sound_on_off_button, 1, 1, 1,
                                             1, Qt.AlignCenter)
         
-        # remove setting button,Brian,30 May 2024
-        if DEBUG_LEVEL>=3:
-            self.button_slider_layout.addWidget(self.setting_button, 0, 3, 2, 1,Qt.AlignCenter)
+        # revise[add back setting button],Brian,31 May 2024
+        self.button_slider_layout.addWidget(self.setting_button, 0, 3, 2, 1,Qt.AlignCenter)
         
         self.button_slider_layout.setSpacing(20)
         self.main_page_button.addLayout(self.button_slider_layout, 0, 2, 1, 2,
@@ -1890,7 +1889,13 @@ class App(QWidget):
         '''
         self.stacked_widget.setCurrentIndex(2)
 
-    
+    # add[function to set mic gain texbox value],Brian,31 May 2024
+    def setTestPage_MicGain(self,value):
+        # get handle of tbx_targetPos
+        theWidget = [textbox for textbox in self.test_page_widget.findChildren(QLineEdit) if textbox.objectName()=='tbx_micGain']
+        if len(theWidget)>0:
+            theWidget[0].setText(str(value))    
+
     def setTargetPos(self,point):
         
         # get handle of tbx_targetPos
@@ -1900,22 +1905,39 @@ class App(QWidget):
             theWidget[0].setText('%.2f,%.2f,%.2f' %(-point[0],-point[1],point[2]))    
         
 
+    # add[set test page mic gain textbox value],Brian,31 May 2024
+    def setMicGainValue(self,value):
+        '''
+        revise test page textbox value on admin page according to the input "value"
+        '''
+        #print(value)
+
+        self.setTestPage_MicGain(value)
+
+        # update gain label as well
+        valdB = (value//2)*0.5
+        self.gain_label.setText("Mic Array Channel Gain  :\t%d(%.1f dB)" %(value,valdB))
+        
+
+
     def setupSettingsPage(self):
         # revised[using Clickable Label instead],Brian, 05 April 2024
         # Setting up Setting page for LPF and Gain and Voulme
         # self.gain_label = QLabel("Mic Array Channel Gain  :")
-        self.gain_label = ClickableLabel("Mic Array Channel Gain  :")
+        self.gain_label = ClickableLabel("Mic Array Channel Gain  :\t0(0 dB)")
         # button_font = QFont("Arial",40)
         # button_font.setPixelSize(40)
         self.gain_label.setFont(BUTTON_FONT)
-        self.gain_label.clicked.connect(self.showPasswordDialog)
+
+        # remove[disable password],Brian,31 May 2024
+        # self.gain_label.clicked.connect(self.showPasswordDialog)
 
         self.volume_label = QLabel("Mic Array Digital Volume :")
         self.volume_label.setFont(BUTTON_FONT)
-        self.gain_fader = Create_Slider(-12, 12, 0, 1, SLIDER_STYLE_2,
-                                        function=update_label)
-        self.volume_fader = Create_Slider(0, 24, 0, 1, SLIDER_STYLE_2,
-                                          function=update_label)
+
+        # revised[gain fader settings],Brian,31 May 2024
+        self.gain_fader = Create_Slider(0,160, 0, 1, SLIDER_STYLE_2,function=self.setMicGainValue)
+        self.volume_fader = Create_Slider(0, 24, 0, 1, SLIDER_STYLE_2,function=update_label)
         self.filter_select_label = QLabel("Mic Array Filter Select     :")
         self.filter_select_label.setFont(BUTTON_FONT)
 
@@ -1935,6 +1957,19 @@ class App(QWidget):
             "Back", lambda: switchPage(self, APP_PAGE.MAIN.value),
             BUTTON_STYLE_TEXT)
         self.ApplyButton = Create_Button("Apply", lambda: exit(), BUTTON_STYLE_TEXT)
+
+        # Add[disable some of the widgets at this moment],Brian,31 May 2024
+        
+        # the digital vol. slider bar
+        self.volume_label.setEnabled(False)
+        self.volume_fader.setEnabled(False)
+
+        # the filter settings
+        self.filter_select_label.setEnabled(False)
+        self.checkbox_12kHz.setEnabled(False)
+        self.checkbox_18kHz.setEnabled(False)
+        self.checkbox_6kHz.setEnabled(False)
+        self.checkbox_full.setEnabled(False)
 
         self.setting_page = QGridLayout()
         self.setting_page.addWidget(self.gain_label, 1, 0, 1, 1)
