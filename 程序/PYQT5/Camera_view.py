@@ -2590,7 +2590,11 @@ class App(QWidget):
                 currentX = mouse_position.x()
                 currentY = mouse_position.y()
 
-                self.video_thread.setMouseXY(currentX,currentY)
+                # add[keep off region to change mousex and mousey],Brian,31 May 2024
+                if (currentX>=1250 and currentX<=1852) and (currentY>=830 and currentY<=1080):
+                    pass
+                else:
+                    self.video_thread.setMouseXY(currentX,currentY)
 
                 # if self.adminRole:
                 #     self.setTargetPos(self.targetPos)
