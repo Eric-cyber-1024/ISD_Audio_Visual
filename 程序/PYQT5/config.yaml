@@ -4,4 +4,4 @@ adminRole: True
 showROI: True
 usePoseEstimation: True
 combineVideo: False
-debugLevel: 4
+debugLevel: 0

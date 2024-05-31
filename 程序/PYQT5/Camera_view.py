@@ -404,7 +404,8 @@ class WebCam(QThread):
                     # print('Out QSize: ', self.q_frame_output.qsize())
                     prev_time_second = cur_time
                     self.fps_cnt = 0
-            except:
+            except Exception(e):
+                print(repr(e))
                 print('getFrame Failed')
 
 
@@ -413,6 +414,7 @@ class d435(QThread):
     class to get access to d435 data
     '''
     frame_ready = pyqtSignal(tuple)
+    getFrame_err= pyqtSignal(str)
 
     # DEPTH_CAM_WIDTH  = 1280#848#1280
     # DEPTH_CAM_HEIGHT = 720#480#720
@@ -495,6 +497,9 @@ class d435(QThread):
         # for visualization
         self.depthMin = 0.1  #meter
         self.depthMax = 15.0  #meter
+
+        # add,Brian,31 May 2024
+        self.getFrameErrCount=0
 
         # 2D image coordinate
         self.i=0  # from mouse x
@@ -600,7 +605,7 @@ class d435(QThread):
     
     # Revised, Jason, 14 May 2024
     def getFrame(self):
-        global START_RECORDING, ALIGNED_FRAMES, DEBUG_LEVEL
+        global START_RECORDING, ALIGNED_FRAMES, DEBUG_LEVEL, dataLogger
 
         # Get a frameset from the pipeline
         try:
@@ -724,9 +729,18 @@ class d435(QThread):
 
             # Revised to use queue, Jason, 7 May 2024
             self.q_color_frame.put({'frame': colorImage, 'point':self.point, 'timestamp': time.time(), 'depth_pixel': depthPixel})
+
         except Exception as e:
             print('exception::',repr(e))
             print("getFrame Failed")
+            if self.getFrameErrCount<=30:
+                dataLogger.add_data('getFrame exception:: %s' %(repr(e)))
+            self.getFrameErrCount+=1
+            if self.getFrameErrCount>30:
+                self.getFrame_err.emit(repr(e))
+                # reset self.getFrameErrCount
+                self.getFrameErrCount=0
+                
 
     # Revised, Jason - 17 May 2024 - Aligned Frames
     def getFrameWithAlignedFrames(self):
@@ -849,7 +863,7 @@ class d435(QThread):
 
     # Get frames continuously in thread, Jason, 14 May 2024
     def run(self):
-        global ALIGNED_FRAMES
+        global ALIGNED_FRAMES, DEBUG_LEVEL
 
         fps_cnt = 0
         cur_time = time.time()
@@ -870,7 +884,8 @@ class d435(QThread):
 
             fps_cnt += 1
             if time.time() - cur_time > 1.0:
-                print('Cam FPS: ', fps_cnt)
+                if DEBUG_LEVEL>=3:
+                    print('Cam FPS: ', fps_cnt)
                 fps_cnt = 0
                 cur_time = time.time()
 
@@ -944,6 +959,7 @@ class VideoThread(QThread):
     depth_value_locked = pyqtSignal()
     update_3d_coordinate = pyqtSignal(list)
     change_pixmap_signal = pyqtSignal(np.ndarray)
+    handleSysError_signal= pyqtSignal(str)
 
     def __init__(self, camera_index, camera_name, display_width, display_height, usePoseEstimation=False):
         super().__init__()
@@ -964,9 +980,16 @@ class VideoThread(QThread):
         if self.camera_name.startswith('Intel(R) RealSense(TM) Depth Camera 4') and self.camera_name.endswith('RGB'):
             self.d435 = d435(self.DISPLAY_WIDTH, self.DISPLAY_HEIGHT)
             self.k, self.d = self.d435.getOpencvIntrinsics()
+            # add connect signal 
+            self.d435.getFrame_err.connect(self.handleSysError)
         else:
             self.cam = WebCam(self.camera_index, self.DISPLAY_WIDTH, self.DISPLAY_HEIGHT)
 
+    # add,Brian,31 May 2024
+    def handleSysError(self,sMsg):
+        self.handleSysError_signal.emit(sMsg)
+
+        
     def setMouseXY(self,mousex,mousey):
         self.mousex = mousex
         self.mousey = mousey
@@ -1834,6 +1857,8 @@ class App(QWidget):
                 self.video_thread.change_pixmap_signal.connect(self.update_image)
                 # connnect signal to update 3d coordinate
                 self.video_thread.update_3d_coordinate.connect(self.update_3d_coordinate)
+                # add,Brian,31 May 2024
+                self.video_thread.handleSysError_signal.connect(self.handleSysError)
                 # start video thread
                 if self.video_thread.d435:
                     self.video_thread.d435.start()
@@ -1850,7 +1875,16 @@ class App(QWidget):
         else:
             # print("Exit now...")
             raise Exception('exit from init')
-
+    
+    # add,Brian,31 May 2024
+    def handleSysError(self,sMsg):
+        dataLogger.add_data('sys error:: %s' %(sMsg))
+        message_box = QMessageBox()
+        message_box.setWindowTitle("Error")
+        message_box.setText("Something went wrong. The Application will quit soon")
+        message_box.setIcon(QMessageBox.Critical)
+        message_box.exec_()
+        app.quit()
         
     def tryLoadConfig(self):
         
@@ -2224,10 +2258,10 @@ class App(QWidget):
             'tbx_bm_uplimit_h3':{'text':'0x00180244','row':4,'column':5,'row_span':1,'col_span':1},
             'lbl_bm_alpha_sel':{'text':'bm_alpha_sel','row':5,'column':4,'row_span':1,'col_span':1},
             'tbx_bm_alpha_sel':{'text':'0','row':5,'column':5,'row_span':1,'col_span':1},
-            'lbl_bm_on_interval':{'text':'bm_on_interval','row':5,'column':4,'row_span':1,'col_span':1},
-            'tbx_bm_on_interval':{'text':'5','row':5,'column':5,'row_span':1,'col_span':1},
-            'lbl_mc_K_set':{'text':'mc_K_set','row':6,'column':4,'row_span':1,'col_span':1},
-            'tbx_mc_K_set':{'text':'0x00036000','row':6,'column':5,'row_span':1,'col_span':1},
+            'lbl_bm_on_interval':{'text':'bm_on_interval','row':6,'column':4,'row_span':1,'col_span':1},
+            'tbx_bm_on_interval':{'text':'5','row':6,'column':5,'row_span':1,'col_span':1},
+            'lbl_mc_K_set':{'text':'mc_K_set','row':7,'column':4,'row_span':1,'col_span':1},
+            'tbx_mc_K_set':{'text':'0x00036000','row':7,'column':5,'row_span':1,'col_span':1},
             'lbl_fourMics':{'text':'4 Mics','row':10,'column':3,'row_span':1,'col_span':1},
             'tbx_fourMics':{'text':'1' if self.toUseYAML else '0','row':10,'column':4,'row_span':1,'col_span':1},
         }
@@ -2624,12 +2658,15 @@ class App(QWidget):
 
         
 
+        try:
         
-        packet = prepareMicDelaysPacket(payload)
-        if validateMicDelaysPacket(packet):
-            print('packet ok')
-        else:
-            print('packet not ok')
+            packet = prepareMicDelaysPacket(payload)
+            if validateMicDelaysPacket(packet):
+                print('packet ok')
+            else:
+                print('packet not ok')
+        except Exception(e):
+            print('exception caught:: ',repr(e))
             
         sendBuf=bytes([message1,message2,message3,message4,message5,message6,message7,message8,message9,message10,message11,message12,message13])
             
@@ -2701,11 +2738,16 @@ class App(QWidget):
     def update_3d_coordinate(self,point):
         '''
         update 3d coodrinate
+        point can be 0,0,0
+        When point is not zero, set TARGET_POS_UPDATED to True to send packet
         '''
-        global TARGET_POS_UPDATED
+        global TARGET_POS_UPDATED, DEBUG_LEVEL
 
         self.targetPos = point
-        TARGET_POS_UPDATED = True
+        if point[0] != 0.0 and point[1] != 0.0 and point[2] != 0.0:
+            # if DEBUG_LEVEL >= 3:
+            #     print('target pos updated ', point)
+            TARGET_POS_UPDATED = True
         
 
     # revised,Brian, 1 April 2024
@@ -2721,7 +2763,7 @@ class App(QWidget):
         return QPixmap.fromImage(p)
 
     def mousePressEvent(self, event):
-        global MOUSE_CLICKED, START_SEND_PACKET, DEBUG_LEVEL
+        global MOUSE_CLICKED, START_SEND_PACKET, SENDING_PACKET_MODE5_MODE6, DEBUG_LEVEL
         # Handle mouse press events
         mouse_position = event.pos()
         # try to get 3d coordinate from camera if it's d435
@@ -2755,18 +2797,25 @@ class App(QWidget):
             if START_SEND_PACKET:
                 if self.video_thread.d435:
                     self.video_thread.d435.ma.reset_calculation()
+                SENDING_PACKET_MODE5_MODE6 = False
                 MOUSE_CLICKED = True
+                
 
     # Added for 3d coordinates, Jason, 11 April 2024
     def on_send_packed_finished(self):
-        global SENDING_PACKET, DEBUG_LEVEL
+        global SENDING_PACKET, SENDING_PACKET_MODE5_MODE6, DEBUG_LEVEL
         if DEBUG_LEVEL>=3:
             print('on_send_packed_finished')
+        if SENDING_PACKET_MODE5_MODE6 and self.fpgaMode != FPGA_MODE.MC_ON:
+            self.send_packet_mode56_timer = QTimer()
+            self.send_packet_mode56_timer.setSingleShot(True)
+            self.send_packet_mode56_timer.timeout.connect(self.send_3d_point)
+            self.send_packet_mode56_timer.start(5000)
         SENDING_PACKET = False
 
     # Added for 3d coordinates, Jason, 11 April 2024
     def send_3d_point(self):
-        global SENDING_PACKET, DEBUG_LEVEL, TARGET_POS_UPDATED
+        global SENDING_PACKET, SENDING_PACKET_MODE5_MODE6, DEBUG_LEVEL, TARGET_POS_UPDATED
 
         # if not self.adminRole:
         #     return
@@ -2774,22 +2823,33 @@ class App(QWidget):
         if not hasattr(self, 'mouse_press_timer'):
             self.mouse_press_timer = QTimer()
             self.mouse_press_timer.setSingleShot(True)
+            self.mouse_press_timer.timeout.connect(self.send_3d_point)
 
-        if not SENDING_PACKET:
+        if not SENDING_PACKET and TARGET_POS_UPDATED:
             SENDING_PACKET = True
-            self.thread_send_packet = QThread()
+            
             # add[start with BM_ON mode always]
-            self.fpgaMode=FPGA_MODE.BM_ON
+            if not SENDING_PACKET_MODE5_MODE6:
+                self.fpgaMode=FPGA_MODE.BM_ON
+                SENDING_PACKET_MODE5_MODE6 = True
+            else:
+                if self.fpgaMode == FPGA_MODE.BM_ON:
+                    self.fpgaMode = FPGA_MODE.BM_OFF
+                elif self.fpgaMode == FPGA_MODE.BM_OFF:
+                    self.fpgaMode = FPGA_MODE.MC_ON
+                    
+            self.thread_send_packet = QThread()
             self.thread_send_packet.run = self.sendPacket
             self.thread_send_packet.finished.connect(self.on_send_packed_finished)
             if DEBUG_LEVEL>=3:
                 print("self.targetPos: ", self.targetPos)
-                print('Start sending 3D point packet')
+                print('Start sending 3D point packet - mode ', self.fpgaMode)
             self.thread_send_packet.start()
             
         else:
             if DEBUG_LEVEL>=3:
                 print('Wait for sending the last packet...')
+            # if not SENDING_PACKET_MODE5_MODE6:
             self.mouse_press_timer.start(2000)
 
     def saving_thread_finished(self):
