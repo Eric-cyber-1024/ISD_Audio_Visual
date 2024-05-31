@@ -596,7 +596,7 @@ class d435(QThread):
             frameset = self.pipeline.wait_for_frames()
 
             # Align the depth frame to the color frame
-            aligned_frameset = self.align.process(frameset)
+            # aligned_frameset = self.align.process(frameset)
 
             # Get the aligned depth and color frames
             depthFrame = frameset.get_depth_frame()
@@ -655,7 +655,7 @@ class d435(QThread):
             depthPixel = rs.rs2_project_color_pixel_to_depth_pixel(
                 depthFrameData, self.depthScale, self.depthMin,
                 self.depthMax, self.depthIntrinsics, self.colorIntrinsics,
-                self.depthToColorExtrinsics, self.colorToDepthExtrinsics, [self.i, self.j])
+                self.colorToDepthExtrinsics, self.depthToColorExtrinsics, [self.i, self.j])
 
             # print('i j: ', self.i, self.j)
             # print('depth pixel: ', depthPixel)
@@ -719,7 +719,7 @@ class d435(QThread):
 
     # Revised, Jason - 17 May 2024 - Aligned Frames
     def getFrameWithAlignedFrames(self):
-        global FILTERED_FRAMES, START_RECORDING
+        global ALIGNED_FRAMES, FILTERED_FRAMES, START_RECORDING
 
         # self.i = mousex
         # self.j = mousey
@@ -792,7 +792,7 @@ class d435(QThread):
             depthPixel = rs.rs2_project_color_pixel_to_depth_pixel(
                 depth_frame.get_data(), self.depthScale, self.depthMin,
                 self.depthMax, self.depthIntrinsics, self.colorIntrinsics,
-                self.depthToColorExtrinsics, self.colorToDepthExtrinsics, [self.i, self.j])
+                self.colorToDepthExtrinsics, self.depthToColorExtrinsics, [self.i, self.j])
             # print('i j: ', self.i, self.j)
             # print('depth pixel: ', depthPixel)
             if depthPixel[0]>=0 and depthPixel[1]>=0:
@@ -1149,7 +1149,7 @@ class VideoThread(QThread):
         self.is_paused = False
 
     def run(self):
-        global MOUSE_CLICKED, START_SEND_PACKET,  ALIGNED_FRAMES,DEBUG_LEVEL
+        global MOUSE_CLICKED, TARGET_POS_UPDATED, START_SEND_PACKET,  ALIGNED_FRAMES,DEBUG_LEVEL
 
         while True:
             if self.is_paused:
@@ -1454,6 +1454,9 @@ class App(QWidget):
         self.selected_camera_index = -1
         self.selected_camera = ''
         self.d435 = None 
+        # add[have to initialize targetPos],Brian,31 May 2024
+        self.targetPos = [0.,0.,0.]
+
         self.adminRole=self.configParams['adminRole'] # Add[if adminRole is True, will can show more features],Brian,05 April 2024
         self.toUseYAML=self.configParams['fourMics']  # true load mic locs from yaml file (for 4 mics case)
 
@@ -1962,6 +1965,13 @@ class App(QWidget):
         '''
         #print(value)
 
+        # need to get value to be even numbers!
+        if value&1 ==1:
+            value+=1
+        
+        theWidget = [textbox for textbox in self.test_page_widget.findChildren(QLineEdit) if textbox.objectName()=='tbx_micGain']
+        if len(theWidget)>0:
+            theWidget[0].setText(str(value))
         self.setTestPage_MicGain(value)
 
         # update gain label as well
@@ -1976,7 +1986,7 @@ class App(QWidget):
         # revised[using Clickable Label instead],Brian, 05 April 2024
         # Setting up Setting page for LPF and Gain and Voulme
         # self.gain_label = QLabel("Mic Array Channel Gain  :")
-        self.gain_label = ClickableLabel("Mic Array Channel Gain  : 0(0 dB)               ")
+        self.gain_label = ClickableLabel("Mic Array Channel Gain  : 30(7.5 dB) ")
         # button_font = QFont("Arial",40)
         # button_font.setPixelSize(40)
         self.gain_label.setFont(BUTTON_FONT)
@@ -1988,7 +1998,7 @@ class App(QWidget):
         self.volume_label.setFont(BUTTON_FONT)
 
         # revised[gain fader settings],Brian,31 May 2024
-        self.gain_fader = Create_Slider(0,160, 0, 1, SLIDER_STYLE_2,function=self.setMicGainValue)
+        self.gain_fader = Create_Slider(0,160, 30, 2, SLIDER_STYLE_2,function=self.setMicGainValue)
         self.volume_fader = Create_Slider(0, 24, 0, 1, SLIDER_STYLE_2,function=update_label)
         self.filter_select_label = QLabel("Mic Array Filter Select     :")
         self.filter_select_label.setFont(BUTTON_FONT)
@@ -2098,7 +2108,8 @@ class App(QWidget):
         adminLayout.addWidget(self.btnToggleDebug,1,1,1,1)
         adminLayout.addWidget(self.btnToggleAlignedFrames,2,0,1,1)
         adminLayout.addWidget(self.btnToggleFilteredFrames,2,1,1,1)
-        adminLayout.addWidget(btnExitAdminMode,3,0,1,1)
+        # removed,Brian,31 May 2024
+        # adminLayout.addWidget(btnExitAdminMode,3,0,1,1)
 
         adminFrame = QFrame()
         adminFrame.setFrameStyle(QFrame.Panel | QFrame.Plain)
@@ -2175,6 +2186,20 @@ class App(QWidget):
             'tbx_targetPos':{'text':'0,0,0','row':9,'column':1,'row_span':1,'col_span':1},
             'lbl_xyzOffsets':{'text':'x,y,z Offsets','row':10,'column':0,'row_span':1,'col_span':1},
             'tbx_xyzOffsets':{'text':'0,-0.1,0','row':10,'column':1,'row_span':1,'col_span':1},
+            # add[6 sets of widgets to add to sync with system tool v0.11],Brian,31 May 2024
+            # bm uplimits H0-H3, bm_alpha_sel and mc_K_set
+            'lbl_bm_uplimit_h0':{'text':'bm uplimits H0','row':1,'column':4,'row_span':1,'col_span':1},
+            'tbx_bm_uplimit_h0':{'text':'0x00040122','row':1,'column':5,'row_span':1,'col_span':1},
+            'lbl_bm_uplimit_h1':{'text':'bm uplimits H1','row':2,'column':4,'row_span':1,'col_span':1},
+            'tbx_bm_uplimit_h1':{'text':'0x0019A280','row':2,'column':5,'row_span':1,'col_span':1},            
+            'lbl_bm_uplimit_h2':{'text':'bm uplimits H2','row':3,'column':4,'row_span':1,'col_span':1},
+            'tbx_bm_uplimit_h2':{'text':'0x006D1400','row':3,'column':5,'row_span':1,'col_span':1},
+            'lbl_bm_uplimit_h3':{'text':'bm uplimits H3','row':4,'column':4,'row_span':1,'col_span':1},
+            'tbx_bm_uplimit_h3':{'text':'0x00180244','row':4,'column':5,'row_span':1,'col_span':1},
+            'lbl_bm_alpha_sel':{'text':'bm_alpha_sel ','row':5,'column':4,'row_span':1,'col_span':1},
+            'tbx_bm_alpha_sel':{'text':'0','row':5,'column':5,'row_span':1,'col_span':1},
+            'lbl_mc_K_set':{'text':'mc_K_set','row':6,'column':4,'row_span':1,'col_span':1},
+            'tbx_mc_K_set':{'text':'0x00036000','row':6,'column':5,'row_span':1,'col_span':1},
             'lbl_fourMics':{'text':'4 Mics','row':10,'column':3,'row_span':1,'col_span':1},
             'tbx_fourMics':{'text':'1' if self.toUseYAML else '0','row':10,'column':4,'row_span':1,'col_span':1},
         }
@@ -2264,7 +2289,8 @@ class App(QWidget):
         frame.setMidLineWidth(1)
         frame.setLayout(layout)
         frame.setFixedHeight(1000)
-        frame.setFixedWidth(1500)
+        # revise[wider],Brian,31 May 2024
+        frame.setFixedWidth(1800)
         # frame.setMinimumSize(400,300)
         # frame.setMaximumSize(1000,600)
 
@@ -2280,12 +2306,12 @@ class App(QWidget):
     
 
     def __str__(self):
-        return f"params,{self.hostIP}, {self.hostPort}, {self.mode},{self.micIndx},{self.micGain},{self.setTest},{self.den_out_sel},{self.mc_beta_sel},{self.mc_K_sel},{self.en_BM_MC_ctrl},[{self.targetPos[0]},{self.targetPos[1]},{self.targetPos[2]}],[{self.offsets[0]},{self.offsets[1]},{self.offsets[2]}],{self.toUseYAML}"
-
+        hex_string = ','.join('0x'+hex(value)[2:].zfill(8) for value in self.bm_uplimit_H)
+        return f"params,{self.hostIP}, {self.hostPort}, {self.mode},{self.micIndx},{self.micGain},{self.micDisable},{self.setTest},{self.den_out_sel},{self.mc_beta_sel},{self.mc_K_sel},[{self.targetPos[0]},{self.targetPos[1]},{self.targetPos[2]}],[{self.offsets[0]},{self.offsets[1]},{self.offsets[2]}],{self.bm_alpha_sel},{'0x'+hex(self.mc_K_set).zfill(8)},{hex_string},{self.toUseYAML}"
 
     def printParams(self):
         global dataLogger
-        print(self.hostIP,self.hostPort,self.mode,self.micIndx,self.micGain,self.setTest,self.den_out_sel,self.mc_beta_sel,self.mc_K_sel,self.targetPos,self.offsets,self.toUseYAML)
+        # print(self.hostIP,self.hostPort,self.mode,self.micIndx,self.micGain,self.setTest,self.den_out_sel,self.mc_beta_sel,self.mc_K_sel,self.targetPos,self.offsets,self.toUseYAML)
         # add[save to log as well],Brian,27 Mar 2024
         dataLogger.add_data(self.__str__())
 
@@ -2316,6 +2342,13 @@ class App(QWidget):
         self.offsets       = np.array(params['tbx_xyzOffsets'].split(','), dtype=float)
         self.toUseYAML     = True if params['tbx_fourMics'] == '1' else False
 
+        self.bm_alpha_sel=int(params['tbx_bm_alpha_sel'])
+        self.mc_K_set=int(params['tbx_mc_K_set'],16)   # in hexidecimal format
+        self.bm_uplimit_H= [int(params['tbx_bm_uplimit_h0'],16),
+                            int(params['tbx_bm_uplimit_h1'],16),
+                            int(params['tbx_bm_uplimit_h2'],16),
+                            int(params['tbx_bm_uplimit_h3'],16)]
+
         # get values from combo boxes
         comboboxes = self.test_page_widget.findChildren(QComboBox)
         params = {cbx.objectName(): cbx.currentText() for cbx in comboboxes}
@@ -2323,6 +2356,7 @@ class App(QWidget):
         self.micIndx    = self.micNames.index(params['cbx_micNum'])
         self.mode       = int(params['cbx_mode'].split(':')[0])
         self.setTest    = int(params['cbx_setTest'].split(':')[0])
+
 
 
     def showInfo(self,sMsg):
@@ -2402,11 +2436,6 @@ class App(QWidget):
         message13 = int(self.en_BM_MC_ctrl) # en_BM_MC_ctrl
 
         # Add[sync with system tool v0.11],Brian,31 May 2024
-
-        self.bm_alpha_sel=0;	
-        self.mc_K_set=0x00036000
-        self.bm_uplimit_H= [0x00040122,0x0019A280,0x006D1400,0x00180244]
-
 
         # add new parameters, 25 April 2024
 
@@ -2638,8 +2667,10 @@ class App(QWidget):
         '''
         update 3d coodrinate
         '''
+        global TARGET_POS_UPDATED
 
         self.targetPos = point
+        TARGET_POS_UPDATED = True
         
 
     # revised,Brian, 1 April 2024
@@ -2699,7 +2730,7 @@ class App(QWidget):
 
     # Added for 3d coordinates, Jason, 11 April 2024
     def send_3d_point(self):
-        global SENDING_PACKET, DEBUG_LEVEL
+        global SENDING_PACKET, DEBUG_LEVEL, TARGET_POS_UPDATED
 
         # if not self.adminRole:
         #     return
@@ -2711,7 +2742,6 @@ class App(QWidget):
         if not SENDING_PACKET:
             SENDING_PACKET = True
             self.thread_send_packet = QThread()
-            # Disabled send packet
             self.thread_send_packet.run = self.sendPacket
             self.thread_send_packet.finished.connect(self.on_send_packed_finished)
             if DEBUG_LEVEL>=3:
