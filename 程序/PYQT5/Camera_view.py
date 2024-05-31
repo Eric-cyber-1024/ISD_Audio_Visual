@@ -450,7 +450,7 @@ class d435(QThread):
         self.depthProfile = rs.video_stream_profile(profile.get_stream(rs.stream.depth))
         self.depthIntrinsics = self.depthProfile.get_intrinsics()
 
-        if DEBUG_LEVEL==3:
+        if DEBUG_LEVEL>=3:
             print("colorIntrinsics: ", self.colorIntrinsics)
             print("depthIntrinsics: ", self.depthIntrinsics)
 
@@ -465,7 +465,7 @@ class d435(QThread):
         self.depthToColorExtrinsics = self.depthProfile.get_extrinsics_to(self.colorProfile)
         self.colorToDepthExtrinsics = self.colorProfile.get_extrinsics_to(self.depthProfile)
 
-        if DEBUG_LEVEL==3:
+        if DEBUG_LEVEL>=3:
             print('depthToColor Extrinsics: ', self.depthToColorExtrinsics)
             print('colorToDepth Extrinsics: ', self.colorToDepthExtrinsics)
 
@@ -618,7 +618,7 @@ class d435(QThread):
 
                 self.is_get_frame_initialized = True
                 self.is_get_align_frame_initialized = False
-                if DEBUG_LEVEL==3:
+                if DEBUG_LEVEL>=3:
                     print('depthIntrinsics: ', depthFrame.profile.as_video_stream_profile().intrinsics)
                     print('colorIntrinsics: ', colorFrame.profile.as_video_stream_profile().intrinsics)
                     print('depthToColor Extrinsics: ', depthFrame.profile.get_extrinsics_to(colorFrame.profile))
@@ -876,12 +876,12 @@ class VideoAudioThread(QThread):
     def run(self):
         global DEBUG_LEVEL
 
-        if DEBUG_LEVEL==3:
+        if DEBUG_LEVEL>=3:
             print("Combine Video")
         time.sleep(1)
         self.start_writing.emit()
 
-        if DEBUG_LEVEL==3:
+        if DEBUG_LEVEL>=3:
             print('v: ', self.video_path)
             print('a: ', self.audio_path)
             print('o: ', self.output_path)
@@ -1209,7 +1209,7 @@ class VideoSavingThread(QThread):
         self.video_width = video_width
         self.video_height = video_height
         self.is_initialized = False
-        if DEBUG_LEVEL==3:
+        if DEBUG_LEVEL>=3:
             print('Initiate Video')
         current_datetime = datetime.now()
         formatted_datetime = current_datetime.strftime(
@@ -1220,7 +1220,7 @@ class VideoSavingThread(QThread):
             formatted_datetime) + '.mp4'
         VIDEO_NAME = self.video_name
         OUTPUT_NAME = self.output_path
-        if DEBUG_LEVEL==3:
+        if DEBUG_LEVEL>=3:
             print('video name: ', self.video_name)
             print('combined video: ', self.output_path)
         if self.d435:
@@ -1302,7 +1302,7 @@ class VideoSavingThread(QThread):
 
         if not START_RECORDING:
             self.out.release()
-            if DEBUG_LEVEL==3:
+            if DEBUG_LEVEL>=3:
                 print('total time: ', self.video_end_time - self.video_start_time)
                 print('total frame count: ', self.total_f_cnt)
             self.out_fps_cnt = 0
@@ -1348,10 +1348,10 @@ class AudioThread(QThread):
             audio_name = CURRENT_PATH + AUDIO_PATH + VIDEO_DATE + "\\" + str(formatted_datetime) + '.wav'
             AUDIO_NAME = audio_name
 
-            if DEBUG_LEVEL==3:
+            if DEBUG_LEVEL>=3:
                 print('audio file::',audio_name)
             with sf.SoundFile(audio_name, mode='w', subtype=subtype,samplerate=self.sample_rate, channels=1) as file:
-                if DEBUG_LEVEL==3:
+                if DEBUG_LEVEL>=3:
                     print('starting soundfile',file)
                 with sd.InputStream(samplerate=self.sample_rate, dtype=dtype, channels=1, callback=callback):
                     while START_RECORDING:
@@ -1359,7 +1359,7 @@ class AudioThread(QThread):
                             file.write(self.q.get(timeout=0.3))
                         except:
                             break
-                    if DEBUG_LEVEL==3:
+                    if DEBUG_LEVEL>=3:
                         print('closing soundfile')
                     file.close()
 
@@ -1619,7 +1619,7 @@ class App(QWidget):
                                             1, Qt.AlignCenter)
         
         # remove setting button,Brian,30 May 2024
-        if DEBUG_LEVEL==3:
+        if DEBUG_LEVEL>=3:
             self.button_slider_layout.addWidget(self.setting_button, 0, 3, 2, 1,Qt.AlignCenter)
         
         self.button_slider_layout.setSpacing(20)
@@ -1741,7 +1741,7 @@ class App(QWidget):
                 self.audio_outCtrl = AudioController(self.output_devid,'output','default')
                 self.audio_outCtrl.listAllSections()
 
-                if DEBUG_LEVEL==3:
+                if DEBUG_LEVEL>=3:
                     print(self.audio_outCtrl.volume)
 
                 # turn to zero volume at start
@@ -2271,7 +2271,7 @@ class App(QWidget):
 
         # revised[add offsets],Brian,18 Mar 2024
         delay=delay_calculation_v1(this_location)
-        if DEBUG_LEVEL==3: 
+        if DEBUG_LEVEL>=3: 
             print(delay)
         
         #converting the delay into binary format 
@@ -2294,7 +2294,7 @@ class App(QWidget):
         message3 = int(messagehex[6:8],16)  # hex at  5 and 6 
         message4 = int(messagehex[8:],16)
 
-        if DEBUG_LEVEL==3:
+        if DEBUG_LEVEL>=3:
             print(message)
             print(messagehex)
             print("m1:{},m2:{},m3:{},m4:{}\n".format(message1,message2,message3,message4))
@@ -2333,7 +2333,7 @@ class App(QWidget):
         refDelay = refDelay.astype(np.uint8)
         payload = refDelay.tobytes()
 
-        if DEBUG_LEVEL==3:
+        if DEBUG_LEVEL>=3:
             print('refDelay',refDelay)
             print('payload',payload)
             print('sendBuf',sendBuf)
@@ -2355,12 +2355,12 @@ class App(QWidget):
 
 
         if send_and_receive_packet(self.hostIP,self.hostPort,sendBuf,timeout=3):
-            if DEBUG_LEVEL==3:
+            if DEBUG_LEVEL>=3:
                 print('data transmission ok')
             self.showInfo('tx ok')
             dataLogger.add_data('tx ok')
         else:
-            if DEBUG_LEVEL==3:
+            if DEBUG_LEVEL>=3:
                 print('data transmission failed')
             dataLogger.add_data('tx failed')
 
@@ -2403,7 +2403,7 @@ class App(QWidget):
         message3 = int(messagehex[6:8],16)  # hex at  5 and 6 
         message4 = int(messagehex[8:],16)
 
-        if DEBUG_LEVEL==3:
+        if DEBUG_LEVEL>=3:
             print(message)
             print(messagehex)
             print("m1:{},m2:{},m3:{},m4:{}\n".format(message1,message2,message3,message4))
@@ -2439,7 +2439,7 @@ class App(QWidget):
         refDelay = refDelay.astype(np.uint8)
         payload = refDelay.tobytes()
 
-        if DEBUG_LEVEL==3:
+        if DEBUG_LEVEL>=3:
             print('refDelay',refDelay)
             print('payload',payload)
             print('sendBuf',sendBuf)
@@ -2461,12 +2461,12 @@ class App(QWidget):
 
 
         if send_and_receive_packet(self.hostIP,self.hostPort,sendBuf,timeout=3):
-            if DEBUG_LEVEL==3:
+            if DEBUG_LEVEL>=3:
                 print('data transmission ok')
             self.showInfo('tx ok')
             dataLogger.add_data('tx ok')
         else:
-            if DEBUG_LEVEL==3:
+            if DEBUG_LEVEL>=3:
                 print('data transmission failed')
             dataLogger.add_data('tx failed')
 
@@ -2562,7 +2562,7 @@ class App(QWidget):
                 f"Clicked on [{mouse_position.x()},{mouse_position.y()}]")
             row = int(mouse_position.y()) // (WINDOW_HEIGHT // 4)
             col = int(mouse_position.x()) // (WINDOW_WIDTH // 4)
-            if DEBUG_LEVEL==3:
+            if DEBUG_LEVEL>=3:
                 print(row, col)
             area = row * 4 + col + 1
             self.text_label.appendPlainText(f"Area: {area}")
@@ -2594,13 +2594,13 @@ class App(QWidget):
             # Disabled send packet
             self.thread_send_packet.run = self.sendPacket
             self.thread_send_packet.finished.connect(self.on_send_packed_finished)
-            if DEBUG_LEVEL==3:
+            if DEBUG_LEVEL>=3:
                 print("self.targetPos: ", self.targetPos)
                 print('Start sending 3D point packet')
             self.thread_send_packet.start()
             
         else:
-            if DEBUG_LEVEL==3:
+            if DEBUG_LEVEL>=3:
                 print('Wait for sending the last packet...')
             self.mouse_press_timer.start(2000)
 
@@ -2609,7 +2609,7 @@ class App(QWidget):
 
     def combine_thread_finished(self):
         global DEBUG_LEVEL
-        if DEBUG_LEVEL==3:
+        if DEBUG_LEVEL>=3:
             print('finished combining video and audio as mp4 file')
         if self.video_thread.d435:
             self.video_thread.d435.resume_thread()
@@ -2731,7 +2731,7 @@ class App(QWidget):
         # Set the minimum and maximum width of the dialog
         self.video_record_finished_dialog.setMinimumWidth(400)
         self.video_record_finished_dialog.setMaximumWidth(400)
-        
+
         layout = QVBoxLayout()
         message = QLabel('Finished Recording')
         layout.addWidget(message)
