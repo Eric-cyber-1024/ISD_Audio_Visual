@@ -66,6 +66,17 @@ COMBINE_VIDEO = True # Add,Brian,31 May 2024
 
 sVersion='0.1.10'
 
+
+# Add,Brian,31 May 2024
+class FPGA_MODE(Enum):
+    NORMAL=0
+    CAL=1
+    CAL_VERIFY=2
+    SWITCH_MIC=3
+    BM_ON=4
+    BM_OFF=5
+    MC_ON=6
+
 def config_path(relative_path):
     try:
         base_path = sys._MEIPASS
@@ -1456,6 +1467,8 @@ class App(QWidget):
         self.d435 = None 
         # add[have to initialize targetPos],Brian,31 May 2024
         self.targetPos = [0.,0.,0.]
+        # add[initialize fpgaMode as well]
+        self.fpgaMode = FPGA_MODE.NORMAL
 
         self.adminRole=self.configParams['adminRole'] # Add[if adminRole is True, will can show more features],Brian,05 April 2024
         self.toUseYAML=self.configParams['fourMics']  # true load mic locs from yaml file (for 4 mics case)
@@ -1941,6 +1954,19 @@ class App(QWidget):
         go to stacked widget index 2
         '''
         self.stacked_widget.setCurrentIndex(2)
+        
+
+
+    # add[function to set mode],Brian,31 May 2024
+    def setTestPage_Mode(self,mode):
+        '''
+        mode should be of type enum FPGA_MODE
+
+        '''
+        # get handle of tbx_targetPos
+        theWidget = [comboBox for comboBox in self.test_page_widget.findChildren(QComboBox) if comboBox.objectName()=='cbx_mode']
+        if len(theWidget)>0:
+            theWidget[0].setCurrentIndex(int(mode.value))
 
     # add[function to set mic gain texbox value],Brian,31 May 2024
     def setTestPage_MicGain(self,value):
@@ -2196,8 +2222,10 @@ class App(QWidget):
             'tbx_bm_uplimit_h2':{'text':'0x006D1400','row':3,'column':5,'row_span':1,'col_span':1},
             'lbl_bm_uplimit_h3':{'text':'bm uplimits H3','row':4,'column':4,'row_span':1,'col_span':1},
             'tbx_bm_uplimit_h3':{'text':'0x00180244','row':4,'column':5,'row_span':1,'col_span':1},
-            'lbl_bm_alpha_sel':{'text':'bm_alpha_sel ','row':5,'column':4,'row_span':1,'col_span':1},
+            'lbl_bm_alpha_sel':{'text':'bm_alpha_sel','row':5,'column':4,'row_span':1,'col_span':1},
             'tbx_bm_alpha_sel':{'text':'0','row':5,'column':5,'row_span':1,'col_span':1},
+            'lbl_bm_on_interval':{'text':'bm_on_interval','row':5,'column':4,'row_span':1,'col_span':1},
+            'tbx_bm_on_interval':{'text':'5','row':5,'column':5,'row_span':1,'col_span':1},
             'lbl_mc_K_set':{'text':'mc_K_set','row':6,'column':4,'row_span':1,'col_span':1},
             'tbx_mc_K_set':{'text':'0x00036000','row':6,'column':5,'row_span':1,'col_span':1},
             'lbl_fourMics':{'text':'4 Mics','row':10,'column':3,'row_span':1,'col_span':1},
@@ -2348,6 +2376,7 @@ class App(QWidget):
                             int(params['tbx_bm_uplimit_h1'],16),
                             int(params['tbx_bm_uplimit_h2'],16),
                             int(params['tbx_bm_uplimit_h3'],16)]
+        self.bm_on_interval=int(params['tbx_bm_on_interval'])
 
         # get values from combo boxes
         comboboxes = self.test_page_widget.findChildren(QComboBox)
@@ -2373,6 +2402,8 @@ class App(QWidget):
     #     else:
     #         self.btnSendPacket.setText('Send Packet')
 
+
+
     def sendPacket(self):
         global dataLogger, DEBUG_LEVEL
 
@@ -2381,6 +2412,10 @@ class App(QWidget):
         sendBuf=b'SET0'
         
         self.setTargetPos(self.targetPos)
+
+        # add[change mode],Brian,31 May 2024
+        # BM_ON --> N secs --> BM_OFF --> M secs -> MC_ON
+        self.setTestPage_Mode(self.fpgaMode)
 
         self.fetchParamsFromUI()
         self.printParams()
@@ -2724,8 +2759,9 @@ class App(QWidget):
 
     # Added for 3d coordinates, Jason, 11 April 2024
     def on_send_packed_finished(self):
-        global SENDING_PACKET
-        print('on_send_packed_finished')
+        global SENDING_PACKET, DEBUG_LEVEL
+        if DEBUG_LEVEL>=3:
+            print('on_send_packed_finished')
         SENDING_PACKET = False
 
     # Added for 3d coordinates, Jason, 11 April 2024
@@ -2742,6 +2778,8 @@ class App(QWidget):
         if not SENDING_PACKET:
             SENDING_PACKET = True
             self.thread_send_packet = QThread()
+            # add[start with BM_ON mode always]
+            self.fpgaMode=FPGA_MODE.BM_ON
             self.thread_send_packet.run = self.sendPacket
             self.thread_send_packet.finished.connect(self.on_send_packed_finished)
             if DEBUG_LEVEL>=3:
