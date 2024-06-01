@@ -1497,6 +1497,8 @@ class App(QWidget):
 
         # add[initialize fpgaMode as well]
         self.fpgaMode = FPGA_MODE.NORMAL
+        # add,Brian,1 June 2024bm
+        self.bm_on_interval = 5000 # default to be 5000ms
 
         self.adminRole=self.configParams['adminRole'] # Add[if adminRole is True, will can show more features],Brian,05 April 2024
         self.toUseYAML=self.configParams['fourMics']  # true load mic locs from yaml file (for 4 mics case)
@@ -2266,7 +2268,7 @@ class App(QWidget):
             'lbl_bm_alpha_sel':{'text':'bm_alpha_sel','row':5,'column':4,'row_span':1,'col_span':1},
             'tbx_bm_alpha_sel':{'text':'0','row':5,'column':5,'row_span':1,'col_span':1},
             'lbl_bm_on_interval':{'text':'bm_on_interval','row':6,'column':4,'row_span':1,'col_span':1},
-            'tbx_bm_on_interval':{'text':'5','row':6,'column':5,'row_span':1,'col_span':1},
+            'tbx_bm_on_interval':{'text':'5000','row':6,'column':5,'row_span':1,'col_span':1},
             'lbl_mc_K_set':{'text':'mc_K_set','row':7,'column':4,'row_span':1,'col_span':1},
             'tbx_mc_K_set':{'text':'0x00036000','row':7,'column':5,'row_span':1,'col_span':1},
             'lbl_fourMics':{'text':'4 Mics','row':10,'column':3,'row_span':1,'col_span':1},
@@ -2597,7 +2599,6 @@ class App(QWidget):
         # if DEBUG_LEVEL>4:
         #     print('try to call setTestPage_Mode...')
         # self.setTestPage_Mode(self.fpgaMode)
-
 
         # save a copy of self.targetPos first
         self.targetPosCopy= self.targetPos
@@ -3134,6 +3135,7 @@ class App(QWidget):
                 
 
     # Added for 3d coordinates, Jason, 11 April 2024
+    @pyqtSlot()
     def on_send_packed_finished(self):
         global SENDING_PACKET, SENDING_PACKET_MODE5_MODE6, DEBUG_LEVEL
         if DEBUG_LEVEL>=3:
@@ -3142,7 +3144,10 @@ class App(QWidget):
             self.send_packet_mode56_timer = QTimer()
             self.send_packet_mode56_timer.setSingleShot(True)
             self.send_packet_mode56_timer.timeout.connect(self.send_3d_point)
-            self.send_packet_mode56_timer.start(5000)
+            if self.bm_on_interval>0:
+                self.send_packet_mode56_timer.start(self.bm_on_interval)
+            else:
+                self.send_packet_mode56_timer.start(5000)
         SENDING_PACKET = False
 
 
@@ -3155,6 +3160,7 @@ class App(QWidget):
         #     return
 
         if not hasattr(self, 'mouse_press_timer'):
+            # prepare a single shot timer 
             self.mouse_press_timer = QTimer()
             self.mouse_press_timer.setSingleShot(True)
             self.mouse_press_timer.timeout.connect(self.send_3d_point)
