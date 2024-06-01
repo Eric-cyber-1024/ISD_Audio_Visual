@@ -1,3 +1,5 @@
 *.wav
 *.avi
 *.txt
+!requirements.txt
+!python.txt
