@@ -36,6 +36,9 @@ from progress_bar import CustomProgressBarLogger
 from utils import ARUCO_DICT
 import struct # Add,Brian,31 May 2024
 
+#import noisereduce as nr
+#from scipy.io import wavfile
+
 # from pywinauto import Desktop
 current_datetime = datetime.now()
 # Format the date and time
@@ -58,11 +61,16 @@ DEBUG = False
 ALIGNED_FRAMES = False
 FILTERED_FRAMES = False
 SENDING_PACKET = False
+SENDING_PACKET_MODE5_MODE6 = False
 START_SEND_PACKET = True
 MOUSE_CLICKED = False
 TARGET_POS_UPDATED = False
 DEBUG_LEVEL   = 0 # Add,Brian,30 May 2024
 COMBINE_VIDEO = True # Add,Brian,31 May 2024
+
+# add,Brian,2 June 2024
+APP_NAME = "ISD Mic Array Control Panel"
+APP_DATA_DIR = os.path.join(os.path.expandvars('%APPDATA%'), APP_NAME)
 
 sVersion='0.1.10'
 
@@ -137,9 +145,7 @@ class ClickableLabel(QLabel):
     def handleTimeout(self):
         #print('timeout')
         self.counter=0
-
-
-
+    
 
 class WorkerTryPing(QObject):
     finished = pyqtSignal(tuple)
@@ -1396,7 +1402,7 @@ class VideoSavingThread(QThread):
 
 # Audio Thread
 class AudioThread(QThread):
-
+    finished = pyqtSignal()
     def __init__(self, input_device):
         super().__init__()
         self.sample_rate = 48000    # Hz
@@ -1448,6 +1454,25 @@ class AudioThread(QThread):
                     if DEBUG_LEVEL>=3:
                         print('closing soundfile')
                     file.close()
+                
+            # Add noisereduce, Jason, 31 May 2024
+            import noisereduce as nr
+            from scipy.io import wavfile
+
+            self.sleep(2)
+            if DEBUG_LEVEL>=3:
+                print('reading %s' %(audio_name))
+            rate, data = wavfile.read(audio_name)
+            if DEBUG_LEVEL>=3:
+                print('noise reducing')
+
+            
+            reduced_noise = nr.reduce_noise(y = data, sr=rate, prop_decrease=0.97)
+            # wavfile.write(audio_name,data=reduced_noise,rate=rate)
+            wavfile.write(audio_name,data=reduced_noise,rate=rate)
+            if DEBUG_LEVEL >=3:
+                print('Generated noise reduced wav file')
+
 
 
 class App(QWidget):
@@ -1456,7 +1481,7 @@ class App(QWidget):
     CAM_DISPLAY_HEIGHT = 1080
 
     def __init__(self):
-        global DEBUG, DEBUG_LEVEL, COMBINE_VIDEO
+        global DEBUG, DEBUG_LEVEL, COMBINE_VIDEO, APP_DATA_DIR, APP_NAME
         super().__init__()
 
         # try to load configurations from yaml file (if the config.yaml exists)
@@ -1472,7 +1497,7 @@ class App(QWidget):
             self.screen_number = 1
         else:
             self.screen_number = 0
-        self.setWindowTitle("ISD Mic Array Control Panel — v%s" %(sVersion))
+        self.setWindowTitle("%s — v%s" %(APP_NAME,sVersion))
         #self.setStyleSheet("background-color:gray")
 
         icon = QtGui.QIcon()
@@ -1896,12 +1921,19 @@ class App(QWidget):
         app.quit()
         
     def tryLoadConfig(self):
+        global APP_NAME, APP_DATA_DIR
         
         '''
         check if config.yaml exists, if yes, load config params from it, else set default values manually
 
         '''
-        configFileName = 'config.yaml'
+        
+        # check if APP_DATA_DIR exists, if not create it
+        if not os.path.exists(APP_DATA_DIR):
+            os.makedirs(APP_DATA_DIR)
+
+
+        configFileName = APP_DATA_DIR+'/config.yaml'
         # configFilePath = config_path(configFileName)
         print('Config Path: ', configFileName)
         if os.path.exists(configFileName):
@@ -1911,7 +1943,7 @@ class App(QWidget):
         else:
             # set up default values manually
             self.configParams = {
-                'debug': False,
+                'debug': True,
                 'fourMics': True,
                 'adminRole': False,
                 'showROI': True,
@@ -1919,6 +1951,10 @@ class App(QWidget):
                 'combineVideo': True,
                 'debugLevel':0
             }
+
+            # create the config.yaml with the default settings
+            with open(configFileName, 'w') as outfile:
+                yaml.dump(self.configParams, outfile, default_flow_style=False)
             return self.configParams
 
         
@@ -2898,7 +2934,6 @@ class App(QWidget):
         if send_and_receive_packet(self.hostIP,self.hostPort,sendBuf,timeout=3):
             if DEBUG_LEVEL>=3:
                 print('data transmission ok')
-
             self.showInfo('tx ok')
             dataLogger.add_data('tx ok')
         else:
