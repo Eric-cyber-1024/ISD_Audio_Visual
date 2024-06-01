@@ -137,7 +137,9 @@ class ClickableLabel(QLabel):
     def handleTimeout(self):
         #print('timeout')
         self.counter=0
-    
+
+
+
 
 class WorkerTryPing(QObject):
     finished = pyqtSignal(tuple)
@@ -420,7 +422,7 @@ class d435(QThread):
     # DEPTH_CAM_HEIGHT = 720#480#720
     DEPTH_CAM_WIDTH  = 848#1280
     DEPTH_CAM_HEIGHT = 480#720
-    DEPTH_FPS        = 15
+    DEPTH_FPS        = 30
 
     COLOR_CAM_WIDTH  = 1280#1920
     COLOR_CAM_HEIGHT = 720#1080
@@ -1490,6 +1492,9 @@ class App(QWidget):
         self.d435 = None 
         # add[have to initialize targetPos],Brian,31 May 2024
         self.targetPos = [0.,0.,0.]
+        # add[a temp copy of targetPos]
+        self.targetPosCopy = self.targetPos
+
         # add[initialize fpgaMode as well]
         self.fpgaMode = FPGA_MODE.NORMAL
 
@@ -1851,6 +1856,7 @@ class App(QWidget):
 
                 # send packet when depth locked, Jason, 16 April 2024
                 if hasattr(self.video_thread, 'd435'):
+                    # revise[connect to send_3d_point_noUIUpdate instead],Brian,1 June 2024
                     self.video_thread.depth_value_locked.connect(self.send_3d_point)
 
                 # connect its signal to the update_image slot
@@ -1877,6 +1883,7 @@ class App(QWidget):
             raise Exception('exit from init')
     
     # add,Brian,31 May 2024
+    @pyqtSlot(str)
     def handleSysError(self,sMsg):
         dataLogger.add_data('sys error:: %s' %(sMsg))
         message_box = QMessageBox()
@@ -2322,7 +2329,8 @@ class App(QWidget):
         # Jason, 17 April 2024
         btnSendPacket = QPushButton('Send Packet')
         btnSendPacket.setStyleSheet(BUTTON_STYLE_TEST_PAGE)
-        btnSendPacket.clicked.connect(self.sendPacket)
+        # revise[use sendPacket_withUIUpdate instead],Brian,1 June 2024
+        btnSendPacket.clicked.connect(self.sendPacket_withUIUpdate)
         # btnSendPacket.clicked.connect(self.onSendPacketButtonClicked)
 
         btnTestPing = QPushButton('Test Ping Host')
@@ -2437,25 +2445,17 @@ class App(QWidget):
     #         self.btnSendPacket.setText('Send Packet')
 
 
-
-    def sendPacket(self):
+    # add, Brian, 1 June 2024
+    def prepareFullPacket(self):
         global dataLogger, DEBUG_LEVEL
 
-        # clear lbl_info first
-        self.showInfo('')
+        '''
+        prepare a full FPGA Packet , returns a byte array
+
+        '''
+
         sendBuf=b'SET0'
-        
-        self.setTargetPos(self.targetPos)
 
-        # add[change mode],Brian,31 May 2024
-        # BM_ON --> N secs --> BM_OFF --> M secs -> MC_ON
-        self.setTestPage_Mode(self.fpgaMode)
-
-        self.fetchParamsFromUI()
-        self.printParams()
-    
-        #Z=distance between camera and object, x is left+/right-, y is down+/up-
-        
         # just a dummy target location
         this_location=[6, 0.2, 0.3]
 
@@ -2565,10 +2565,339 @@ class App(QWidget):
         sendBuf += packet
         dataLogger.add_data('data,%s,%s,%s,%s' %(bytes(sendBuf),np.array2string(refDelay),np.array2string(np.array(self.targetPos)),np.array2string(rawDelay)))
 
+        return sendBuf
+
+
+    # add,Brian,1 June 2024
+    def sendPacket_noUIUpdate(self):
+        '''
+        prepare network packet to be sent to FPGA
+
+        WITHOUT updating UI widgets (at test page) 
+
+        BUT will fetch UI contents to prepare the network packet 
+        EXCEPT mode and targetPos
+ 
+        warning!! this function is not a pyqt slot
+
+        '''
+        global dataLogger, DEBUG_LEVEL
+
+        
+        # remove,Brian,1 June 2024
+        # sendBuf=b'SET0'
+        
+        # removed[moved to send_3d_point to avoid cross-ui thread issue],Brian,1 June 2024
+        # if DEBUG_LEVEL>4:
+        #     print('try to call setTargetPos...')
+        # self.setTargetPos(self.targetPos)
+
+        # # add[change mode],Brian,31 May 2024
+        # # BM_ON --> N secs --> BM_OFF --> M secs -> MC_ON
+        # if DEBUG_LEVEL>4:
+        #     print('try to call setTestPage_Mode...')
+        # self.setTestPage_Mode(self.fpgaMode)
+
+
+        # save a copy of self.targetPos first
+        self.targetPosCopy= self.targetPos
+
+        # get parameters from UI at test page
+        if DEBUG_LEVEL>4:
+            print('try to call fetchParamsFromUI..')
+        self.fetchParamsFromUI()
+
+        # reset self.targetPos to self.targetPosCopy and 
+        # reset self.mode to self.fpgaMode
+
+        self.targetPos = self.targetPosCopy
+        self.mode = int(self.fpgaMode.value)
+
+
+        self.printParams()
+    
+        #Z=distance between camera and object, x is left+/right-, y is down+/up-
+        
+        # remove[replaced by function prepareFullPacket],Brian,1 June 2024
+        # the following codes to be removed later 
+
+        # # just a dummy target location
+        # this_location=[6, 0.2, 0.3]
+
+        # # revised[add offsets],Brian,18 Mar 2024
+        # delay=delay_calculation_v1(this_location)
+        # if DEBUG_LEVEL>=3: 
+        #     print(delay)
+        # dataLogger.add_data('%s,%s' %('delay',np.array2string(delay)))
+        # #converting the delay into binary format 
+        # delay_binary_output = delay_to_binary(delay)
+        # #print(delay_binary_output)
+        # #need to do later
+        # RW_field=[1,1]
+        # mode=0
+        # mic_gain=[1,0]
+        # mic_num=0
+        # en_bm=1
+        # en_bc=1
+        # mic_en=1
+        # type=0
+        # reserved=0
+        # message=struct_packet(RW_field,mode,mic_gain,mic_num,en_bm,en_bc,delay_binary_output[0],mic_en,type,reserved)
+        # messagehex = BintoINT(message)
+        # message1 = int(messagehex[2:4],16) # hex at  1 and 2  
+        # message2 = int(messagehex[4:6],16) # hex at  3 and 4 
+        # message3 = int(messagehex[6:8],16)  # hex at  5 and 6 
+        # message4 = int(messagehex[8:],16)
+
+        # if DEBUG_LEVEL>=3:
+        #     print(message)
+        #     print(messagehex)
+        #     print("m1:{},m2:{},m3:{},m4:{}\n".format(message1,message2,message3,message4))
+        
+
+        # message5  = int(self.mode)        # mode
+        # message6  = int(self.micIndx)     # mic
+        # message7  = int(self.micGain)     # mic_gain
+        # message8  = int(self.micDisable)  # mic_disable
+        # message9  = int(self.setTest)     # set_test
+        # message10 = int(self.den_out_sel) # den_out_sel, previously micDelay
+
+        # # revise[added message11, message12],Brian, 27 Mar 2024
+        # message11 = int(self.mc_beta_sel) # mc_beta_sel
+        # message12 = int(self.mc_K_sel)    # mc_K_sel
+
+        # # revise[added message13],Brian, 28 Mar 2024
+        # message13 = int(self.en_BM_MC_ctrl) # en_BM_MC_ctrl
+
+        # # Add[sync with system tool v0.11],Brian,31 May 2024
+
+        # # add new parameters, 25 April 2024
+
+        # # message14-34
+        # message14 = int(self.bm_alpha_sel)
+
+        # # five 32-bit parameters here
+        # message15_18 = struct.pack('>I', self.mc_K_set)
+        # message19_22 = struct.pack('>I', self.bm_uplimit_H[0])
+        # message23_26 = struct.pack('>I', self.bm_uplimit_H[1])
+        # message27_30 = struct.pack('>I', self.bm_uplimit_H[2])
+        # message31_34 = struct.pack('>I', self.bm_uplimit_H[3])
+
+ 
+        
+        # _,refDelay,_ = delay_calculation(self.targetPos,self.offsets[0],self.offsets[1],self.offsets[2],toUseYAML=self.toUseYAML)   
+        
+        # # save a copy of the raw delay in us
+        # rawDelay = refDelay[1:]*1e6
+        # # revise[should not include m00],Brian,15 April 204
+        # refDelay = refDelay[1:]
+        # refDelay = refDelay*48e3
+        # refDelay = np.max(refDelay)-refDelay
+        # refDelay = np.round(refDelay)
+
+        # #convert refDelay to byte
+        # #but make sure that they are within 0 to 255 first!!
+        # assert (refDelay>=0).all() and (refDelay<=255).all()
+
+            
+        # refDelay = refDelay.astype(np.uint8)
+        # payload = refDelay.tobytes()
+
+        # if DEBUG_LEVEL>=3:
+        #     print('refDelay',refDelay)
+        #     print('payload',payload)
+        #     print('sendBuf',sendBuf)
+
+        
+
+        
+        # packet = prepareMicDelaysPacket(payload)
+        # if validateMicDelaysPacket(packet):
+        #     print('packet ok')
+        # else:
+        #     print('packet not ok')
+            
+        # sendBuf=bytes([message1,message2,message3,message4,message5,message6,message7,message8,message9,message10,message11,message12,message13])
+
+        # sendBuf += bytes([message14])
+        # sendBuf += bytes(message15_18)
+        # sendBuf += bytes(message19_22)
+        # sendBuf += bytes(message23_26)
+        # sendBuf += bytes(message27_30)
+        # sendBuf += bytes(message31_34)
+            
+        # # append packet to sendBuf
+        # sendBuf += packet
+        # dataLogger.add_data('data,%s,%s,%s,%s' %(bytes(sendBuf),np.array2string(refDelay),np.array2string(np.array(self.targetPos)),np.array2string(rawDelay)))
+
+        sendBuf = self.prepareFullPacket()
 
         if send_and_receive_packet(self.hostIP,self.hostPort,sendBuf,timeout=3):
             if DEBUG_LEVEL>=3:
                 print('data transmission ok')
+            dataLogger.add_data('tx ok')
+        else:
+            if DEBUG_LEVEL>=3:
+                print('data transmission failed')
+            dataLogger.add_data('tx failed')
+
+    
+    # Add,Brian,1 June 2024
+    @pyqtSlot()
+    def sendPacket_withUIUpdate(self):
+        '''
+        prepare network packet to be sent to FPGA
+
+        will update UI widgets (at test page) 
+
+        warning!!: beware of cross-ui thread issue and this function is a pyqt slot
+
+        '''
+        global dataLogger, DEBUG_LEVEL
+
+        
+        # clear lbl_info first
+        self.showInfo('')
+        
+        # remove,Brian,1 June 2024
+        # sendBuf=b'SET0'
+        
+        # removed[moved to send_3d_point to avoid cross-ui thread issue],Brian,1 June 2024
+        # if DEBUG_LEVEL>4:
+        #     print('try to call setTargetPos...')
+        # self.setTargetPos(self.targetPos)
+
+        # # add[change mode],Brian,31 May 2024
+        # # BM_ON --> N secs --> BM_OFF --> M secs -> MC_ON
+        # if DEBUG_LEVEL>4:
+        #     print('try to call setTestPage_Mode...')
+        # self.setTestPage_Mode(self.fpgaMode)
+
+        if DEBUG_LEVEL>4:
+            print('try to call fetchParamsFromUI..')
+        self.fetchParamsFromUI()
+        self.printParams()
+    
+        #Z=distance between camera and object, x is left+/right-, y is down+/up-
+        
+        # remove[replaced by function prepareFullPacket],Brian,1 June 2024
+        # the following codes to be removed later 
+
+        # # just a dummy target location
+        # this_location=[6, 0.2, 0.3]
+
+        # # revised[add offsets],Brian,18 Mar 2024
+        # delay=delay_calculation_v1(this_location)
+        # if DEBUG_LEVEL>=3: 
+        #     print(delay)
+        # dataLogger.add_data('%s,%s' %('delay',np.array2string(delay)))
+        # #converting the delay into binary format 
+        # delay_binary_output = delay_to_binary(delay)
+        # #print(delay_binary_output)
+        # #need to do later
+        # RW_field=[1,1]
+        # mode=0
+        # mic_gain=[1,0]
+        # mic_num=0
+        # en_bm=1
+        # en_bc=1
+        # mic_en=1
+        # type=0
+        # reserved=0
+        # message=struct_packet(RW_field,mode,mic_gain,mic_num,en_bm,en_bc,delay_binary_output[0],mic_en,type,reserved)
+        # messagehex = BintoINT(message)
+        # message1 = int(messagehex[2:4],16) # hex at  1 and 2  
+        # message2 = int(messagehex[4:6],16) # hex at  3 and 4 
+        # message3 = int(messagehex[6:8],16)  # hex at  5 and 6 
+        # message4 = int(messagehex[8:],16)
+
+        # if DEBUG_LEVEL>=3:
+        #     print(message)
+        #     print(messagehex)
+        #     print("m1:{},m2:{},m3:{},m4:{}\n".format(message1,message2,message3,message4))
+        
+
+        # message5  = int(self.mode)        # mode
+        # message6  = int(self.micIndx)     # mic
+        # message7  = int(self.micGain)     # mic_gain
+        # message8  = int(self.micDisable)  # mic_disable
+        # message9  = int(self.setTest)     # set_test
+        # message10 = int(self.den_out_sel) # den_out_sel, previously micDelay
+
+        # # revise[added message11, message12],Brian, 27 Mar 2024
+        # message11 = int(self.mc_beta_sel) # mc_beta_sel
+        # message12 = int(self.mc_K_sel)    # mc_K_sel
+
+        # # revise[added message13],Brian, 28 Mar 2024
+        # message13 = int(self.en_BM_MC_ctrl) # en_BM_MC_ctrl
+
+        # # Add[sync with system tool v0.11],Brian,31 May 2024
+
+        # # add new parameters, 25 April 2024
+
+        # # message14-34
+        # message14 = int(self.bm_alpha_sel)
+
+        # # five 32-bit parameters here
+        # message15_18 = struct.pack('>I', self.mc_K_set)
+        # message19_22 = struct.pack('>I', self.bm_uplimit_H[0])
+        # message23_26 = struct.pack('>I', self.bm_uplimit_H[1])
+        # message27_30 = struct.pack('>I', self.bm_uplimit_H[2])
+        # message31_34 = struct.pack('>I', self.bm_uplimit_H[3])
+
+ 
+        
+        # _,refDelay,_ = delay_calculation(self.targetPos,self.offsets[0],self.offsets[1],self.offsets[2],toUseYAML=self.toUseYAML)   
+        
+        # # save a copy of the raw delay in us
+        # rawDelay = refDelay[1:]*1e6
+        # # revise[should not include m00],Brian,15 April 204
+        # refDelay = refDelay[1:]
+        # refDelay = refDelay*48e3
+        # refDelay = np.max(refDelay)-refDelay
+        # refDelay = np.round(refDelay)
+
+        # #convert refDelay to byte
+        # #but make sure that they are within 0 to 255 first!!
+        # assert (refDelay>=0).all() and (refDelay<=255).all()
+
+            
+        # refDelay = refDelay.astype(np.uint8)
+        # payload = refDelay.tobytes()
+
+        # if DEBUG_LEVEL>=3:
+        #     print('refDelay',refDelay)
+        #     print('payload',payload)
+        #     print('sendBuf',sendBuf)
+
+        
+
+        
+        # packet = prepareMicDelaysPacket(payload)
+        # if validateMicDelaysPacket(packet):
+        #     print('packet ok')
+        # else:
+        #     print('packet not ok')
+            
+        # sendBuf=bytes([message1,message2,message3,message4,message5,message6,message7,message8,message9,message10,message11,message12,message13])
+
+        # sendBuf += bytes([message14])
+        # sendBuf += bytes(message15_18)
+        # sendBuf += bytes(message19_22)
+        # sendBuf += bytes(message23_26)
+        # sendBuf += bytes(message27_30)
+        # sendBuf += bytes(message31_34)
+            
+        # # append packet to sendBuf
+        # sendBuf += packet
+        # dataLogger.add_data('data,%s,%s,%s,%s' %(bytes(sendBuf),np.array2string(refDelay),np.array2string(np.array(self.targetPos)),np.array2string(rawDelay)))
+
+        sendBuf = self.prepareFullPacket()
+
+        if send_and_receive_packet(self.hostIP,self.hostPort,sendBuf,timeout=3):
+            if DEBUG_LEVEL>=3:
+                print('data transmission ok')
+
             self.showInfo('tx ok')
             dataLogger.add_data('tx ok')
         else:
@@ -2769,6 +3098,9 @@ class App(QWidget):
         # try to get 3d coordinate from camera if it's d435
         # based on mouse_position.x(), y()
 
+        if DEBUG_LEVEL>4:
+            print('mousePressEvent triggered...')
+
         # revised[make sure that stacked_widget is at index 0],Brian,05 April 2024
         if self.stacked_widget.currentIndex()==0:
             if self.selected_camera.startswith('Intel(R) RealSense(TM) Depth Camera 4') and self.selected_camera.endswith('RGB'):
@@ -2813,7 +3145,9 @@ class App(QWidget):
             self.send_packet_mode56_timer.start(5000)
         SENDING_PACKET = False
 
+
     # Added for 3d coordinates, Jason, 11 April 2024
+    @pyqtSlot()
     def send_3d_point(self):
         global SENDING_PACKET, SENDING_PACKET_MODE5_MODE6, DEBUG_LEVEL, TARGET_POS_UPDATED
 
@@ -2839,7 +3173,7 @@ class App(QWidget):
                     self.fpgaMode = FPGA_MODE.MC_ON
                     
             self.thread_send_packet = QThread()
-            self.thread_send_packet.run = self.sendPacket
+            self.thread_send_packet.run = self.sendPacket_noUIUpdate
             self.thread_send_packet.finished.connect(self.on_send_packed_finished)
             if DEBUG_LEVEL>=3:
                 print("self.targetPos: ", self.targetPos)
