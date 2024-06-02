@@ -12,9 +12,9 @@ from Enum_library import  *
 # Create neccessary Directory
 def check_folder_existence(folder_path):
     if os.path.exists(folder_path) and os.path.isdir(folder_path):
-        print(f"The folder '{folder_path}' exists.")
+        pass #print(f"The folder '{folder_path}' exists.")
     else:
-        print(f"The folder '{folder_path}' does not exist.")
+        pass #print(f"The folder '{folder_path}' does not exist. create it now...")
         os.makedirs(folder_path)
 
 
