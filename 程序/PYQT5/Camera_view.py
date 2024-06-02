@@ -73,7 +73,7 @@ COMBINE_VIDEO = True # Add,Brian,31 May 2024
 APP_NAME = "ISD Mic Array Control Panel"
 APP_DATA_DIR = os.path.join(os.path.expandvars('%APPDATA%'), APP_NAME)
 
-sVersion='0.1.10'
+sVersion='1.0.0'
 
 
 # Add,Brian,31 May 2024
@@ -610,6 +610,40 @@ class d435(QThread):
         return False, self.q_frame_output.get()
     
 
+    # add,Brian,2 June 2024
+    def getCorrectionRatio(self,z):
+        '''
+        estimate the correction ratio based upon estimated depth
+
+        z 0-2m -- 1.01
+        z 2-3m -- 1.03
+        z 4    -- 1.1
+
+        '''
+        ratio = 0.029*(z**2)-0.129*z+1.152
+
+        return 1/ratio
+    
+    def correctXY(self,x,y,z):
+        '''
+        correct estimated x, y
+
+        X' = (X - bx Z )/ax
+        Y' = (Y - by Z )/ay
+
+        warning!! the following coefficients are emprical and depth camera dependent
+
+        '''
+        ax=0.7531
+        bx=0.0816
+        ay=1.0101
+        by=0.0101
+
+        return (x-bx*z)/ax , (y-by*z)/ay
+
+
+
+
     # add,Brian,27 May 2024
     def remap(self,x,y,z,err_max=0.3):
         '''
@@ -712,6 +746,24 @@ class d435(QThread):
                 # self.point[0]=x
                 # self.point[1]=y
                 # self.point[2]=z
+
+                # Add[try to correct x,y,z to improve accuracy],Brian,2 June 2024
+                # test data:
+                # original xyz:
+                # 0.54,0.49,3.11 (0.37,0.445,3.03)
+                # 1.85,0.87,3.87 (1.66,0.665,3.15)
+
+                x,y = self.correctXY(x,y,z)
+
+                correctionRatio = self.getCorrectionRatio(z)
+                x = correctionRatio*x
+                y = correctionRatio*y
+                z = correctionRatio*z
+                
+                # self.point[0]=x
+                # self.point[1]=y
+                # self.point[2]=z
+                
                 if DEBUG_LEVEL==4:
                     print(self.i,self.j,depthPixel,self.point,depth)
 
