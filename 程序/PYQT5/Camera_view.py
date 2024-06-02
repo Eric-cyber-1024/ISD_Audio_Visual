@@ -252,8 +252,9 @@ class MovingAverageCalculator:
         self.average = 0.0
 
     def reset_calculation(self):
-        global TARGET_POS_UPDATED
-        print('reset ma')
+        global TARGET_POS_UPDATED,DEBUG_LEVEL
+        if DEBUG_LEVEL>=3:
+            print('reset ma')
         self.mutex.lock()
         TARGET_POS_UPDATED = False
         self.window = []
@@ -272,6 +273,7 @@ class MovingAverageCalculator:
 
     # Add lock value, Jason, 10 April 2024
     def calculate_moving_average_lock(self, x):
+        global DEBUG_LEVEL
         '''
         Save the averaged depth value as locked_value if 
         the variance of the data in the window is smaller than
@@ -280,7 +282,8 @@ class MovingAverageCalculator:
         self.mutex.lock()
         self.window.append(x)
         if len(self.window) == 1:
-            print('x: ', x)
+            if DEBUG_LEVEL>=3:
+                print('x: ', x)
             if x < 5.0:
                 self.lock_var_range = 0.01
             else:
@@ -542,6 +545,8 @@ class d435(QThread):
         get color frame intrinsics in Opencv Format
 
         '''
+        global DEBUG_LEVEL
+
         # get self.k, self.d from self.d435 color intrinsic matrix
         intrinsics = self.colorIntrinsics
 
@@ -554,13 +559,16 @@ class d435(QThread):
         distortion_coeffs = [[intrinsics.coeffs[0], intrinsics.coeffs[1], intrinsics.coeffs[4],
                      intrinsics.coeffs[3], intrinsics.coeffs[2]]]
         
-        print(distortion_coeffs)
+        if DEBUG_LEVEL>=3:
+            print(distortion_coeffs)
 
         camera_matrix = np.array([[fx, 0, cx],
                         [0, fy, cy],
                         [0, 0, 1]])
         dist_coeffs = np.array(distortion_coeffs)
-        print(camera_matrix,dist_coeffs)
+
+        if DEBUG_LEVEL>=3:
+            print(camera_matrix,dist_coeffs)
 
         return camera_matrix,dist_coeffs
 
@@ -1866,7 +1874,7 @@ class App(QWidget):
 
                 # create audio controller for the output device
                 self.audio_outCtrl = AudioController(self.output_devid,'output','default')
-                self.audio_outCtrl.listAllSections()
+                # self.audio_outCtrl.listAllSections()
 
                 if DEBUG_LEVEL>=3:
                     print(self.audio_outCtrl.volume)
@@ -2633,10 +2641,10 @@ class App(QWidget):
 
         
         packet = prepareMicDelaysPacket(payload)
-        if validateMicDelaysPacket(packet):
-            print('packet ok')
-        else:
-            print('packet not ok')
+        # if validateMicDelaysPacket(packet):
+        #     print('packet ok')
+        # else:
+        #     print('packet not ok')
             
         sendBuf=bytes([message1,message2,message3,message4,message5,message6,message7,message8,message9,message10,message11,message12,message13])
 
