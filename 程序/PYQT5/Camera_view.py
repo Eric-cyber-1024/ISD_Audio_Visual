@@ -611,6 +611,16 @@ class d435(QThread):
     
 
     # add,Brian,2 June 2024
+    def estimatePoseFarField(self,depthPixel):
+        '''
+        estimate 3d pose by using far-field approximation
+
+        warning!! currently hardcode to be 0,0,4
+        '''
+
+        return [0.,0.,4.]
+
+    # add,Brian,2 June 2024
     def getCorrectionRatio(self,z):
         '''
         estimate the correction ratio based upon estimated depth
@@ -729,43 +739,48 @@ class d435(QThread):
 
             # print('i j: ', self.i, self.j)
             # print('depth pixel: ', depthPixel)
-
+            
             if depthPixel[0]>=0 and depthPixel[1]>=0:
                 depth = depthFrame.get_distance(int(depthPixel[0]),int(depthPixel[1]))
                 depth = self.ma.calculate_moving_average_lock(depth)
-
                 # project depth pixel to 3D point
                 # x is right+, y is down+, z is forward+
                 self.point = rs.rs2_deproject_pixel_to_point(self.depthIntrinsics,[int(depthPixel[0]), int(depthPixel[1])], depth)
 
-                x = self.point[0]
-                y = self.point[1]
-                z = self.point[2]
-                # # add [map to 0.37,0.345,3.03 if x,y,z is close to 0.54,0.49,3.15],Brian,27 May 2024
-                # x,y,z = self.remap(x,y,z)
-                # self.point[0]=x
-                # self.point[1]=y
-                # self.point[2]=z
+                if self.point[2]==0.0 and self.point[0]==0.0 and self.point[1]==0.0:
+                    # simply hardcode at this moment, may try using far-field approximation here
+                    self.point=self.estimatePoseFarField(depthPixel)
+                else:
+                    x = self.point[0]
+                    y = self.point[1]
+                    z = self.point[2]
+                    # # add [map to 0.37,0.345,3.03 if x,y,z is close to 0.54,0.49,3.15],Brian,27 May 2024
+                    # x,y,z = self.remap(x,y,z)
+                    # self.point[0]=x
+                    # self.point[1]=y
+                    # self.point[2]=z
 
-                # Add[try to correct x,y,z to improve accuracy],Brian,2 June 2024
-                # test data:
-                # original xyz:
-                # 0.54,0.49,3.11 (0.37,0.445,3.03)
-                # 1.85,0.87,3.87 (1.66,0.665,3.15)
+                    # Add[try to correct x,y,z to improve accuracy],Brian,2 June 2024
+                    # test data:
+                    # original xyz:
+                    # 0.54,0.49,3.11 (0.37,0.445,3.03)
+                    # 1.85,0.87,3.87 (1.66,0.665,3.15)
 
-                x,y = self.correctXY(x,y,z)
+                    x,y = self.correctXY(x,y,z)
 
-                correctionRatio = self.getCorrectionRatio(z)
-                x = correctionRatio*x
-                y = correctionRatio*y
-                z = correctionRatio*z
-                
-                # self.point[0]=x
-                # self.point[1]=y
-                # self.point[2]=z
+                    correctionRatio = self.getCorrectionRatio(z)
+                    x = correctionRatio*x
+                    y = correctionRatio*y
+                    z = correctionRatio*z
+                    
+                    self.point[0]=x
+                    self.point[1]=y
+                    self.point[2]=z
                 
                 if DEBUG_LEVEL==4:
                     print(self.i,self.j,depthPixel,self.point,depth)
+
+            
 
             # update self.iPrev,jPrev
             self.iPrev = self.i
