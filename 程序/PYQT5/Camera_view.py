@@ -1928,9 +1928,10 @@ class App(QWidget):
 
         '''
         
-        # check if APP_DATA_DIR exists, if not create it
-        if not os.path.exists(APP_DATA_DIR):
-            os.makedirs(APP_DATA_DIR)
+        # revise [move to beginning of the app instead],Brian,2 June 2024
+        # # check if APP_DATA_DIR exists, if not create it
+        # if not os.path.exists(APP_DATA_DIR):
+        #     os.makedirs(APP_DATA_DIR)
 
 
         configFileName = APP_DATA_DIR+'/config.yaml'
@@ -3400,10 +3401,14 @@ class App(QWidget):
 
 if __name__ == "__main__":
 
+    # check if APP_DATA_DIR exists, if not create it
+    if not os.path.exists(APP_DATA_DIR):
+        os.makedirs(APP_DATA_DIR)
+
     # Check if the folder exists
-    if not os.path.exists('log'):
+    if not os.path.exists(APP_DATA_DIR+'/log'):
         # Create the folder
-        os.makedirs('log')
+        os.makedirs(APP_DATA_DIR+'/log')
         print("log folder created successfully.")
     else:
         print("log folder already exists.")
@@ -3414,11 +3419,12 @@ if __name__ == "__main__":
     dataLogger.start_logging()
     dataLogger.add_data('logger started...')
 
+    # revise[save to APP_DATA_DIR],Brian, 2 June 2024
     # Create necessary DIR
-    check_folder_existence(CURRENT_PATH+VIDEO_SAVE_DIRECTORY)
-    check_folder_existence(CURRENT_PATH+VIDEO_SAVE_DIRECTORY+VIDEO_DATE)
-    check_folder_existence(CURRENT_PATH+AUDIO_PATH+"\\"+VIDEO_DATE)
-    check_folder_existence(CURRENT_PATH+OUTPUT_PATH+"\\"+VIDEO_DATE)
+    check_folder_existence(APP_DATA_DIR+'\\'+VIDEO_SAVE_DIRECTORY)
+    check_folder_existence(APP_DATA_DIR+'\\'+VIDEO_SAVE_DIRECTORY+VIDEO_DATE)
+    check_folder_existence(APP_DATA_DIR+'\\'+AUDIO_PATH+"\\"+VIDEO_DATE)
+    check_folder_existence(APP_DATA_DIR+'\\'+OUTPUT_PATH+"\\"+VIDEO_DATE)
 
     # os.environ["QT_ENABLE_HIGHDPI_SCALING"]   = "2"
     # os.environ["QT_AUTO_SCREEN_SCALE_FACTOR"] = "0.5"
