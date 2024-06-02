@@ -2769,14 +2769,16 @@ class App(QWidget):
 
         sendBuf = self.prepareFullPacket()
 
-        if send_and_receive_packet(self.hostIP,self.hostPort,sendBuf,timeout=3):
+        # revise[getting status and error message],Brian,2 June 2024
+        status,sMsg = send_and_receive_packet(self.hostIP,self.hostPort,sendBuf,timeout=3)
+        if status:
             if DEBUG_LEVEL>=3:
                 print('data transmission ok')
             dataLogger.add_data('tx ok')
         else:
             if DEBUG_LEVEL>=3:
-                print('data transmission failed')
-            dataLogger.add_data('tx failed')
+                print('data transmission failed:: %s' %(sMsg))
+            dataLogger.add_data('tx failed, %s' %(sMsg))
 
     
     # Add,Brian,1 June 2024
@@ -2931,15 +2933,17 @@ class App(QWidget):
 
         sendBuf = self.prepareFullPacket()
 
-        if send_and_receive_packet(self.hostIP,self.hostPort,sendBuf,timeout=3):
+        # revise[getting status and error message],Brian,2 June 2024
+        status,sMsg = send_and_receive_packet(self.hostIP,self.hostPort,sendBuf,timeout=3)
+        if status:
             if DEBUG_LEVEL>=3:
                 print('data transmission ok')
             self.showInfo('tx ok')
             dataLogger.add_data('tx ok')
         else:
             if DEBUG_LEVEL>=3:
-                print('data transmission failed')
-            dataLogger.add_data('tx failed')
+                print('data transmission failed:: %s' %(sMsg))
+            dataLogger.add_data('tx failed, %s' %(sMsg))
 
 
 
