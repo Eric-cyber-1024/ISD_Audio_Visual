@@ -11,14 +11,18 @@ import cv2
 
 from Style import *
 import numpy as np
-import sounddevice as sd
-import soundfile as sf
-import os
-import wavio  #pip3 install wavio
-from datetime import datetime
 
+import os
 import time
 from sys import exit
+from datetime import datetime
+
+# import sounddevice as sd
+# import soundfile as sf
+# import wavio  #pip3 install wavio
+# # added[for d435]
+# import pyrealsense2 as rs
+
 
 from Widget_library import *
 from Event import *
@@ -29,15 +33,12 @@ from utility import audio_dev_to_str, networkController, rescale_frame
 from data_logger import DataLogger
 from test_delay_cal import *
 
-# added[for d435]
-import pyrealsense2 as rs
+
 
 from progress_bar import CustomProgressBarLogger
 from utils import ARUCO_DICT
 import struct # Add,Brian,31 May 2024
 
-#import noisereduce as nr
-#from scipy.io import wavfile
 
 # from pywinauto import Desktop
 current_datetime = datetime.now()
@@ -421,6 +422,9 @@ class d435(QThread):
     '''
     class to get access to d435 data
     '''
+
+    #import numpy as np
+
     frame_ready = pyqtSignal(tuple)
     getFrame_err= pyqtSignal(str)
 
@@ -1306,9 +1310,9 @@ class VideoSavingThread(QThread):
         current_datetime = datetime.now()
         formatted_datetime = current_datetime.strftime(
             "[%m-%d-%y]%H_%M_%S")
-        self.video_name = CURRENT_PATH + VIDEO_SAVE_DIRECTORY + VIDEO_DATE + "\\" + str(
+        self.video_name = APP_DATA_DIR+'/' + VIDEO_SAVE_DIRECTORY + VIDEO_DATE + "\\" + str(
             formatted_datetime) + '.avi'
-        self.output_path = CURRENT_PATH + OUTPUT_PATH + VIDEO_DATE + "\\" + str(
+        self.output_path = APP_DATA_DIR+'/' + OUTPUT_PATH + VIDEO_DATE + "\\" + str(
             formatted_datetime) + '.mp4'
         VIDEO_NAME = self.video_name
         OUTPUT_NAME = self.output_path
@@ -1437,7 +1441,7 @@ class AudioThread(QThread):
             formatted_datetime = current_datetime.strftime("[%m-%d-%y]%H_%M_%S")
             subtype = 'PCM_16'
             dtype = 'int16' 
-            audio_name = CURRENT_PATH + AUDIO_PATH + VIDEO_DATE + "\\" + str(formatted_datetime) + '.wav'
+            audio_name = APP_DATA_DIR+'/'+ AUDIO_PATH + VIDEO_DATE + "\\" + str(formatted_datetime) + '.wav'
             AUDIO_NAME = audio_name
 
             if DEBUG_LEVEL>=3:
@@ -1472,6 +1476,9 @@ class AudioThread(QThread):
             wavfile.write(audio_name,data=reduced_noise,rate=rate)
             if DEBUG_LEVEL >=3:
                 print('Generated noise reduced wav file')
+
+            # emit finished signal back to App object
+            self.finished.emit()
 
 
 
@@ -1880,6 +1887,7 @@ class App(QWidget):
                 # create the video capture thread
                 self.video_thread = VideoThread(self.selected_camera_index,self.selected_camera, App.CAM_DISPLAY_WIDTH, App.CAM_DISPLAY_HEIGHT, self.configParams['usePoseEstimation'])
                 self.audio_thread = AudioThread(self.input_device)
+                self.audio_thread.finished.connect(self.onAudioThreadFinished)
 
                 # send packet when depth locked, Jason, 16 April 2024
                 if hasattr(self.video_thread, 'd435'):
@@ -1908,6 +1916,45 @@ class App(QWidget):
         else:
             # print("Exit now...")
             raise Exception('exit from init')
+        
+    
+    # add,Brian,2 June 2024
+    @pyqtSlot()
+    def onAudioThreadFinished(self):
+        '''
+        slot for AudioThread Finished Signal
+        '''
+
+        
+
+        # should call for video combine here
+        if COMBINE_VIDEO:
+            # revised[combine video, audio],Jason,17 May 2024
+            self.combine_thread = VideoAudioThread(VIDEO_NAME,AUDIO_NAME,OUTPUT_NAME, self.logger)
+            self.combine_thread.start_writing.connect(self.show_progress_dialog)
+            self.combine_thread.start_writing.connect(self.video_thread.pause_thread)
+            if self.video_thread.d435:
+                self.combine_thread.start_writing.connect(self.video_thread.d435.pause_thread)
+            elif self.video_thread.cam:
+                self.combine_thread.start_writing.connect(self.video_thread.cam.pause_thread)
+            self.combine_thread.finished.connect(self.combine_thread_finished)
+            self.logger.signal_emitter.percentage_changed_signal.connect(self.update_progress_dialog_percentage)
+            self.logger.signal_emitter.text_changed_signal.connect(self.update_progress_dialog_text)
+            # disable combine, Jason, 20 May 2024
+            self.combine_thread.start()
+
+            # try to close the audio processing dialog box first
+            if hasattr(self, 'audio_processing_dialog') and self.audio_processing_dialog is not None:
+                self.audio_processing_dialog.accept()
+                self.audio_processing_dialog=None
+        else:
+            # try to close the audio processing dialog box first
+            if hasattr(self, 'audio_processing_dialog') and self.audio_processing_dialog is not None:
+                self.audio_processing_dialog.accept()
+                self.audio_processing_dialog=None
+            # simply pop up a message window to indicate that the recording process ended 
+            self.show_record_finished_dialog()
+
     
     # add,Brian,31 May 2024
     @pyqtSlot(str)
@@ -1936,7 +1983,7 @@ class App(QWidget):
 
         configFileName = APP_DATA_DIR+'/config.yaml'
         # configFilePath = config_path(configFileName)
-        print('Config Path: ', configFileName)
+        # print('Config Path: ', configFileName)
         if os.path.exists(configFileName):
             with open(configFileName, 'r') as file:
                 configParams= yaml.safe_load(file)
@@ -3282,24 +3329,28 @@ class App(QWidget):
 
             self.audio_thread.requestInterruption()
 
-            # add[enable/disable video combine by COMBINE_VIDEO],Brian,31 May 2024
-            if COMBINE_VIDEO:
-                # revised[combine video, audio],Jason,17 May 2024
-                self.combine_thread = VideoAudioThread(VIDEO_NAME,AUDIO_NAME,OUTPUT_NAME, self.logger)
-                self.combine_thread.start_writing.connect(self.show_progress_dialog)
-                self.combine_thread.start_writing.connect(self.video_thread.pause_thread)
-                if self.video_thread.d435:
-                    self.combine_thread.start_writing.connect(self.video_thread.d435.pause_thread)
-                elif self.video_thread.cam:
-                    self.combine_thread.start_writing.connect(self.video_thread.cam.pause_thread)
-                self.combine_thread.finished.connect(self.combine_thread_finished)
-                self.logger.signal_emitter.percentage_changed_signal.connect(self.update_progress_dialog_percentage)
-                self.logger.signal_emitter.text_changed_signal.connect(self.update_progress_dialog_text)
-                # disable combine, Jason, 20 May 2024
-                self.combine_thread.start()
-            else:
-                # simply pop up a message window to indicate that the recording process ended 
-                self.show_record_finished_dialog()
+            # remove[moved to onAudoThreadFinished slot],Brian,2 June 2024
+            # # add[enable/disable video combine by COMBINE_VIDEO],Brian,31 May 2024
+            # if COMBINE_VIDEO:
+            #     # revised[combine video, audio],Jason,17 May 2024
+            #     self.combine_thread = VideoAudioThread(VIDEO_NAME,AUDIO_NAME,OUTPUT_NAME, self.logger)
+            #     self.combine_thread.start_writing.connect(self.show_progress_dialog)
+            #     self.combine_thread.start_writing.connect(self.video_thread.pause_thread)
+            #     if self.video_thread.d435:
+            #         self.combine_thread.start_writing.connect(self.video_thread.d435.pause_thread)
+            #     elif self.video_thread.cam:
+            #         self.combine_thread.start_writing.connect(self.video_thread.cam.pause_thread)
+            #     self.combine_thread.finished.connect(self.combine_thread_finished)
+            #     self.logger.signal_emitter.percentage_changed_signal.connect(self.update_progress_dialog_percentage)
+            #     self.logger.signal_emitter.text_changed_signal.connect(self.update_progress_dialog_text)
+            #     # disable combine, Jason, 20 May 2024
+            #     self.combine_thread.start()
+            # else:
+            #     # simply pop up a message window to indicate that the recording process ended 
+            #     self.show_record_finished_dialog()
+
+            # show a dialog box for audio processing
+            self.show_audio_processing_dialog()
 
     def mic_on_off_button_clicked(self):
         self.MIC_ON = not self.MIC_ON
@@ -3342,11 +3393,35 @@ class App(QWidget):
         self.video_combine_finished_dialog.setWindowTitle('Video')
         layout = QVBoxLayout()
         message = QLabel('Finished generating video ' + OUTPUT_NAME)
+        message.setFont(Label_Font)
         layout.addWidget(message)
         self.video_combine_finished_dialog.setLayout(layout)
         self.video_combine_finished_dialog.exec_()
 
+
+    # add[dialog showing audio under process],Brian,2 June 2024
+    def show_audio_processing_dialog(self):
+        self.audio_processing_dialog = QDialog(self)
+        self.audio_processing_dialog.setWindowTitle('Audio Processing')
+        self.audio_processing_dialog.setWindowFlags(self.windowFlags() & ~Qt.WindowSystemMenuHint)
+        # self.audio_processing_dialog.setGeometry(100, 100, 400, 100)
+        
+        # # Set the fixed width of the dialog
+        # self.audio_processing_dialog.setFixedWidth(400)
+        
+        # # Set the minimum and maximum width of the dialog
+        # self.audio_processing_dialog.setMinimumWidth(400)
+        # self.audio_processing_dialog.setMaximumWidth(400)
+
+        layout = QVBoxLayout()
+        message = QLabel('Processing Audio, Please Wait for a moment')
+        message.setFont(Label_Font)
+        layout.addWidget(message)
+        self.audio_processing_dialog.setLayout(layout)
+        self.audio_processing_dialog.exec_()
+
     # add[messagebox to show that recording ended without combine],Brian,31 May 2024
+    @pyqtSlot()
     def show_record_finished_dialog(self):
         self.video_record_finished_dialog = QDialog(self)
         self.video_record_finished_dialog.setWindowTitle('Recording')
@@ -3366,10 +3441,12 @@ class App(QWidget):
         self.video_record_finished_dialog.setLayout(layout)
         self.video_record_finished_dialog.exec_()
 
+    @pyqtSlot()
     def show_progress_dialog(self):
         print('show progress dialog')
         self.video_progress_dialog = QProgressDialog(self)
         self.video_progress_dialog.setWindowTitle("Video")  
+        self.video_progress_dialog.setFont(Label_Font)
         self.video_progress_dialog.setLabelText("Generating video " + OUTPUT_NAME)
         self.video_progress_dialog.setCancelButton(None)
         self.video_progress_dialog.setWindowFlags(Qt.Window | Qt.WindowType.WindowTitleHint | Qt.WindowType.CustomizeWindowHint)
@@ -3398,8 +3475,22 @@ class App(QWidget):
             self.mouse_press_timer.stop()
         exit()
 
+# add,Brian,2 June 2024
+def printHeader():
+    print('******************************')
+    print('******************************')
+    print(APP_NAME)
+    print('Version:: %s' %(sVersion))
+    print('******************************')
+    print('******************************')
+
 
 if __name__ == "__main__":
+
+    
+
+    # print App header
+    printHeader()
 
     # check if APP_DATA_DIR exists, if not create it
     if not os.path.exists(APP_DATA_DIR):
@@ -3409,13 +3500,14 @@ if __name__ == "__main__":
     if not os.path.exists(APP_DATA_DIR+'/log'):
         # Create the folder
         os.makedirs(APP_DATA_DIR+'/log')
-        print("log folder created successfully.")
+        #print("log folder created successfully.")
     else:
-        print("log folder already exists.")
+        #print("log folder already exists.")
+        pass
 
     # initialize logger
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    dataLogger = DataLogger(log_interval=1, file_path="log/%s_sys.log" %(timestamp))  # Specify the data file path
+    dataLogger = DataLogger(log_interval=1, file_path="%s/log/%s_sys.log" %(APP_DATA_DIR,timestamp))  # Specify the data file path
     dataLogger.start_logging()
     dataLogger.add_data('logger started...')
 
@@ -3425,6 +3517,13 @@ if __name__ == "__main__":
     check_folder_existence(APP_DATA_DIR+'\\'+VIDEO_SAVE_DIRECTORY+VIDEO_DATE)
     check_folder_existence(APP_DATA_DIR+'\\'+AUDIO_PATH+"\\"+VIDEO_DATE)
     check_folder_existence(APP_DATA_DIR+'\\'+OUTPUT_PATH+"\\"+VIDEO_DATE)
+
+
+    import sounddevice as sd
+    import soundfile as sf
+    import wavio  #pip3 install wavio
+    # added[for d435]
+    import pyrealsense2 as rs
 
     # os.environ["QT_ENABLE_HIGHDPI_SCALING"]   = "2"
     # os.environ["QT_AUTO_SCREEN_SCALE_FACTOR"] = "0.5"
