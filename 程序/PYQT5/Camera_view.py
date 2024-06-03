@@ -1625,8 +1625,10 @@ class App(QWidget):
 
         # add[initialize fpgaMode as well]
         self.fpgaMode = FPGA_MODE.NORMAL
-        # add,Brian,1 June 2024bm
+        # add,Brian,1 June 2024
         self.bm_on_interval = 5000 # default to be 5000ms
+        # add,Brian,3 June 2024
+        self.prevMicGain    = 0    
 
         self.adminRole=self.configParams['adminRole'] # Add[if adminRole is True, will can show more features],Brian,05 April 2024
         self.toUseYAML=self.configParams['fourMics']  # true load mic locs from yaml file (for 4 mics case)
@@ -2241,7 +2243,9 @@ class App(QWidget):
         # get handle of tbx_targetPos
         theWidget = [textbox for textbox in self.test_page_widget.findChildren(QLineEdit) if textbox.objectName()=='tbx_micGain']
         if len(theWidget)>0:
-            theWidget[0].setText(str(value))    
+            theWidget[0].setText(str(value))
+            # add[update self.micGain as well],Brian,3 June 2024
+            self.micGain = value    
 
     def setTargetPos(self,point):
         
@@ -2505,6 +2509,8 @@ class App(QWidget):
 
         # load test_setting.yaml, Jason, 3 Jun 2024
         self.testSetting = self.tryLoadTestSetting(APP_DATA_DIR+'/settings.yaml')
+        # add[update self.prevMicGain from self.testSetting at start up],Brian,3 June 2024
+        self.prevMicGain = int(self.testSetting['tbx_micGain'])
         if DEBUG_LEVEL >= 3:
             print(self.testSetting)
 
@@ -3393,6 +3399,9 @@ class App(QWidget):
                     self.send_packet_mode56_timer.start(5000)
             elif self.fpgaMode == FPGA_MODE.BM_OFF:
                 self.send_packet_mode56_timer.start(1000)
+            elif self.fpgaMode == FPGA_MODE.SWITCH_MIC:
+                self.send_packet_mode56_timer.start(1000)
+
 
         SENDING_PACKET = False
 
@@ -3417,13 +3426,19 @@ class App(QWidget):
             if TARGET_POS_UPDATED and self.fpgaMode != FPGA_MODE.NORMAL:
                 # add[start with BM_ON mode always]
                 if not SENDING_PACKET_MODE5_MODE6:
-                    self.fpgaMode=FPGA_MODE.BM_ON
+                    if self.micGain != self.prevMicGain:
+                        self.fpgaMode=FPGA_MODE.SWITCH_MIC
+                        self.prevMicGain=self.micGain
+                    else:
+                        self.fpgaMode=FPGA_MODE.BM_ON
                     SENDING_PACKET_MODE5_MODE6 = True
                 else:
                     if self.fpgaMode == FPGA_MODE.BM_ON:
                         self.fpgaMode = FPGA_MODE.BM_OFF
                     elif self.fpgaMode == FPGA_MODE.BM_OFF:
                         self.fpgaMode = FPGA_MODE.MC_ON
+                    elif self.fpgaMode == FPGA_MODE.SWITCH_MIC:
+                        self.fpgaMode = FPGA_MODE.BM_ON
 
             self.thread_send_packet = QThread()
             self.thread_send_packet.run = self.sendPacket_noUIUpdate
