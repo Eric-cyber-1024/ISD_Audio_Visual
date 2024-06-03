@@ -73,7 +73,7 @@ COMBINE_VIDEO = True # Add,Brian,31 May 2024
 APP_NAME = "ISD Mic Array Control Panel"
 APP_DATA_DIR = os.path.join(os.path.expandvars('%APPDATA%'), APP_NAME)
 
-sVersion='1.0.0'
+sVersion='1.0.1'
 
 
 # Add,Brian,31 May 2024
@@ -1895,6 +1895,11 @@ class App(QWidget):
         self.stacked_widget.addWidget(self.test_page_widget)
         self.stacked_widget.setCurrentIndex(0) 
 
+
+        # add,Brian,4 June 2024
+        self.setMicGainValue(self.prevMicGain)
+
+
         self.layout = QVBoxLayout()
         self.layout.addWidget(self.stacked_widget)
         # revised[zero margins],Brian, 1 April 2024
@@ -2511,8 +2516,11 @@ class App(QWidget):
         self.testSetting = self.tryLoadTestSetting(APP_DATA_DIR+'/settings.yaml')
         # add[update self.prevMicGain from self.testSetting at start up],Brian,3 June 2024
         self.prevMicGain = int(self.testSetting['tbx_micGain'])
+        
         if DEBUG_LEVEL >= 3:
             print(self.testSetting)
+
+        
 
         widget = QWidget()
         outer_layout = QVBoxLayout()
@@ -2613,7 +2621,7 @@ class App(QWidget):
         widget.setLayout(outer_layout)
 
         
-
+        
 
         return widget
     
