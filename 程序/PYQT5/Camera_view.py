@@ -1538,15 +1538,33 @@ class AudioThread(QThread):
                     file.close()
                 
             # Add noisereduce, Jason, 31 May 2024
+            # it might take around 7 secs to import noisereduce and scipy the first time!!
+            
+            if DEBUG_LEVEL>=3:
+                start_time = time.time()
+            
             import noisereduce as nr
             from scipy.io import wavfile
+
+            if DEBUG_LEVEL>=3:
+                end_time   = time.time()
+
+            if DEBUG_LEVEL>=3:
+                print(f"time lapsed: {end_time - start_time} seconds")
 
             self.sleep(2)
             if DEBUG_LEVEL>=3:
                 print('reading %s' %(audio_name))
+
+            if DEBUG_LEVEL>=3:
+                start_time = time.time()
             rate, data = wavfile.read(audio_name)
             if DEBUG_LEVEL>=3:
+                end_time   = time.time()
+
+            if DEBUG_LEVEL>=3:
                 print('noise reducing')
+                print(f"time lapsed: {end_time - start_time} seconds")
 
             
             reduced_noise = nr.reduce_noise(y = data, sr=rate, prop_decrease=0.97)
@@ -3556,11 +3574,37 @@ class App(QWidget):
         # self.audio_processing_dialog.setMaximumWidth(400)
 
         layout = QVBoxLayout()
-        message = QLabel('Processing Audio, Please Wait for a moment')
-        message.setFont(Label_Font)
-        layout.addWidget(message)
+        self.audio_processing_dialog_label = QLabel('Processing Audio, Please Wait for a moment')
+        self.audio_processing_dialog_label.setFont(Label_Font)
+        layout.addWidget(self.audio_processing_dialog_label)
+
+
+
         self.audio_processing_dialog.setLayout(layout)
+
+        # # Create a timer to update the label text
+        # self.audio_processing_timer = QTimer(self)
+        # self.audio_processing_timer.timeout.connect(self.update_audio_processing_label)
+        # self.audio_processing_timer.start(500)  # Update the label every 500 milliseconds (0.5 seconds)
+
         self.audio_processing_dialog.exec_()
+
+        
+    # add,Brian,3 June 2024 
+    @pyqtSlot()
+    def update_audio_processing_label(self):
+        # Update the label text to indicate the processing status
+        text = self.audio_processing_dialog_label.text()
+        if text == "Processing |":
+            self.audio_processing_dialog_label.setText("Processing \\")
+        elif text == "Processing \\":
+            self.audio_processing_dialog_label.setText("Processing --")
+        elif text == "Processing --":
+            self.audio_processing_dialog_label.setText("Processing /")
+        else:
+            self.audio_processing_dialog_label.setText("Processing |")
+
+
 
     # add[messagebox to show that recording ended without combine],Brian,31 May 2024
     @pyqtSlot()
