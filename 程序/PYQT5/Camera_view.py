@@ -94,10 +94,13 @@ def config_path(relative_path):
     
     return os.path.join(base_path, relative_path)
 
+# revised[for building .exe without --onefile]
 def resource_path(relative_path):
     try:
         base_path = sys._MEIPASS
+        # base_path = os.path.abspath("./res")
     except Exception:
+        # base_path = sys._MEIPASS
         base_path = os.path.abspath("./res")
 
     return os.path.join(base_path, relative_path)
@@ -766,16 +769,16 @@ class d435(QThread):
                     # 0.54,0.49,3.11 (0.37,0.445,3.03)
                     # 1.85,0.87,3.87 (1.66,0.665,3.15)
 
-                    x,y = self.correctXY(x,y,z)
+                    # x,y = self.correctXY(x,y,z)
 
-                    correctionRatio = self.getCorrectionRatio(z)
-                    x = correctionRatio*x
-                    y = correctionRatio*y
-                    z = correctionRatio*z
+                    # correctionRatio = self.getCorrectionRatio(z)
+                    # x = correctionRatio*x
+                    # y = correctionRatio*y
+                    # z = correctionRatio*z
                     
-                    self.point[0]=x
-                    self.point[1]=y
-                    self.point[2]=z
+                    # self.point[0]=x
+                    # self.point[1]=y
+                    # self.point[2]=z
                 
                 if DEBUG_LEVEL==4:
                     print(self.i,self.j,depthPixel,self.point,depth)
@@ -1571,7 +1574,7 @@ class App(QWidget):
         DEBUG = self.configParams['debug']
         DEBUG_LEVEL = self.configParams['debugLevel']
         COMBINE_VIDEO = self.configParams['combineVideo']
-        if DEBUG_LEVEL == 3:
+        if DEBUG_LEVEL >= 3:
             print(self.configParams)
         
 
@@ -1983,6 +1986,9 @@ class App(QWidget):
                 self.video_thread.start()
 
                 self.logger = CustomProgressBarLogger()
+
+                # send FPGA_MODE.NORMAL, Jason, 3 Jun 2024
+                self.send_3d_point()
             else:
                 raise Exception('exit from init')
 
@@ -2042,6 +2048,48 @@ class App(QWidget):
         message_box.exec_()
         app.quit()
         
+
+    # add load test setting, Jason, 3 Jun 2024
+    def tryLoadTestSetting(self, settingFileName='test_setting.yaml'):
+        '''
+        check if test_setting.yaml exists, if yes, load config params from it, else set default values manually
+
+        '''
+
+        if os.path.exists(settingFileName):
+            with open(settingFileName, 'r') as file:
+                testSetting = yaml.safe_load(file)
+                return testSetting
+        else:
+            self.testSetting = {
+                'tbx_hostIP': '192.168.1.40',
+                'tbx_hostPort': '5004',
+                'cbx_mode': '0: normal',
+                'cbx_micNum': 'M01',
+                'tbx_micGain': '60',
+                'tbx_micDisable': '30',
+                'cbx_setTest': '9: PS_enMC-0,PS_enBM-0,FFTgain: 5, MIC8-data_bm_n, MIC9-data_fbf_d_MC',
+                'tbx_denOutSel': '0',
+                'tbx_mcBetaSel': '2',
+                'tbx_mcKSel': '0',
+                'tbx_en_BM_MC_ctrl': '1',
+                'tbx_targetPos': '0,0,0',
+                'tbx_xyzOffsets': '0,-0.1,0',
+                'tbx_bm_uplimit_h0': '0x00040122',
+                'tbx_bm_uplimit_h1': '0x0019A280',
+                'tbx_bm_uplimit_h2': '0x006D1400',
+                'tbx_bm_uplimit_h3': '0x00180244',
+                'tbx_bm_alpha_sel': '0',
+                'tbx_bm_on_interval': '5000',
+                'tbx_mc_K_set': '0x00036000',
+                'tbx_fourMics': '1',
+            }
+        
+            # create the config.yaml with the default settings
+            with open(settingFileName, 'w') as outfile:
+                yaml.dump(self.testSetting, outfile, default_flow_style=False)
+            return self.testSetting
+
     def tryLoadConfig(self):
         global APP_NAME, APP_DATA_DIR
         
@@ -2279,9 +2327,10 @@ class App(QWidget):
                                     Qt.AlignHCenter)
         self.setting_page.addWidget(self.checkbox_full, 3, 4, 1, 1,
                                     Qt.AlignHCenter)
-
-        self.setting_page.addWidget(self.ApplyButton, 4, 3, 1, 1,
-                                    Qt.AlignHCenter)
+        
+        # revised[remove apply button], Jason, 3 Jun 2024
+        # self.setting_page.addWidget(self.ApplyButton, 4, 3, 1, 1,
+        #                             Qt.AlignHCenter)
         self.setting_page.addWidget(self.back_button, 4, 4, 1, 1,
                                     Qt.AlignHCenter)
         
@@ -2358,6 +2407,7 @@ class App(QWidget):
 
         retuns a QWidget
         '''
+        global APP_DATA_DIR
 
         modes = [
             '0: normal', 
@@ -2387,6 +2437,7 @@ class App(QWidget):
             '14: PS_enMC-0,PS_enBM-0,FFTgain: 5, MIC8-data_ym_judge, MIC9-data_bm_0'
         ]
 
+        # revised[change default value], Jason, 3 Jun 2024
         name_dict = {
             'lbl_hostIP': {'text':'Host IP:','row':1,'column':0,'row_span':1,'col_span':1},
             'tbx_hostIP': {'text':'192.168.1.40','row':1,'column':1,'row_span':1,'col_span':1},
@@ -2397,19 +2448,19 @@ class App(QWidget):
             'lbl_micNum': {'text':'mic#','row':2,'column':2,'row_span':1,'col_span':1},
             'cbx_micNum': {'items':self.micNames,'row':2,'column':3,'row_span':1,'col_span':1},
             'lbl_micGain': {'text':'mic gain','row':3,'column':0,'row_span':1,'col_span':1},
-            'tbx_micGain': {'text':'30','row':3,'column':1,'row_span':1,'col_span':1},
+            'tbx_micGain': {'text':'60','row':3,'column':1,'row_span':1,'col_span':1},
             'lbl_micDisable':{'text':'mic disable','row':3,'column':2,'row_span':1,'col_span':1},
-            'tbx_micDisable':{'text':'30','row':3,'column':3,'row_span':1,'col_span':1},
+            'tbx_micDisable':{'text':'16','row':3,'column':3,'row_span':1,'col_span':1},
             'lbl_setTest': {'text':'set Test','row':4,'column':0,'row_span':1,'col_span':1},
             'cbx_setTest': {'items':setTests,'row':4,'column':1,'row_span':1,'col_span':1},
             'lbl_denOutSel':{'text':'den_out_sel','row':5,'column':0,'row_span':1,'col_span':1},
-            'tbx_denOutSel':{'text':'8','row':5,'column':1,'row_span':1,'col_span':1},
+            'tbx_denOutSel':{'text':'0','row':5,'column':1,'row_span':1,'col_span':1},
             'lbl_mcBetaSel':{'text':'mc_beta_sel','row':5,'column':2,'row_span':1,'col_span':1},
-            'tbx_mcBetaSel':{'text':'4','row':5,'column':3,'row_span':1,'col_span':1},
+            'tbx_mcBetaSel':{'text':'3','row':5,'column':3,'row_span':1,'col_span':1},
             'lbl_mcKSel':{'text':'mc_K_sel','row':6,'column':0,'row_span':1,'col_span':1},
-            'tbx_mcKSel':{'text':'1','row':6,'column':1,'row_span':1,'col_span':1},
+            'tbx_mcKSel':{'text':'0','row':6,'column':1,'row_span':1,'col_span':1},
             'lbl_en_BM_MC_ctrl':{'text':'en_BM_MC_ctrl','row':6,'column':2,'row_span':1,'col_span':1},
-            'tbx_en_BM_MC_ctrl':{'text':'3','row':6,'column':3,'row_span':1,'col_span':1},
+            'tbx_en_BM_MC_ctrl':{'text':'1','row':6,'column':3,'row_span':1,'col_span':1},
             'lbl_targetPos':{'text':'target pos','row':9,'column':0,'row_span':1,'col_span':1},
             'tbx_targetPos':{'text':'0,0,0','row':9,'column':1,'row_span':1,'col_span':1},
             'lbl_xyzOffsets':{'text':'x,y,z Offsets','row':10,'column':0,'row_span':1,'col_span':1},
@@ -2433,6 +2484,11 @@ class App(QWidget):
             'lbl_fourMics':{'text':'4 Mics','row':10,'column':3,'row_span':1,'col_span':1},
             'tbx_fourMics':{'text':'1' if self.toUseYAML else '0','row':10,'column':4,'row_span':1,'col_span':1},
         }
+
+        # load test_setting.yaml, Jason, 3 Jun 2024
+        self.testSetting = self.tryLoadTestSetting(APP_DATA_DIR+'/settings.yaml')
+        if DEBUG_LEVEL >= 3:
+            print(self.testSetting)
 
         widget = QWidget()
         outer_layout = QVBoxLayout()
@@ -2463,7 +2519,8 @@ class App(QWidget):
                 )
             elif name.startswith("tbx_"):
                 line_edit = QLineEdit()
-                line_edit.setText(properties['text'])
+                # line_edit.setText(properties['text'])
+                line_edit.setText(self.testSetting[name])
                 line_edit.setObjectName(name)
                 line_edit.setStyleSheet(LINEEDIT_STYLE_TEST_PAGE)
                 layout.addWidget(
@@ -2478,6 +2535,7 @@ class App(QWidget):
                 combo_box.setObjectName(name)
                 combo_box.setStyleSheet(COMBO_STYLE_TEST_PAGE)
                 combo_box.addItems(properties["items"])  # Add items to the combobox
+                combo_box.setCurrentText(self.testSetting[name])
                 layout.addWidget(
                     combo_box,
                     properties["row"],
@@ -2541,8 +2599,10 @@ class App(QWidget):
         return f"params,{self.hostIP}, {self.hostPort}, {self.mode},{self.micIndx},{self.micGain},{self.micDisable},{self.setTest},{self.den_out_sel},{self.mc_beta_sel},{self.mc_K_sel},[{self.targetPos[0]},{self.targetPos[1]},{self.targetPos[2]}],[{self.offsets[0]},{self.offsets[1]},{self.offsets[2]}],{self.bm_alpha_sel},{'0x'+hex(self.mc_K_set).zfill(8)},{hex_string},{self.toUseYAML}"
 
     def printParams(self):
-        global dataLogger
-        # print(self.hostIP,self.hostPort,self.mode,self.micIndx,self.micGain,self.setTest,self.den_out_sel,self.mc_beta_sel,self.mc_K_sel,self.targetPos,self.offsets,self.toUseYAML)
+        global dataLogger, DEBUG_LEVEL
+
+        if DEBUG_LEVEL>=3:
+            print(self.hostIP,self.hostPort,self.mode,self.micIndx,self.micGain,self.setTest,self.den_out_sel,self.mc_beta_sel,self.mc_K_sel,self.targetPos,self.offsets,self.toUseYAML)
         # add[save to log as well],Brian,27 Mar 2024
         dataLogger.add_data(self.__str__())
 
@@ -3296,24 +3356,29 @@ class App(QWidget):
                 MOUSE_CLICKED = True
                 
 
-    # Added for 3d coordinates, Jason, 11 April 2024
+    # revised[add FPGA_MODE.NORMAL], Jason, 3 Jun 2024
     @pyqtSlot()
     def on_send_packed_finished(self):
         global SENDING_PACKET, SENDING_PACKET_MODE5_MODE6, DEBUG_LEVEL
         if DEBUG_LEVEL>=3:
             print('on_send_packed_finished')
-        if SENDING_PACKET_MODE5_MODE6 and self.fpgaMode != FPGA_MODE.MC_ON:
+        if self.fpgaMode == FPGA_MODE.NORMAL:
+            self.fpgaMode = FPGA_MODE.BM_ON
+        elif SENDING_PACKET_MODE5_MODE6 and self.fpgaMode != FPGA_MODE.MC_ON:
             self.send_packet_mode56_timer = QTimer()
             self.send_packet_mode56_timer.setSingleShot(True)
             self.send_packet_mode56_timer.timeout.connect(self.send_3d_point)
-            if self.bm_on_interval>0:
-                self.send_packet_mode56_timer.start(self.bm_on_interval)
-            else:
-                self.send_packet_mode56_timer.start(5000)
+            if self.fpgaMode == FPGA_MODE.BM_ON:
+                if self.bm_on_interval>0:
+                    self.send_packet_mode56_timer.start(self.bm_on_interval)
+                else:
+                    self.send_packet_mode56_timer.start(5000)
+            elif self.fpgaMode == FPGA_MODE.BM_OFF:
+                self.send_packet_mode56_timer.start(1000)
+
         SENDING_PACKET = False
 
-
-    # Added for 3d coordinates, Jason, 11 April 2024
+    # revised[add FPGA_MODE.NORMAL], Jason, 3 Jun 2024
     @pyqtSlot()
     def send_3d_point(self):
         global SENDING_PACKET, SENDING_PACKET_MODE5_MODE6, DEBUG_LEVEL, TARGET_POS_UPDATED
@@ -3327,26 +3392,28 @@ class App(QWidget):
             self.mouse_press_timer.setSingleShot(True)
             self.mouse_press_timer.timeout.connect(self.send_3d_point)
 
-        if not SENDING_PACKET and TARGET_POS_UPDATED:
+        if not SENDING_PACKET:
+         
             SENDING_PACKET = True
             
-            # add[start with BM_ON mode always]
-            if not SENDING_PACKET_MODE5_MODE6:
-                self.fpgaMode=FPGA_MODE.BM_ON
-                SENDING_PACKET_MODE5_MODE6 = True
-            else:
-                if self.fpgaMode == FPGA_MODE.BM_ON:
-                    self.fpgaMode = FPGA_MODE.BM_OFF
-                elif self.fpgaMode == FPGA_MODE.BM_OFF:
-                    self.fpgaMode = FPGA_MODE.MC_ON
-                    
+            if TARGET_POS_UPDATED and self.fpgaMode != FPGA_MODE.NORMAL:
+                # add[start with BM_ON mode always]
+                if not SENDING_PACKET_MODE5_MODE6:
+                    self.fpgaMode=FPGA_MODE.BM_ON
+                    SENDING_PACKET_MODE5_MODE6 = True
+                else:
+                    if self.fpgaMode == FPGA_MODE.BM_ON:
+                        self.fpgaMode = FPGA_MODE.BM_OFF
+                    elif self.fpgaMode == FPGA_MODE.BM_OFF:
+                        self.fpgaMode = FPGA_MODE.MC_ON
+
             self.thread_send_packet = QThread()
             self.thread_send_packet.run = self.sendPacket_noUIUpdate
             self.thread_send_packet.finished.connect(self.on_send_packed_finished)
             if DEBUG_LEVEL>=3:
                 print("self.targetPos: ", self.targetPos)
                 print('Start sending 3D point packet - mode ', self.fpgaMode)
-            self.thread_send_packet.start()
+            self.thread_send_packet.start()       
             
         else:
             if DEBUG_LEVEL>=3:
