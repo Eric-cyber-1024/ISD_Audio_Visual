@@ -1540,38 +1540,38 @@ class AudioThread(QThread):
             # Add noisereduce, Jason, 31 May 2024
             # it might take around 7 secs to import noisereduce and scipy the first time!!
             
-            if DEBUG_LEVEL>=3:
-                start_time = time.time()
+            # if DEBUG_LEVEL>=3:
+            #     start_time = time.time()
             
-            import noisereduce as nr
-            from scipy.io import wavfile
+            # import noisereduce as nr
+            # from scipy.io import wavfile
 
-            if DEBUG_LEVEL>=3:
-                end_time   = time.time()
+            # if DEBUG_LEVEL>=3:
+            #     end_time   = time.time()
 
-            if DEBUG_LEVEL>=3:
-                print(f"time lapsed: {end_time - start_time} seconds")
+            # if DEBUG_LEVEL>=3:
+            #     print(f"time lapsed: {end_time - start_time} seconds")
 
-            self.sleep(2)
-            if DEBUG_LEVEL>=3:
-                print('reading %s' %(audio_name))
+            # self.sleep(2)
+            # if DEBUG_LEVEL>=3:
+            #     print('reading %s' %(audio_name))
 
-            if DEBUG_LEVEL>=3:
-                start_time = time.time()
-            rate, data = wavfile.read(audio_name)
-            if DEBUG_LEVEL>=3:
-                end_time   = time.time()
+            # if DEBUG_LEVEL>=3:
+            #     start_time = time.time()
+            # rate, data = wavfile.read(audio_name)
+            # if DEBUG_LEVEL>=3:
+            #     end_time   = time.time()
 
-            if DEBUG_LEVEL>=3:
-                print('noise reducing')
-                print(f"time lapsed: {end_time - start_time} seconds")
+            # if DEBUG_LEVEL>=3:
+            #     print('noise reducing')
+            #     print(f"time lapsed: {end_time - start_time} seconds")
 
             
-            reduced_noise = nr.reduce_noise(y = data, sr=rate, prop_decrease=0.97)
+            # reduced_noise = nr.reduce_noise(y = data, sr=rate, prop_decrease=0.97)
+            # # wavfile.write(audio_name,data=reduced_noise,rate=rate)
             # wavfile.write(audio_name,data=reduced_noise,rate=rate)
-            wavfile.write(audio_name,data=reduced_noise,rate=rate)
-            if DEBUG_LEVEL >=3:
-                print('Generated noise reduced wav file')
+            # if DEBUG_LEVEL >=3:
+            #     print('Generated noise reduced wav file')
 
             # emit finished signal back to App object
             self.finished.emit()
