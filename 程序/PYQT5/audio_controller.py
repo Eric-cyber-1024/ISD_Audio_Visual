@@ -241,9 +241,9 @@ class AudioController:
         self.selectedDevice = cast(interface, POINTER(IAudioEndpointVolume))
 
         
-        print("volume.GetMute(): %s" % self.selectedDevice.GetMute())
-        print("volume.GetMasterVolumeLevel(): %s" % self.selectedDevice.GetMasterVolumeLevel())
-        print("volume.GetVolumeRange(): (%s, %s, %s)" % self.selectedDevice.GetVolumeRange())
+        # print("volume.GetMute(): %s" % self.selectedDevice.GetMute())
+        # print("volume.GetMasterVolumeLevel(): %s" % self.selectedDevice.GetMasterVolumeLevel())
+        # print("volume.GetVolumeRange(): (%s, %s, %s)" % self.selectedDevice.GetVolumeRange())
 
         # get device dB range
         self.minDB,self.maxDB,_ = self.selectedDevice.GetVolumeRange()
@@ -297,7 +297,7 @@ class AudioController:
         for session in sessions:
             interface = session.SimpleAudioVolume
             if session.Process and session.Process.name() == self.process_name:
-                print("Volume:", interface.GetMasterVolume(),self.process_name)  # debug
+                # print("Volume:", interface.GetMasterVolume(),self.process_name)  # debug
                 return interface.GetMasterVolume()
 
     def set_volume(self, volumeVal):

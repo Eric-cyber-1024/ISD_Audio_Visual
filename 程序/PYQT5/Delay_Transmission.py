@@ -68,7 +68,7 @@ def BintoINT(Binary):
     return result_hex
 
 
-
+# revise[return errorMsg as well],Brian,2 June 2024
 def send_and_receive_packet(host, port, packet, timeout=1):
     # Create a socket object
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -86,13 +86,12 @@ def send_and_receive_packet(host, port, packet, timeout=1):
 
         # Check if the received data matches the expected return packet
         if data == b'copy':
-            return True
+            return True,'got response from FPGA'
         else:
-            return False
+            return False,'failed to get response from FPGA'
 
-    except socket.timeout:
-        print('socket timeout!!')
-        return False
+    except Exception as e: #socket.timeout:
+        return False, repr(e)
 
     finally:
         # Close the socket

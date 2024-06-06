@@ -11,14 +11,18 @@ import cv2
 
 from Style import *
 import numpy as np
-import sounddevice as sd
-import soundfile as sf
-import os
-import wavio  #pip3 install wavio
-from datetime import datetime
 
+import os
 import time
 from sys import exit
+from datetime import datetime
+
+# import sounddevice as sd
+# import soundfile as sf
+# import wavio  #pip3 install wavio
+# # added[for d435]
+# import pyrealsense2 as rs
+
 
 from Widget_library import *
 from Event import *
@@ -29,12 +33,12 @@ from utility import audio_dev_to_str, networkController, rescale_frame
 from data_logger import DataLogger
 from test_delay_cal import *
 
-# added[for d435]
-import pyrealsense2 as rs
+
 
 from progress_bar import CustomProgressBarLogger
 from utils import ARUCO_DICT
 import struct # Add,Brian,31 May 2024
+
 
 # from pywinauto import Desktop
 current_datetime = datetime.now()
@@ -58,13 +62,18 @@ DEBUG = False
 ALIGNED_FRAMES = False
 FILTERED_FRAMES = False
 SENDING_PACKET = False
+SENDING_PACKET_MODE5_MODE6 = False
 START_SEND_PACKET = True
 MOUSE_CLICKED = False
 TARGET_POS_UPDATED = False
 DEBUG_LEVEL   = 0 # Add,Brian,30 May 2024
 COMBINE_VIDEO = True # Add,Brian,31 May 2024
 
-sVersion='0.1.10c'
+# add,Brian,2 June 2024
+APP_NAME = "ISD Mic Array Control Panel"
+APP_DATA_DIR = os.path.join(os.path.expandvars('%APPDATA%'), APP_NAME)
+
+sVersion='1.0.1'
 
 
 # Add,Brian,31 May 2024
@@ -85,10 +94,13 @@ def config_path(relative_path):
     
     return os.path.join(base_path, relative_path)
 
+# revised[for building .exe without --onefile]
 def resource_path(relative_path):
     try:
         base_path = sys._MEIPASS
+        # base_path = os.path.abspath("./res")
     except Exception:
+        # base_path = sys._MEIPASS
         base_path = os.path.abspath("./res")
 
     return os.path.join(base_path, relative_path)
@@ -243,8 +255,9 @@ class MovingAverageCalculator:
         self.average = 0.0
 
     def reset_calculation(self):
-        global TARGET_POS_UPDATED
-        print('reset ma')
+        global TARGET_POS_UPDATED,DEBUG_LEVEL
+        if DEBUG_LEVEL>=3:
+            print('reset ma')
         self.mutex.lock()
         TARGET_POS_UPDATED = False
         self.window = []
@@ -263,6 +276,7 @@ class MovingAverageCalculator:
 
     # Add lock value, Jason, 10 April 2024
     def calculate_moving_average_lock(self, x):
+        global DEBUG_LEVEL
         '''
         Save the averaged depth value as locked_value if 
         the variance of the data in the window is smaller than
@@ -271,7 +285,8 @@ class MovingAverageCalculator:
         self.mutex.lock()
         self.window.append(x)
         if len(self.window) == 1:
-            print('x: ', x)
+            if DEBUG_LEVEL>=3:
+                print('x: ', x)
             if x < 5.0:
                 self.lock_var_range = 0.01
             else:
@@ -413,6 +428,9 @@ class d435(QThread):
     '''
     class to get access to d435 data
     '''
+
+    #import numpy as np
+
     frame_ready = pyqtSignal(tuple)
     getFrame_err= pyqtSignal(str)
 
@@ -530,6 +548,8 @@ class d435(QThread):
         get color frame intrinsics in Opencv Format
 
         '''
+        global DEBUG_LEVEL
+
         # get self.k, self.d from self.d435 color intrinsic matrix
         intrinsics = self.colorIntrinsics
 
@@ -542,13 +562,16 @@ class d435(QThread):
         distortion_coeffs = [[intrinsics.coeffs[0], intrinsics.coeffs[1], intrinsics.coeffs[4],
                      intrinsics.coeffs[3], intrinsics.coeffs[2]]]
         
-        print(distortion_coeffs)
+        if DEBUG_LEVEL>=3:
+            print(distortion_coeffs)
 
         camera_matrix = np.array([[fx, 0, cx],
                         [0, fy, cy],
                         [0, 0, 1]])
         dist_coeffs = np.array(distortion_coeffs)
-        print(camera_matrix,dist_coeffs)
+
+        if DEBUG_LEVEL>=3:
+            print(camera_matrix,dist_coeffs)
 
         return camera_matrix,dist_coeffs
 
@@ -589,6 +612,50 @@ class d435(QThread):
 
         return False, self.q_frame_output.get()
     
+
+    # add,Brian,2 June 2024
+    def estimatePoseFarField(self,depthPixel):
+        '''
+        estimate 3d pose by using far-field approximation
+
+        warning!! currently hardcode to be 0,0,4
+        '''
+
+        return [0.,0.,4.]
+
+    # add,Brian,2 June 2024
+    def getCorrectionRatio(self,z):
+        '''
+        estimate the correction ratio based upon estimated depth
+
+        z 0-2m -- 1.01
+        z 2-3m -- 1.03
+        z 4    -- 1.1
+
+        '''
+        ratio = 0.029*(z**2)-0.129*z+1.152
+
+        return 1/ratio
+    
+    def correctXY(self,x,y,z):
+        '''
+        correct estimated x, y
+
+        X' = (X - bx Z )/ax
+        Y' = (Y - by Z )/ay
+
+        warning!! the following coefficients are emprical and depth camera dependent
+
+        '''
+        ax=0.7531
+        bx=0.0816
+        ay=1.0101
+        by=0.0101
+
+        return (x-bx*z)/ax , (y-by*z)/ay
+
+
+
 
     # add,Brian,27 May 2024
     def remap(self,x,y,z,err_max=0.3):
@@ -677,25 +744,48 @@ class d435(QThread):
 
             # print('i j: ', self.i, self.j)
             # print('depth pixel: ', depthPixel)
-
+            
             if depthPixel[0]>=0 and depthPixel[1]>=0:
                 depth = depthFrame.get_distance(int(depthPixel[0]),int(depthPixel[1]))
                 depth = self.ma.calculate_moving_average_lock(depth)
-
                 # project depth pixel to 3D point
                 # x is right+, y is down+, z is forward+
                 self.point = rs.rs2_deproject_pixel_to_point(self.depthIntrinsics,[int(depthPixel[0]), int(depthPixel[1])], depth)
 
-                x = self.point[0]
-                y = self.point[1]
-                z = self.point[2]
-                # add [map to 0.37,0.345,3.03 if x,y,z is close to 0.54,0.49,3.15],Brian,27 May 2024
-                x,y,z = self.remap(x,y,z)
-                self.point[0]=x
-                self.point[1]=y
-                self.point[2]=z
+                if self.point[2]==0.0 and self.point[0]==0.0 and self.point[1]==0.0:
+                    # simply hardcode at this moment, may try using far-field approximation here
+                    self.point=self.estimatePoseFarField(depthPixel)
+                else:
+                    x = self.point[0]
+                    y = self.point[1]
+                    z = self.point[2]
+                    # # add [map to 0.37,0.345,3.03 if x,y,z is close to 0.54,0.49,3.15],Brian,27 May 2024
+                    # x,y,z = self.remap(x,y,z)
+                    # self.point[0]=x
+                    # self.point[1]=y
+                    # self.point[2]=z
+
+                    # Add[try to correct x,y,z to improve accuracy],Brian,2 June 2024
+                    # test data:
+                    # original xyz:
+                    # 0.54,0.49,3.11 (0.37,0.445,3.03)
+                    # 1.85,0.87,3.87 (1.66,0.665,3.15)
+
+                    # x,y = self.correctXY(x,y,z)
+
+                    # correctionRatio = self.getCorrectionRatio(z)
+                    # x = correctionRatio*x
+                    # y = correctionRatio*y
+                    # z = correctionRatio*z
+                    
+                    # self.point[0]=x
+                    # self.point[1]=y
+                    # self.point[2]=z
+                
                 if DEBUG_LEVEL==4:
                     print(self.i,self.j,depthPixel,self.point,depth)
+
+            
 
             # update self.iPrev,jPrev
             self.iPrev = self.i
@@ -1300,9 +1390,9 @@ class VideoSavingThread(QThread):
         current_datetime = datetime.now()
         formatted_datetime = current_datetime.strftime(
             "[%m-%d-%y]%H_%M_%S")
-        self.video_name = CURRENT_PATH + VIDEO_SAVE_DIRECTORY + VIDEO_DATE + "\\" + str(
+        self.video_name = APP_DATA_DIR+'/' + VIDEO_SAVE_DIRECTORY + VIDEO_DATE + "\\" + str(
             formatted_datetime) + '.avi'
-        self.output_path = CURRENT_PATH + OUTPUT_PATH + VIDEO_DATE + "\\" + str(
+        self.output_path = APP_DATA_DIR+'/' + OUTPUT_PATH + VIDEO_DATE + "\\" + str(
             formatted_datetime) + '.mp4'
         VIDEO_NAME = self.video_name
         OUTPUT_NAME = self.output_path
@@ -1396,7 +1486,7 @@ class VideoSavingThread(QThread):
 
 # Audio Thread
 class AudioThread(QThread):
-
+    finished = pyqtSignal()
     def __init__(self, input_device):
         super().__init__()
         self.sample_rate = 48000    # Hz
@@ -1431,7 +1521,7 @@ class AudioThread(QThread):
             formatted_datetime = current_datetime.strftime("[%m-%d-%y]%H_%M_%S")
             subtype = 'PCM_16'
             dtype = 'int16' 
-            audio_name = CURRENT_PATH + AUDIO_PATH + VIDEO_DATE + "\\" + str(formatted_datetime) + '.wav'
+            audio_name = APP_DATA_DIR+'/'+ AUDIO_PATH + VIDEO_DATE + "\\" + str(formatted_datetime) + '.wav'
             AUDIO_NAME = audio_name
 
             if DEBUG_LEVEL>=3:
@@ -1448,6 +1538,46 @@ class AudioThread(QThread):
                     if DEBUG_LEVEL>=3:
                         print('closing soundfile')
                     file.close()
+                
+            # Add noisereduce, Jason, 31 May 2024
+            # it might take around 7 secs to import noisereduce and scipy the first time!!
+            
+            # if DEBUG_LEVEL>=3:
+            #     start_time = time.time()
+            
+            # import noisereduce as nr
+            # from scipy.io import wavfile
+
+            # if DEBUG_LEVEL>=3:
+            #     end_time   = time.time()
+
+            # if DEBUG_LEVEL>=3:
+            #     print(f"time lapsed: {end_time - start_time} seconds")
+
+            # self.sleep(2)
+            # if DEBUG_LEVEL>=3:
+            #     print('reading %s' %(audio_name))
+
+            # if DEBUG_LEVEL>=3:
+            #     start_time = time.time()
+            # rate, data = wavfile.read(audio_name)
+            # if DEBUG_LEVEL>=3:
+            #     end_time   = time.time()
+
+            # if DEBUG_LEVEL>=3:
+            #     print('noise reducing')
+            #     print(f"time lapsed: {end_time - start_time} seconds")
+
+            
+            # reduced_noise = nr.reduce_noise(y = data, sr=rate, prop_decrease=0.97)
+            # # wavfile.write(audio_name,data=reduced_noise,rate=rate)
+            # wavfile.write(audio_name,data=reduced_noise,rate=rate)
+            # if DEBUG_LEVEL >=3:
+            #     print('Generated noise reduced wav file')
+
+            # emit finished signal back to App object
+            self.finished.emit()
+
 
 
 class App(QWidget):
@@ -1456,7 +1586,7 @@ class App(QWidget):
     CAM_DISPLAY_HEIGHT = 1080
 
     def __init__(self):
-        global DEBUG, DEBUG_LEVEL, COMBINE_VIDEO
+        global DEBUG, DEBUG_LEVEL, COMBINE_VIDEO, APP_DATA_DIR, APP_NAME
         super().__init__()
 
         # try to load configurations from yaml file (if the config.yaml exists)
@@ -1464,7 +1594,7 @@ class App(QWidget):
         DEBUG = self.configParams['debug']
         DEBUG_LEVEL = self.configParams['debugLevel']
         COMBINE_VIDEO = self.configParams['combineVideo']
-        if DEBUG_LEVEL == 3:
+        if DEBUG_LEVEL >= 3:
             print(self.configParams)
         
 
@@ -1472,7 +1602,7 @@ class App(QWidget):
             self.screen_number = 1
         else:
             self.screen_number = 0
-        self.setWindowTitle("ISD Mic Array Control Panel — v%s" %(sVersion))
+        self.setWindowTitle("%s — v%s" %(APP_NAME,sVersion))
         #self.setStyleSheet("background-color:gray")
 
         icon = QtGui.QIcon()
@@ -1492,8 +1622,15 @@ class App(QWidget):
         self.d435 = None 
         # add[have to initialize targetPos],Brian,31 May 2024
         self.targetPos = [0.,0.,0.]
+        # add[a temp copy of targetPos]
+        self.targetPosCopy = self.targetPos
+
         # add[initialize fpgaMode as well]
         self.fpgaMode = FPGA_MODE.NORMAL
+        # add,Brian,1 June 2024
+        self.bm_on_interval = 5000 # default to be 5000ms
+        # add,Brian,3 June 2024
+        self.prevMicGain    = 0    
 
         self.adminRole=self.configParams['adminRole'] # Add[if adminRole is True, will can show more features],Brian,05 April 2024
         self.toUseYAML=self.configParams['fourMics']  # true load mic locs from yaml file (for 4 mics case)
@@ -1760,6 +1897,11 @@ class App(QWidget):
         self.stacked_widget.addWidget(self.test_page_widget)
         self.stacked_widget.setCurrentIndex(0) 
 
+
+        # add,Brian,4 June 2024
+        self.setMicGainValue(self.prevMicGain)
+
+
         self.layout = QVBoxLayout()
         self.layout.addWidget(self.stacked_widget)
         # revised[zero margins],Brian, 1 April 2024
@@ -1829,7 +1971,7 @@ class App(QWidget):
 
                 # create audio controller for the output device
                 self.audio_outCtrl = AudioController(self.output_devid,'output','default')
-                self.audio_outCtrl.listAllSections()
+                # self.audio_outCtrl.listAllSections()
 
                 if DEBUG_LEVEL>=3:
                     print(self.audio_outCtrl.volume)
@@ -1850,9 +1992,11 @@ class App(QWidget):
                 # create the video capture thread
                 self.video_thread = VideoThread(self.selected_camera_index,self.selected_camera, App.CAM_DISPLAY_WIDTH, App.CAM_DISPLAY_HEIGHT, self.configParams['usePoseEstimation'])
                 self.audio_thread = AudioThread(self.input_device)
+                self.audio_thread.finished.connect(self.onAudioThreadFinished)
 
                 # send packet when depth locked, Jason, 16 April 2024
                 if hasattr(self.video_thread, 'd435'):
+                    # revise[connect to send_3d_point_noUIUpdate instead],Brian,1 June 2024
                     self.video_thread.depth_value_locked.connect(self.send_3d_point)
 
                 # connect its signal to the update_image slot
@@ -1869,6 +2013,9 @@ class App(QWidget):
                 self.video_thread.start()
 
                 self.logger = CustomProgressBarLogger()
+
+                # send FPGA_MODE.NORMAL, Jason, 3 Jun 2024
+                self.send_3d_point()
             else:
                 raise Exception('exit from init')
 
@@ -1877,8 +2024,48 @@ class App(QWidget):
         else:
             # print("Exit now...")
             raise Exception('exit from init')
+        
+    
+    # add,Brian,2 June 2024
+    @pyqtSlot()
+    def onAudioThreadFinished(self):
+        '''
+        slot for AudioThread Finished Signal
+        '''
+
+        
+
+        # should call for video combine here
+        if COMBINE_VIDEO:
+            # revised[combine video, audio],Jason,17 May 2024
+            self.combine_thread = VideoAudioThread(VIDEO_NAME,AUDIO_NAME,OUTPUT_NAME, self.logger)
+            self.combine_thread.start_writing.connect(self.show_progress_dialog)
+            self.combine_thread.start_writing.connect(self.video_thread.pause_thread)
+            if self.video_thread.d435:
+                self.combine_thread.start_writing.connect(self.video_thread.d435.pause_thread)
+            elif self.video_thread.cam:
+                self.combine_thread.start_writing.connect(self.video_thread.cam.pause_thread)
+            self.combine_thread.finished.connect(self.combine_thread_finished)
+            self.logger.signal_emitter.percentage_changed_signal.connect(self.update_progress_dialog_percentage)
+            self.logger.signal_emitter.text_changed_signal.connect(self.update_progress_dialog_text)
+            # disable combine, Jason, 20 May 2024
+            self.combine_thread.start()
+
+            # try to close the audio processing dialog box first
+            if hasattr(self, 'audio_processing_dialog') and self.audio_processing_dialog is not None:
+                self.audio_processing_dialog.accept()
+                self.audio_processing_dialog=None
+        else:
+            # try to close the audio processing dialog box first
+            if hasattr(self, 'audio_processing_dialog') and self.audio_processing_dialog is not None:
+                self.audio_processing_dialog.accept()
+                self.audio_processing_dialog=None
+            # simply pop up a message window to indicate that the recording process ended 
+            self.show_record_finished_dialog()
+
     
     # add,Brian,31 May 2024
+    @pyqtSlot(str)
     def handleSysError(self,sMsg):
         dataLogger.add_data('sys error:: %s' %(sMsg))
         message_box = QMessageBox()
@@ -1888,15 +2075,65 @@ class App(QWidget):
         message_box.exec_()
         app.quit()
         
+
+    # add load test setting, Jason, 3 Jun 2024
+    def tryLoadTestSetting(self, settingFileName='test_setting.yaml'):
+        '''
+        check if test_setting.yaml exists, if yes, load config params from it, else set default values manually
+
+        '''
+
+        if os.path.exists(settingFileName):
+            with open(settingFileName, 'r') as file:
+                testSetting = yaml.safe_load(file)
+                return testSetting
+        else:
+            self.testSetting = {
+                'tbx_hostIP': '192.168.1.40',
+                'tbx_hostPort': '5004',
+                'cbx_mode': '0: normal',
+                'cbx_micNum': 'M01',
+                'tbx_micGain': '60',
+                'tbx_micDisable': '30',
+                'cbx_setTest': '9: PS_enMC-0,PS_enBM-0,FFTgain: 5, MIC8-data_bm_n, MIC9-data_fbf_d_MC',
+                'tbx_denOutSel': '0',
+                'tbx_mcBetaSel': '2',
+                'tbx_mcKSel': '0',
+                'tbx_en_BM_MC_ctrl': '1',
+                'tbx_targetPos': '0,0,0',
+                'tbx_xyzOffsets': '0,-0.1,0',
+                'tbx_bm_uplimit_h0': '0x00040122',
+                'tbx_bm_uplimit_h1': '0x0019A280',
+                'tbx_bm_uplimit_h2': '0x006D1400',
+                'tbx_bm_uplimit_h3': '0x00180244',
+                'tbx_bm_alpha_sel': '0',
+                'tbx_bm_on_interval': '5000',
+                'tbx_mc_K_set': '0x00036000',
+                'tbx_fourMics': '1',
+            }
+        
+            # create the config.yaml with the default settings
+            with open(settingFileName, 'w') as outfile:
+                yaml.dump(self.testSetting, outfile, default_flow_style=False)
+            return self.testSetting
+
     def tryLoadConfig(self):
+        global APP_NAME, APP_DATA_DIR
         
         '''
         check if config.yaml exists, if yes, load config params from it, else set default values manually
 
         '''
-        configFileName = 'config.yaml'
+        
+        # revise [move to beginning of the app instead],Brian,2 June 2024
+        # # check if APP_DATA_DIR exists, if not create it
+        # if not os.path.exists(APP_DATA_DIR):
+        #     os.makedirs(APP_DATA_DIR)
+
+
+        configFileName = APP_DATA_DIR+'/config.yaml'
         # configFilePath = config_path(configFileName)
-        print('Config Path: ', configFileName)
+        # print('Config Path: ', configFileName)
         if os.path.exists(configFileName):
             with open(configFileName, 'r') as file:
                 configParams= yaml.safe_load(file)
@@ -1904,7 +2141,7 @@ class App(QWidget):
         else:
             # set up default values manually
             self.configParams = {
-                'debug': False,
+                'debug': True,
                 'fourMics': True,
                 'adminRole': False,
                 'showROI': True,
@@ -1912,6 +2149,10 @@ class App(QWidget):
                 'combineVideo': True,
                 'debugLevel':0
             }
+
+            # create the config.yaml with the default settings
+            with open(configFileName, 'w') as outfile:
+                yaml.dump(self.configParams, outfile, default_flow_style=False)
             return self.configParams
 
         
@@ -2009,7 +2250,9 @@ class App(QWidget):
         # get handle of tbx_targetPos
         theWidget = [textbox for textbox in self.test_page_widget.findChildren(QLineEdit) if textbox.objectName()=='tbx_micGain']
         if len(theWidget)>0:
-            theWidget[0].setText(str(value))    
+            theWidget[0].setText(str(value))
+            # add[update self.micGain as well],Brian,3 June 2024
+            self.micGain = value    
 
     def setTargetPos(self,point):
         
@@ -2115,9 +2358,10 @@ class App(QWidget):
                                     Qt.AlignHCenter)
         self.setting_page.addWidget(self.checkbox_full, 3, 4, 1, 1,
                                     Qt.AlignHCenter)
-
-        self.setting_page.addWidget(self.ApplyButton, 4, 3, 1, 1,
-                                    Qt.AlignHCenter)
+        
+        # revised[remove apply button], Jason, 3 Jun 2024
+        # self.setting_page.addWidget(self.ApplyButton, 4, 3, 1, 1,
+        #                             Qt.AlignHCenter)
         self.setting_page.addWidget(self.back_button, 4, 4, 1, 1,
                                     Qt.AlignHCenter)
         
@@ -2194,6 +2438,7 @@ class App(QWidget):
 
         retuns a QWidget
         '''
+        global APP_DATA_DIR
 
         modes = [
             '0: normal', 
@@ -2223,6 +2468,7 @@ class App(QWidget):
             '14: PS_enMC-0,PS_enBM-0,FFTgain: 5, MIC8-data_ym_judge, MIC9-data_bm_0'
         ]
 
+        # revised[change default value], Jason, 3 Jun 2024
         name_dict = {
             'lbl_hostIP': {'text':'Host IP:','row':1,'column':0,'row_span':1,'col_span':1},
             'tbx_hostIP': {'text':'192.168.1.40','row':1,'column':1,'row_span':1,'col_span':1},
@@ -2233,19 +2479,19 @@ class App(QWidget):
             'lbl_micNum': {'text':'mic#','row':2,'column':2,'row_span':1,'col_span':1},
             'cbx_micNum': {'items':self.micNames,'row':2,'column':3,'row_span':1,'col_span':1},
             'lbl_micGain': {'text':'mic gain','row':3,'column':0,'row_span':1,'col_span':1},
-            'tbx_micGain': {'text':'30','row':3,'column':1,'row_span':1,'col_span':1},
+            'tbx_micGain': {'text':'60','row':3,'column':1,'row_span':1,'col_span':1},
             'lbl_micDisable':{'text':'mic disable','row':3,'column':2,'row_span':1,'col_span':1},
-            'tbx_micDisable':{'text':'30','row':3,'column':3,'row_span':1,'col_span':1},
+            'tbx_micDisable':{'text':'16','row':3,'column':3,'row_span':1,'col_span':1},
             'lbl_setTest': {'text':'set Test','row':4,'column':0,'row_span':1,'col_span':1},
             'cbx_setTest': {'items':setTests,'row':4,'column':1,'row_span':1,'col_span':1},
             'lbl_denOutSel':{'text':'den_out_sel','row':5,'column':0,'row_span':1,'col_span':1},
-            'tbx_denOutSel':{'text':'8','row':5,'column':1,'row_span':1,'col_span':1},
+            'tbx_denOutSel':{'text':'0','row':5,'column':1,'row_span':1,'col_span':1},
             'lbl_mcBetaSel':{'text':'mc_beta_sel','row':5,'column':2,'row_span':1,'col_span':1},
-            'tbx_mcBetaSel':{'text':'4','row':5,'column':3,'row_span':1,'col_span':1},
+            'tbx_mcBetaSel':{'text':'3','row':5,'column':3,'row_span':1,'col_span':1},
             'lbl_mcKSel':{'text':'mc_K_sel','row':6,'column':0,'row_span':1,'col_span':1},
-            'tbx_mcKSel':{'text':'1','row':6,'column':1,'row_span':1,'col_span':1},
+            'tbx_mcKSel':{'text':'0','row':6,'column':1,'row_span':1,'col_span':1},
             'lbl_en_BM_MC_ctrl':{'text':'en_BM_MC_ctrl','row':6,'column':2,'row_span':1,'col_span':1},
-            'tbx_en_BM_MC_ctrl':{'text':'3','row':6,'column':3,'row_span':1,'col_span':1},
+            'tbx_en_BM_MC_ctrl':{'text':'1','row':6,'column':3,'row_span':1,'col_span':1},
             'lbl_targetPos':{'text':'target pos','row':9,'column':0,'row_span':1,'col_span':1},
             'tbx_targetPos':{'text':'0,0,0','row':9,'column':1,'row_span':1,'col_span':1},
             'lbl_xyzOffsets':{'text':'x,y,z Offsets','row':10,'column':0,'row_span':1,'col_span':1},
@@ -2263,12 +2509,22 @@ class App(QWidget):
             'lbl_bm_alpha_sel':{'text':'bm_alpha_sel','row':5,'column':4,'row_span':1,'col_span':1},
             'tbx_bm_alpha_sel':{'text':'0','row':5,'column':5,'row_span':1,'col_span':1},
             'lbl_bm_on_interval':{'text':'bm_on_interval','row':6,'column':4,'row_span':1,'col_span':1},
-            'tbx_bm_on_interval':{'text':'5','row':6,'column':5,'row_span':1,'col_span':1},
+            'tbx_bm_on_interval':{'text':'5000','row':6,'column':5,'row_span':1,'col_span':1},
             'lbl_mc_K_set':{'text':'mc_K_set','row':7,'column':4,'row_span':1,'col_span':1},
             'tbx_mc_K_set':{'text':'0x00036000','row':7,'column':5,'row_span':1,'col_span':1},
             'lbl_fourMics':{'text':'4 Mics','row':10,'column':3,'row_span':1,'col_span':1},
             'tbx_fourMics':{'text':'1' if self.toUseYAML else '0','row':10,'column':4,'row_span':1,'col_span':1},
         }
+
+        # load test_setting.yaml, Jason, 3 Jun 2024
+        self.testSetting = self.tryLoadTestSetting(APP_DATA_DIR+'/settings.yaml')
+        # add[update self.prevMicGain from self.testSetting at start up],Brian,3 June 2024
+        self.prevMicGain = int(self.testSetting['tbx_micGain'])
+        
+        if DEBUG_LEVEL >= 3:
+            print(self.testSetting)
+
+        
 
         widget = QWidget()
         outer_layout = QVBoxLayout()
@@ -2299,7 +2555,8 @@ class App(QWidget):
                 )
             elif name.startswith("tbx_"):
                 line_edit = QLineEdit()
-                line_edit.setText(properties['text'])
+                # line_edit.setText(properties['text'])
+                line_edit.setText(self.testSetting[name])
                 line_edit.setObjectName(name)
                 line_edit.setStyleSheet(LINEEDIT_STYLE_TEST_PAGE)
                 layout.addWidget(
@@ -2314,6 +2571,7 @@ class App(QWidget):
                 combo_box.setObjectName(name)
                 combo_box.setStyleSheet(COMBO_STYLE_TEST_PAGE)
                 combo_box.addItems(properties["items"])  # Add items to the combobox
+                combo_box.setCurrentText(self.testSetting[name])
                 layout.addWidget(
                     combo_box,
                     properties["row"],
@@ -2326,7 +2584,8 @@ class App(QWidget):
         # Jason, 17 April 2024
         btnSendPacket = QPushButton('Send Packet')
         btnSendPacket.setStyleSheet(BUTTON_STYLE_TEST_PAGE)
-        btnSendPacket.clicked.connect(self.sendPacket)
+        # revise[use sendPacket_withUIUpdate instead],Brian,1 June 2024
+        btnSendPacket.clicked.connect(self.sendPacket_withUIUpdate)
         # btnSendPacket.clicked.connect(self.onSendPacketButtonClicked)
 
         btnTestPing = QPushButton('Test Ping Host')
@@ -2366,7 +2625,7 @@ class App(QWidget):
         widget.setLayout(outer_layout)
 
         
-
+        
 
         return widget
     
@@ -2376,8 +2635,10 @@ class App(QWidget):
         return f"params,{self.hostIP}, {self.hostPort}, {self.mode},{self.micIndx},{self.micGain},{self.micDisable},{self.setTest},{self.den_out_sel},{self.mc_beta_sel},{self.mc_K_sel},[{self.targetPos[0]},{self.targetPos[1]},{self.targetPos[2]}],[{self.offsets[0]},{self.offsets[1]},{self.offsets[2]}],{self.bm_alpha_sel},{'0x'+hex(self.mc_K_set).zfill(8)},{hex_string},{self.toUseYAML}"
 
     def printParams(self):
-        global dataLogger
-        # print(self.hostIP,self.hostPort,self.mode,self.micIndx,self.micGain,self.setTest,self.den_out_sel,self.mc_beta_sel,self.mc_K_sel,self.targetPos,self.offsets,self.toUseYAML)
+        global dataLogger, DEBUG_LEVEL
+
+        if DEBUG_LEVEL>=3:
+            print(self.hostIP,self.hostPort,self.mode,self.micIndx,self.micGain,self.setTest,self.den_out_sel,self.mc_beta_sel,self.mc_K_sel,self.targetPos,self.offsets,self.toUseYAML)
         # add[save to log as well],Brian,27 Mar 2024
         dataLogger.add_data(self.__str__())
 
@@ -2441,25 +2702,17 @@ class App(QWidget):
     #         self.btnSendPacket.setText('Send Packet')
 
 
-
-    def sendPacket(self):
+    # add, Brian, 1 June 2024
+    def prepareFullPacket(self):
         global dataLogger, DEBUG_LEVEL
 
-        # clear lbl_info first
-        self.showInfo('')
+        '''
+        prepare a full FPGA Packet , returns a byte array
+
+        '''
+
         sendBuf=b'SET0'
-        
-        self.setTargetPos(self.targetPos)
 
-        # add[change mode],Brian,31 May 2024
-        # BM_ON --> N secs --> BM_OFF --> M secs -> MC_ON
-        self.setTestPage_Mode(self.fpgaMode)
-
-        self.fetchParamsFromUI()
-        self.printParams()
-    
-        #Z=distance between camera and object, x is left+/right-, y is down+/up-
-        
         # just a dummy target location
         this_location=[6, 0.2, 0.3]
 
@@ -2551,10 +2804,10 @@ class App(QWidget):
 
         
         packet = prepareMicDelaysPacket(payload)
-        if validateMicDelaysPacket(packet):
-            print('packet ok')
-        else:
-            print('packet not ok')
+        # if validateMicDelaysPacket(packet):
+        #     print('packet ok')
+        # else:
+        #     print('packet not ok')
             
         sendBuf=bytes([message1,message2,message3,message4,message5,message6,message7,message8,message9,message10,message11,message12,message13])
 
@@ -2569,16 +2822,347 @@ class App(QWidget):
         sendBuf += packet
         dataLogger.add_data('data,%s,%s,%s,%s' %(bytes(sendBuf),np.array2string(refDelay),np.array2string(np.array(self.targetPos)),np.array2string(rawDelay)))
 
+        return sendBuf
 
-        if send_and_receive_packet(self.hostIP,self.hostPort,sendBuf,timeout=3):
+
+    # add,Brian,1 June 2024
+    def sendPacket_noUIUpdate(self):
+        '''
+        prepare network packet to be sent to FPGA
+
+        WITHOUT updating UI widgets (at test page) 
+
+        BUT will fetch UI contents to prepare the network packet 
+        EXCEPT mode and targetPos
+ 
+        warning!! this function is not a pyqt slot
+
+        '''
+        global dataLogger, DEBUG_LEVEL
+
+        
+        # remove,Brian,1 June 2024
+        # sendBuf=b'SET0'
+        
+        # removed[moved to send_3d_point to avoid cross-ui thread issue],Brian,1 June 2024
+        # if DEBUG_LEVEL>4:
+        #     print('try to call setTargetPos...')
+        # self.setTargetPos(self.targetPos)
+
+        # # add[change mode],Brian,31 May 2024
+        # # BM_ON --> N secs --> BM_OFF --> M secs -> MC_ON
+        # if DEBUG_LEVEL>4:
+        #     print('try to call setTestPage_Mode...')
+        # self.setTestPage_Mode(self.fpgaMode)
+
+        # save a copy of self.targetPos first
+        self.targetPosCopy= self.targetPos
+
+        # get parameters from UI at test page
+        if DEBUG_LEVEL>4:
+            print('try to call fetchParamsFromUI..')
+        self.fetchParamsFromUI()
+
+        # reset self.targetPos to self.targetPosCopy and 
+        # reset self.mode to self.fpgaMode
+
+        self.targetPos = self.targetPosCopy
+        self.mode = int(self.fpgaMode.value)
+
+
+        self.printParams()
+    
+        #Z=distance between camera and object, x is left+/right-, y is down+/up-
+        
+        # remove[replaced by function prepareFullPacket],Brian,1 June 2024
+        # the following codes to be removed later 
+
+        # # just a dummy target location
+        # this_location=[6, 0.2, 0.3]
+
+        # # revised[add offsets],Brian,18 Mar 2024
+        # delay=delay_calculation_v1(this_location)
+        # if DEBUG_LEVEL>=3: 
+        #     print(delay)
+        # dataLogger.add_data('%s,%s' %('delay',np.array2string(delay)))
+        # #converting the delay into binary format 
+        # delay_binary_output = delay_to_binary(delay)
+        # #print(delay_binary_output)
+        # #need to do later
+        # RW_field=[1,1]
+        # mode=0
+        # mic_gain=[1,0]
+        # mic_num=0
+        # en_bm=1
+        # en_bc=1
+        # mic_en=1
+        # type=0
+        # reserved=0
+        # message=struct_packet(RW_field,mode,mic_gain,mic_num,en_bm,en_bc,delay_binary_output[0],mic_en,type,reserved)
+        # messagehex = BintoINT(message)
+        # message1 = int(messagehex[2:4],16) # hex at  1 and 2  
+        # message2 = int(messagehex[4:6],16) # hex at  3 and 4 
+        # message3 = int(messagehex[6:8],16)  # hex at  5 and 6 
+        # message4 = int(messagehex[8:],16)
+
+        # if DEBUG_LEVEL>=3:
+        #     print(message)
+        #     print(messagehex)
+        #     print("m1:{},m2:{},m3:{},m4:{}\n".format(message1,message2,message3,message4))
+        
+
+        # message5  = int(self.mode)        # mode
+        # message6  = int(self.micIndx)     # mic
+        # message7  = int(self.micGain)     # mic_gain
+        # message8  = int(self.micDisable)  # mic_disable
+        # message9  = int(self.setTest)     # set_test
+        # message10 = int(self.den_out_sel) # den_out_sel, previously micDelay
+
+        # # revise[added message11, message12],Brian, 27 Mar 2024
+        # message11 = int(self.mc_beta_sel) # mc_beta_sel
+        # message12 = int(self.mc_K_sel)    # mc_K_sel
+
+        # # revise[added message13],Brian, 28 Mar 2024
+        # message13 = int(self.en_BM_MC_ctrl) # en_BM_MC_ctrl
+
+        # # Add[sync with system tool v0.11],Brian,31 May 2024
+
+        # # add new parameters, 25 April 2024
+
+        # # message14-34
+        # message14 = int(self.bm_alpha_sel)
+
+        # # five 32-bit parameters here
+        # message15_18 = struct.pack('>I', self.mc_K_set)
+        # message19_22 = struct.pack('>I', self.bm_uplimit_H[0])
+        # message23_26 = struct.pack('>I', self.bm_uplimit_H[1])
+        # message27_30 = struct.pack('>I', self.bm_uplimit_H[2])
+        # message31_34 = struct.pack('>I', self.bm_uplimit_H[3])
+
+ 
+        
+        # _,refDelay,_ = delay_calculation(self.targetPos,self.offsets[0],self.offsets[1],self.offsets[2],toUseYAML=self.toUseYAML)   
+        
+        # # save a copy of the raw delay in us
+        # rawDelay = refDelay[1:]*1e6
+        # # revise[should not include m00],Brian,15 April 204
+        # refDelay = refDelay[1:]
+        # refDelay = refDelay*48e3
+        # refDelay = np.max(refDelay)-refDelay
+        # refDelay = np.round(refDelay)
+
+        # #convert refDelay to byte
+        # #but make sure that they are within 0 to 255 first!!
+        # assert (refDelay>=0).all() and (refDelay<=255).all()
+
+            
+        # refDelay = refDelay.astype(np.uint8)
+        # payload = refDelay.tobytes()
+
+        # if DEBUG_LEVEL>=3:
+        #     print('refDelay',refDelay)
+        #     print('payload',payload)
+        #     print('sendBuf',sendBuf)
+
+        
+
+        
+        # packet = prepareMicDelaysPacket(payload)
+        # if validateMicDelaysPacket(packet):
+        #     print('packet ok')
+        # else:
+        #     print('packet not ok')
+            
+        # sendBuf=bytes([message1,message2,message3,message4,message5,message6,message7,message8,message9,message10,message11,message12,message13])
+
+        # sendBuf += bytes([message14])
+        # sendBuf += bytes(message15_18)
+        # sendBuf += bytes(message19_22)
+        # sendBuf += bytes(message23_26)
+        # sendBuf += bytes(message27_30)
+        # sendBuf += bytes(message31_34)
+            
+        # # append packet to sendBuf
+        # sendBuf += packet
+        # dataLogger.add_data('data,%s,%s,%s,%s' %(bytes(sendBuf),np.array2string(refDelay),np.array2string(np.array(self.targetPos)),np.array2string(rawDelay)))
+
+        sendBuf = self.prepareFullPacket()
+
+        # revise[getting status and error message],Brian,2 June 2024
+        status,sMsg = send_and_receive_packet(self.hostIP,self.hostPort,sendBuf,timeout=3)
+        if status:
+            if DEBUG_LEVEL>=3:
+                print('data transmission ok')
+            dataLogger.add_data('tx ok')
+        else:
+            if DEBUG_LEVEL>=3:
+                print('data transmission failed:: %s' %(sMsg))
+            dataLogger.add_data('tx failed, %s' %(sMsg))
+
+    
+    # Add,Brian,1 June 2024
+    @pyqtSlot()
+    def sendPacket_withUIUpdate(self):
+        '''
+        prepare network packet to be sent to FPGA
+
+        will update UI widgets (at test page) 
+
+        warning!!: beware of cross-ui thread issue and this function is a pyqt slot
+
+        '''
+        global dataLogger, DEBUG_LEVEL
+
+        
+        # clear lbl_info first
+        self.showInfo('')
+        
+        # remove,Brian,1 June 2024
+        # sendBuf=b'SET0'
+        
+        # removed[moved to send_3d_point to avoid cross-ui thread issue],Brian,1 June 2024
+        # if DEBUG_LEVEL>4:
+        #     print('try to call setTargetPos...')
+        # self.setTargetPos(self.targetPos)
+
+        # # add[change mode],Brian,31 May 2024
+        # # BM_ON --> N secs --> BM_OFF --> M secs -> MC_ON
+        # if DEBUG_LEVEL>4:
+        #     print('try to call setTestPage_Mode...')
+        # self.setTestPage_Mode(self.fpgaMode)
+
+        if DEBUG_LEVEL>4:
+            print('try to call fetchParamsFromUI..')
+        self.fetchParamsFromUI()
+        self.printParams()
+    
+        #Z=distance between camera and object, x is left+/right-, y is down+/up-
+        
+        # remove[replaced by function prepareFullPacket],Brian,1 June 2024
+        # the following codes to be removed later 
+
+        # # just a dummy target location
+        # this_location=[6, 0.2, 0.3]
+
+        # # revised[add offsets],Brian,18 Mar 2024
+        # delay=delay_calculation_v1(this_location)
+        # if DEBUG_LEVEL>=3: 
+        #     print(delay)
+        # dataLogger.add_data('%s,%s' %('delay',np.array2string(delay)))
+        # #converting the delay into binary format 
+        # delay_binary_output = delay_to_binary(delay)
+        # #print(delay_binary_output)
+        # #need to do later
+        # RW_field=[1,1]
+        # mode=0
+        # mic_gain=[1,0]
+        # mic_num=0
+        # en_bm=1
+        # en_bc=1
+        # mic_en=1
+        # type=0
+        # reserved=0
+        # message=struct_packet(RW_field,mode,mic_gain,mic_num,en_bm,en_bc,delay_binary_output[0],mic_en,type,reserved)
+        # messagehex = BintoINT(message)
+        # message1 = int(messagehex[2:4],16) # hex at  1 and 2  
+        # message2 = int(messagehex[4:6],16) # hex at  3 and 4 
+        # message3 = int(messagehex[6:8],16)  # hex at  5 and 6 
+        # message4 = int(messagehex[8:],16)
+
+        # if DEBUG_LEVEL>=3:
+        #     print(message)
+        #     print(messagehex)
+        #     print("m1:{},m2:{},m3:{},m4:{}\n".format(message1,message2,message3,message4))
+        
+
+        # message5  = int(self.mode)        # mode
+        # message6  = int(self.micIndx)     # mic
+        # message7  = int(self.micGain)     # mic_gain
+        # message8  = int(self.micDisable)  # mic_disable
+        # message9  = int(self.setTest)     # set_test
+        # message10 = int(self.den_out_sel) # den_out_sel, previously micDelay
+
+        # # revise[added message11, message12],Brian, 27 Mar 2024
+        # message11 = int(self.mc_beta_sel) # mc_beta_sel
+        # message12 = int(self.mc_K_sel)    # mc_K_sel
+
+        # # revise[added message13],Brian, 28 Mar 2024
+        # message13 = int(self.en_BM_MC_ctrl) # en_BM_MC_ctrl
+
+        # # Add[sync with system tool v0.11],Brian,31 May 2024
+
+        # # add new parameters, 25 April 2024
+
+        # # message14-34
+        # message14 = int(self.bm_alpha_sel)
+
+        # # five 32-bit parameters here
+        # message15_18 = struct.pack('>I', self.mc_K_set)
+        # message19_22 = struct.pack('>I', self.bm_uplimit_H[0])
+        # message23_26 = struct.pack('>I', self.bm_uplimit_H[1])
+        # message27_30 = struct.pack('>I', self.bm_uplimit_H[2])
+        # message31_34 = struct.pack('>I', self.bm_uplimit_H[3])
+
+ 
+        
+        # _,refDelay,_ = delay_calculation(self.targetPos,self.offsets[0],self.offsets[1],self.offsets[2],toUseYAML=self.toUseYAML)   
+        
+        # # save a copy of the raw delay in us
+        # rawDelay = refDelay[1:]*1e6
+        # # revise[should not include m00],Brian,15 April 204
+        # refDelay = refDelay[1:]
+        # refDelay = refDelay*48e3
+        # refDelay = np.max(refDelay)-refDelay
+        # refDelay = np.round(refDelay)
+
+        # #convert refDelay to byte
+        # #but make sure that they are within 0 to 255 first!!
+        # assert (refDelay>=0).all() and (refDelay<=255).all()
+
+            
+        # refDelay = refDelay.astype(np.uint8)
+        # payload = refDelay.tobytes()
+
+        # if DEBUG_LEVEL>=3:
+        #     print('refDelay',refDelay)
+        #     print('payload',payload)
+        #     print('sendBuf',sendBuf)
+
+        
+
+        
+        # packet = prepareMicDelaysPacket(payload)
+        # if validateMicDelaysPacket(packet):
+        #     print('packet ok')
+        # else:
+        #     print('packet not ok')
+            
+        # sendBuf=bytes([message1,message2,message3,message4,message5,message6,message7,message8,message9,message10,message11,message12,message13])
+
+        # sendBuf += bytes([message14])
+        # sendBuf += bytes(message15_18)
+        # sendBuf += bytes(message19_22)
+        # sendBuf += bytes(message23_26)
+        # sendBuf += bytes(message27_30)
+        # sendBuf += bytes(message31_34)
+            
+        # # append packet to sendBuf
+        # sendBuf += packet
+        # dataLogger.add_data('data,%s,%s,%s,%s' %(bytes(sendBuf),np.array2string(refDelay),np.array2string(np.array(self.targetPos)),np.array2string(rawDelay)))
+
+        sendBuf = self.prepareFullPacket()
+
+        # revise[getting status and error message],Brian,2 June 2024
+        status,sMsg = send_and_receive_packet(self.hostIP,self.hostPort,sendBuf,timeout=3)
+        if status:
             if DEBUG_LEVEL>=3:
                 print('data transmission ok')
             self.showInfo('tx ok')
             dataLogger.add_data('tx ok')
         else:
             if DEBUG_LEVEL>=3:
-                print('data transmission failed')
-            dataLogger.add_data('tx failed')
+                print('data transmission failed:: %s' %(sMsg))
+            dataLogger.add_data('tx failed, %s' %(sMsg))
 
 
 
@@ -2773,6 +3357,9 @@ class App(QWidget):
         # try to get 3d coordinate from camera if it's d435
         # based on mouse_position.x(), y()
 
+        if DEBUG_LEVEL>4:
+            print('mousePressEvent triggered...')
+
         # revised[make sure that stacked_widget is at index 0],Brian,05 April 2024
         if self.stacked_widget.currentIndex()==0:
             if self.selected_camera.startswith('Intel(R) RealSense(TM) Depth Camera 4') and self.selected_camera.endswith('RGB'):
@@ -2805,19 +3392,33 @@ class App(QWidget):
                 MOUSE_CLICKED = True
                 
 
-    # Added for 3d coordinates, Jason, 11 April 2024
+    # revised[add FPGA_MODE.NORMAL], Jason, 3 Jun 2024
+    @pyqtSlot()
     def on_send_packed_finished(self):
         global SENDING_PACKET, SENDING_PACKET_MODE5_MODE6, DEBUG_LEVEL
         if DEBUG_LEVEL>=3:
             print('on_send_packed_finished')
-        if SENDING_PACKET_MODE5_MODE6 and self.fpgaMode != FPGA_MODE.MC_ON:
+        if self.fpgaMode == FPGA_MODE.NORMAL:
+            self.fpgaMode = FPGA_MODE.BM_ON
+        elif SENDING_PACKET_MODE5_MODE6 and self.fpgaMode != FPGA_MODE.MC_ON:
             self.send_packet_mode56_timer = QTimer()
             self.send_packet_mode56_timer.setSingleShot(True)
             self.send_packet_mode56_timer.timeout.connect(self.send_3d_point)
-            self.send_packet_mode56_timer.start(5000)
+            if self.fpgaMode == FPGA_MODE.BM_ON:
+                if self.bm_on_interval>0:
+                    self.send_packet_mode56_timer.start(self.bm_on_interval)
+                else:
+                    self.send_packet_mode56_timer.start(5000)
+            elif self.fpgaMode == FPGA_MODE.BM_OFF:
+                self.send_packet_mode56_timer.start(1000)
+            elif self.fpgaMode == FPGA_MODE.SWITCH_MIC:
+                self.send_packet_mode56_timer.start(1000)
+
+
         SENDING_PACKET = False
 
-    # Added for 3d coordinates, Jason, 11 April 2024
+    # revised[add FPGA_MODE.NORMAL], Jason, 3 Jun 2024
+    @pyqtSlot()
     def send_3d_point(self):
         global SENDING_PACKET, SENDING_PACKET_MODE5_MODE6, DEBUG_LEVEL, TARGET_POS_UPDATED
 
@@ -2825,30 +3426,39 @@ class App(QWidget):
         #     return
 
         if not hasattr(self, 'mouse_press_timer'):
+            # prepare a single shot timer 
             self.mouse_press_timer = QTimer()
             self.mouse_press_timer.setSingleShot(True)
             self.mouse_press_timer.timeout.connect(self.send_3d_point)
 
-        if not SENDING_PACKET and TARGET_POS_UPDATED:
+        if not SENDING_PACKET:
+         
             SENDING_PACKET = True
             
-            # add[start with BM_ON mode always]
-            if not SENDING_PACKET_MODE5_MODE6:
-                self.fpgaMode=FPGA_MODE.BM_ON
-                SENDING_PACKET_MODE5_MODE6 = True
-            else:
-                if self.fpgaMode == FPGA_MODE.BM_ON:
-                    self.fpgaMode = FPGA_MODE.BM_OFF
-                elif self.fpgaMode == FPGA_MODE.BM_OFF:
-                    self.fpgaMode = FPGA_MODE.MC_ON
-                    
+            if TARGET_POS_UPDATED and self.fpgaMode != FPGA_MODE.NORMAL:
+                # add[start with BM_ON mode always]
+                if not SENDING_PACKET_MODE5_MODE6:
+                    if self.micGain != self.prevMicGain:
+                        self.fpgaMode=FPGA_MODE.SWITCH_MIC
+                        self.prevMicGain=self.micGain
+                    else:
+                        self.fpgaMode=FPGA_MODE.BM_ON
+                    SENDING_PACKET_MODE5_MODE6 = True
+                else:
+                    if self.fpgaMode == FPGA_MODE.BM_ON:
+                        self.fpgaMode = FPGA_MODE.BM_OFF
+                    elif self.fpgaMode == FPGA_MODE.BM_OFF:
+                        self.fpgaMode = FPGA_MODE.MC_ON
+                    elif self.fpgaMode == FPGA_MODE.SWITCH_MIC:
+                        self.fpgaMode = FPGA_MODE.BM_ON
+
             self.thread_send_packet = QThread()
-            self.thread_send_packet.run = self.sendPacket
+            self.thread_send_packet.run = self.sendPacket_noUIUpdate
             self.thread_send_packet.finished.connect(self.on_send_packed_finished)
             if DEBUG_LEVEL>=3:
                 print("self.targetPos: ", self.targetPos)
                 print('Start sending 3D point packet - mode ', self.fpgaMode)
-            self.thread_send_packet.start()
+            self.thread_send_packet.start()       
             
         else:
             if DEBUG_LEVEL>=3:
@@ -2906,24 +3516,28 @@ class App(QWidget):
 
             self.audio_thread.requestInterruption()
 
-            # add[enable/disable video combine by COMBINE_VIDEO],Brian,31 May 2024
-            if COMBINE_VIDEO:
-                # revised[combine video, audio],Jason,17 May 2024
-                self.combine_thread = VideoAudioThread(VIDEO_NAME,AUDIO_NAME,OUTPUT_NAME, self.logger)
-                self.combine_thread.start_writing.connect(self.show_progress_dialog)
-                self.combine_thread.start_writing.connect(self.video_thread.pause_thread)
-                if self.video_thread.d435:
-                    self.combine_thread.start_writing.connect(self.video_thread.d435.pause_thread)
-                elif self.video_thread.cam:
-                    self.combine_thread.start_writing.connect(self.video_thread.cam.pause_thread)
-                self.combine_thread.finished.connect(self.combine_thread_finished)
-                self.logger.signal_emitter.percentage_changed_signal.connect(self.update_progress_dialog_percentage)
-                self.logger.signal_emitter.text_changed_signal.connect(self.update_progress_dialog_text)
-                # disable combine, Jason, 20 May 2024
-                self.combine_thread.start()
-            else:
-                # simply pop up a message window to indicate that the recording process ended 
-                self.show_record_finished_dialog()
+            # remove[moved to onAudoThreadFinished slot],Brian,2 June 2024
+            # # add[enable/disable video combine by COMBINE_VIDEO],Brian,31 May 2024
+            # if COMBINE_VIDEO:
+            #     # revised[combine video, audio],Jason,17 May 2024
+            #     self.combine_thread = VideoAudioThread(VIDEO_NAME,AUDIO_NAME,OUTPUT_NAME, self.logger)
+            #     self.combine_thread.start_writing.connect(self.show_progress_dialog)
+            #     self.combine_thread.start_writing.connect(self.video_thread.pause_thread)
+            #     if self.video_thread.d435:
+            #         self.combine_thread.start_writing.connect(self.video_thread.d435.pause_thread)
+            #     elif self.video_thread.cam:
+            #         self.combine_thread.start_writing.connect(self.video_thread.cam.pause_thread)
+            #     self.combine_thread.finished.connect(self.combine_thread_finished)
+            #     self.logger.signal_emitter.percentage_changed_signal.connect(self.update_progress_dialog_percentage)
+            #     self.logger.signal_emitter.text_changed_signal.connect(self.update_progress_dialog_text)
+            #     # disable combine, Jason, 20 May 2024
+            #     self.combine_thread.start()
+            # else:
+            #     # simply pop up a message window to indicate that the recording process ended 
+            #     self.show_record_finished_dialog()
+
+            # show a dialog box for audio processing
+            self.show_audio_processing_dialog()
 
     def mic_on_off_button_clicked(self):
         self.MIC_ON = not self.MIC_ON
@@ -2966,11 +3580,61 @@ class App(QWidget):
         self.video_combine_finished_dialog.setWindowTitle('Video')
         layout = QVBoxLayout()
         message = QLabel('Finished generating video ' + OUTPUT_NAME)
+        message.setFont(Label_Font)
         layout.addWidget(message)
         self.video_combine_finished_dialog.setLayout(layout)
         self.video_combine_finished_dialog.exec_()
 
+
+    # add[dialog showing audio under process],Brian,2 June 2024
+    def show_audio_processing_dialog(self):
+        self.audio_processing_dialog = QDialog(self)
+        self.audio_processing_dialog.setWindowTitle('Audio Processing')
+        self.audio_processing_dialog.setWindowFlags(self.windowFlags() & ~Qt.WindowSystemMenuHint)
+        # self.audio_processing_dialog.setGeometry(100, 100, 400, 100)
+        
+        # # Set the fixed width of the dialog
+        # self.audio_processing_dialog.setFixedWidth(400)
+        
+        # # Set the minimum and maximum width of the dialog
+        # self.audio_processing_dialog.setMinimumWidth(400)
+        # self.audio_processing_dialog.setMaximumWidth(400)
+
+        layout = QVBoxLayout()
+        self.audio_processing_dialog_label = QLabel('Processing Audio, Please Wait for a moment')
+        self.audio_processing_dialog_label.setFont(Label_Font)
+        layout.addWidget(self.audio_processing_dialog_label)
+
+
+
+        self.audio_processing_dialog.setLayout(layout)
+
+        # # Create a timer to update the label text
+        # self.audio_processing_timer = QTimer(self)
+        # self.audio_processing_timer.timeout.connect(self.update_audio_processing_label)
+        # self.audio_processing_timer.start(500)  # Update the label every 500 milliseconds (0.5 seconds)
+
+        self.audio_processing_dialog.exec_()
+
+        
+    # add,Brian,3 June 2024 
+    @pyqtSlot()
+    def update_audio_processing_label(self):
+        # Update the label text to indicate the processing status
+        text = self.audio_processing_dialog_label.text()
+        if text == "Processing |":
+            self.audio_processing_dialog_label.setText("Processing \\")
+        elif text == "Processing \\":
+            self.audio_processing_dialog_label.setText("Processing --")
+        elif text == "Processing --":
+            self.audio_processing_dialog_label.setText("Processing /")
+        else:
+            self.audio_processing_dialog_label.setText("Processing |")
+
+
+
     # add[messagebox to show that recording ended without combine],Brian,31 May 2024
+    @pyqtSlot()
     def show_record_finished_dialog(self):
         self.video_record_finished_dialog = QDialog(self)
         self.video_record_finished_dialog.setWindowTitle('Recording')
@@ -2990,10 +3654,12 @@ class App(QWidget):
         self.video_record_finished_dialog.setLayout(layout)
         self.video_record_finished_dialog.exec_()
 
+    @pyqtSlot()
     def show_progress_dialog(self):
         print('show progress dialog')
         self.video_progress_dialog = QProgressDialog(self)
         self.video_progress_dialog.setWindowTitle("Video")  
+        self.video_progress_dialog.setFont(Label_Font)
         self.video_progress_dialog.setLabelText("Generating video " + OUTPUT_NAME)
         self.video_progress_dialog.setCancelButton(None)
         self.video_progress_dialog.setWindowFlags(Qt.Window | Qt.WindowType.WindowTitleHint | Qt.WindowType.CustomizeWindowHint)
@@ -3022,28 +3688,55 @@ class App(QWidget):
             self.mouse_press_timer.stop()
         exit()
 
+# add,Brian,2 June 2024
+def printHeader():
+    print('******************************')
+    print('******************************')
+    print(APP_NAME)
+    print('Version:: %s' %(sVersion))
+    print('******************************')
+    print('******************************')
+
 
 if __name__ == "__main__":
 
+    
+
+    # print App header
+    printHeader()
+
+    # check if APP_DATA_DIR exists, if not create it
+    if not os.path.exists(APP_DATA_DIR):
+        os.makedirs(APP_DATA_DIR)
+
     # Check if the folder exists
-    if not os.path.exists('log'):
+    if not os.path.exists(APP_DATA_DIR+'/log'):
         # Create the folder
-        os.makedirs('log')
-        print("log folder created successfully.")
+        os.makedirs(APP_DATA_DIR+'/log')
+        #print("log folder created successfully.")
     else:
-        print("log folder already exists.")
+        #print("log folder already exists.")
+        pass
 
     # initialize logger
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    dataLogger = DataLogger(log_interval=1, file_path="log/%s_sys.log" %(timestamp))  # Specify the data file path
+    dataLogger = DataLogger(log_interval=1, file_path="%s/log/%s_sys.log" %(APP_DATA_DIR,timestamp))  # Specify the data file path
     dataLogger.start_logging()
     dataLogger.add_data('logger started...')
 
+    # revise[save to APP_DATA_DIR],Brian, 2 June 2024
     # Create necessary DIR
-    check_folder_existence(CURRENT_PATH+VIDEO_SAVE_DIRECTORY)
-    check_folder_existence(CURRENT_PATH+VIDEO_SAVE_DIRECTORY+VIDEO_DATE)
-    check_folder_existence(CURRENT_PATH+AUDIO_PATH+"\\"+VIDEO_DATE)
-    check_folder_existence(CURRENT_PATH+OUTPUT_PATH+"\\"+VIDEO_DATE)
+    check_folder_existence(APP_DATA_DIR+'\\'+VIDEO_SAVE_DIRECTORY)
+    check_folder_existence(APP_DATA_DIR+'\\'+VIDEO_SAVE_DIRECTORY+VIDEO_DATE)
+    check_folder_existence(APP_DATA_DIR+'\\'+AUDIO_PATH+"\\"+VIDEO_DATE)
+    check_folder_existence(APP_DATA_DIR+'\\'+OUTPUT_PATH+"\\"+VIDEO_DATE)
+
+
+    import sounddevice as sd
+    import soundfile as sf
+    import wavio  #pip3 install wavio
+    # added[for d435]
+    import pyrealsense2 as rs
 
     # os.environ["QT_ENABLE_HIGHDPI_SCALING"]   = "2"
     # os.environ["QT_AUTO_SCREEN_SCALE_FACTOR"] = "0.5"

@@ -358,8 +358,8 @@ SLIDER_STYLE = """
 
 SLIDER_STYLE_2 = """
                 .QSlider {
-                    min-height: 38px;
-                    max-height: 68px;
+                    min-height: 68px;
+                    max-height: 98px;
                
                 }
 
@@ -372,7 +372,7 @@ SLIDER_STYLE_2 = """
 
                 .QSlider::handle:horizontal {
                     background: darkblue;
-                    width: 15px;
+                    width: 30px;
                     height: 50px;
                     margin: -24px -0px;
                   
