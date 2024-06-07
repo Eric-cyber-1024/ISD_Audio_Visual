@@ -2588,6 +2588,14 @@ class App(QWidget):
         btnSendPacket.clicked.connect(self.sendPacket_withUIUpdate)
         # btnSendPacket.clicked.connect(self.onSendPacketButtonClicked)
 
+        # add save setting, Jason, 3 Jun 2024
+        btnSaveSetting = QPushButton('Save Setting')
+        btnSaveSetting.setStyleSheet(BUTTON_STYLE_TEST_PAGE)
+        btnSaveSetting.clicked.connect(lambda: self.saveSetting('test_setting.yaml'))
+
+        self.lbl_SaveSettingStatus = QLabel('')
+        self.lbl_SaveSettingStatus.setStyleSheet(LABEL_STYLE_TEST_PAGE)
+
         btnTestPing = QPushButton('Test Ping Host')
         btnTestPing.setStyleSheet(BUTTON_STYLE_TEST_PAGE)
         btnTestPing.clicked.connect(self.testPingHost)
@@ -2601,9 +2609,11 @@ class App(QWidget):
         self.lbl_msg.setStyleSheet(SMALL_LABEL_STYLE_TEST_PAGE)
 
         layout.addWidget(btnSendPacket,14,0,1,1)
-        layout.addWidget(btnTestPing,15,0,1,1)
-        layout.addWidget(btnExitTestPage,16,0,1,1)
-        layout.addWidget(self.lbl_msg,17,0,1,3)
+        layout.addWidget(btnSaveSetting, 15,0,1,1)
+        layout.addWidget(self.lbl_SaveSettingStatus,15,1,1,1)
+        layout.addWidget(btnTestPing,16,0,1,1)
+        layout.addWidget(btnExitTestPage,17,0,1,1)
+        layout.addWidget(self.lbl_msg,18,0,1,3)
         
         # Set border color and width for the inner layout
         frame = QFrame()
@@ -3273,7 +3283,42 @@ class App(QWidget):
                 print('data transmission failed')
             dataLogger.add_data('tx failed')
 
+    # add save test setting, Jason, 3 Jun 2024
+    @pyqtSlot(str)
+    def saveSetting(self, settingFileName='test_setting.yaml'):
 
+        textboxes = self.test_page_widget.findChildren(QLineEdit)
+        params = {textbox.objectName(): textbox.text() for textbox in textboxes}
+
+        self.testSetting['tbx_hostIP'] = params['tbx_hostIP']
+        self.testSetting['tbx_hostPort'] = params['tbx_hostPort']
+        self.testSetting['tbx_micGain'] = params['tbx_micGain']
+        self.testSetting['tbx_micDisable'] = params['tbx_micDisable']
+        self.testSetting['tbx_denOutSel'] = params['tbx_denOutSel']
+        self.testSetting['tbx_mcBetaSel'] = params['tbx_mcBetaSel']
+        self.testSetting['tbx_mcKSel'] = params['tbx_mcKSel']
+        self.testSetting['tbx_en_BM_MC_ctrl'] = params['tbx_en_BM_MC_ctrl']
+        self.testSetting['tbx_targetPos'] = params['tbx_targetPos']
+        self.testSetting['tbx_xyzOffsets'] = params['tbx_xyzOffsets']
+        self.testSetting['tbx_fourMics'] = params['tbx_fourMics']
+        self.testSetting['tbx_bm_alpha_sel'] = params['tbx_bm_alpha_sel']
+        self.testSetting['tbx_mc_K_set'] = params['tbx_mc_K_set']
+        self.testSetting['tbx_bm_uplimit_h0'] = params['tbx_bm_uplimit_h0']
+        self.testSetting['tbx_bm_uplimit_h1'] = params['tbx_bm_uplimit_h1']
+        self.testSetting['tbx_bm_uplimit_h2'] = params['tbx_bm_uplimit_h2']
+        self.testSetting['tbx_bm_uplimit_h3'] = params['tbx_bm_uplimit_h2']
+        self.testSetting['tbx_bm_on_interval'] = params['tbx_bm_on_interval']
+
+        comboboxes = self.test_page_widget.findChildren(QComboBox)
+        params = {cbx.objectName(): cbx.currentText() for cbx in comboboxes}
+
+        self.testSetting['cbx_micNum'] = params['cbx_micNum']
+        self.testSetting['cbx_mode'] = params['cbx_mode']
+        self.testSetting['cbx_setTest'] = params['cbx_setTest']
+                
+        with open(settingFileName, 'w') as outfile:
+            yaml.dump(self.testSetting, outfile, default_flow_style=False)
+            self.lbl_SaveSettingStatus.setText('Done!')
 
     def updatePingResults(self,results):
         if results[0]:
@@ -3302,11 +3347,12 @@ class App(QWidget):
             self.thread.start()
         
 
-
+    # revised[add save setting label], Jason, 3 Jun 2024
     def exitTestPage(self):
         '''
         exit test page, back to settings page
         '''
+        self.lbl_SaveSettingStatus.setText('')
         self.stacked_widget.setCurrentIndex(1)
         
         
